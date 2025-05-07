@@ -13,7 +13,7 @@ RUN mkdir -p /data /data/logs
 COPY . .
 
 # 设置环境变量
-ENV DATABASE_PATH=/data/secretary.db
+ENV DATABASE_PATH=/data/tweetanalyst.db
 ENV FLASK_SECRET_KEY=default_secret_key_please_change_in_env
 ENV LOG_DIR=/data/logs
 
