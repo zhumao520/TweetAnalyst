@@ -204,13 +204,31 @@ def set_config(key, value, is_secret=False, description=None, update_env=True):
 
 def is_system_initialized():
     """检查系统是否已初始化"""
-    # 检查是否有管理员用户
-    admin_exists = User.query.first() is not None
+    try:
+        logger.info("检查系统是否已初始化")
 
-    # 检查是否有LLM API密钥
-    llm_api_key = get_config('LLM_API_KEY')
+        # 检查是否有管理员用户
+        try:
+            admin_exists = User.query.first() is not None
+            logger.info(f"管理员用户存在: {admin_exists}")
+        except Exception as e:
+            logger.error(f"检查管理员用户时出错: {str(e)}")
+            admin_exists = False
 
-    return admin_exists and llm_api_key
+        # 检查是否有LLM API密钥
+        try:
+            llm_api_key = get_config('LLM_API_KEY')
+            logger.info(f"LLM API密钥存在: {bool(llm_api_key)}")
+        except Exception as e:
+            logger.error(f"检查LLM API密钥时出错: {str(e)}")
+            llm_api_key = None
+
+        initialized = admin_exists and llm_api_key
+        logger.info(f"系统初始化状态: {initialized}")
+        return initialized
+    except Exception as e:
+        logger.error(f"检查系统初始化状态时出错: {str(e)}")
+        return False
 
 def create_default_admin():
     """创建默认管理员用户（如果不存在）"""
@@ -526,48 +544,91 @@ def import_accounts_from_yaml():
 # 路由
 @app.route('/')
 def index():
-    # 检查是否是首次登录
-    is_first_login = os.getenv('FIRST_LOGIN', 'true').lower() == 'true'
+    try:
+        logger.info("访问首页，检查初始化状态")
 
-    # 如果是首次登录，强制进行初始化
-    if is_first_login:
-        # 设置环境变量，标记已经不是首次登录
-        os.environ['FIRST_LOGIN'] = 'false'
-        # 尝试更新 .env 文件
-        try:
-            env_file = os.path.join(os.path.dirname(os.environ.get('DATABASE_PATH', '.')), '.env')
-            env_lines = []
+        # 检查是否是首次登录
+        is_first_login = os.getenv('FIRST_LOGIN', 'true').lower() == 'true'
+        logger.info(f"FIRST_LOGIN 环境变量值: {is_first_login}")
 
-            # 读取现有.env文件
-            if os.path.exists(env_file):
-                with open(env_file, 'r') as f:
-                    env_lines = f.readlines()
+        # 如果是首次登录，强制进行初始化
+        if is_first_login:
+            logger.info("检测到首次登录，准备初始化系统")
 
-            # 更新或添加环境变量
-            key_found = False
-            for i, line in enumerate(env_lines):
-                if line.startswith("FIRST_LOGIN="):
-                    env_lines[i] = "FIRST_LOGIN=false\n"
-                    key_found = True
-                    break
+            # 初始化数据库
+            try:
+                logger.info("开始初始化数据库")
+                init_db()
+                logger.info("数据库初始化成功")
+            except Exception as e:
+                logger.error(f"数据库初始化失败: {str(e)}")
+                # 继续执行，让用户通过Web界面完成初始化
 
-            if not key_found:
-                env_lines.append("FIRST_LOGIN=false\n")
+            # 设置环境变量，标记已经不是首次登录
+            os.environ['FIRST_LOGIN'] = 'false'
+            logger.info("已将 FIRST_LOGIN 环境变量设置为 false")
 
-            # 写回.env文件
-            with open(env_file, 'w') as f:
-                f.writelines(env_lines)
-        except Exception as e:
-            logger.error(f"更新环境变量文件时出错: {str(e)}")
+            # 尝试更新 .env 文件
+            try:
+                db_path = os.environ.get('DATABASE_PATH', 'instance/tweetanalyst.db')
+                env_dir = os.path.dirname(db_path)
+                env_file = os.path.join(env_dir, '.env')
 
+                logger.info(f"尝试更新环境变量文件: {env_file}")
+
+                # 确保目录存在
+                os.makedirs(env_dir, exist_ok=True)
+
+                env_lines = []
+
+                # 读取现有.env文件
+                if os.path.exists(env_file):
+                    with open(env_file, 'r') as f:
+                        env_lines = f.readlines()
+                    logger.info(f"已读取现有.env文件，包含 {len(env_lines)} 行")
+                else:
+                    logger.info(".env文件不存在，将创建新文件")
+
+                # 更新或添加环境变量
+                key_found = False
+                for i, line in enumerate(env_lines):
+                    if line.startswith("FIRST_LOGIN="):
+                        env_lines[i] = "FIRST_LOGIN=false\n"
+                        key_found = True
+                        break
+
+                if not key_found:
+                    env_lines.append("FIRST_LOGIN=false\n")
+
+                # 写回.env文件
+                with open(env_file, 'w') as f:
+                    f.writelines(env_lines)
+                logger.info("已成功更新.env文件")
+            except Exception as e:
+                logger.error(f"更新环境变量文件时出错: {str(e)}")
+                # 继续执行，不影响初始化流程
+
+            logger.info("重定向到初始化页面")
+            return redirect(url_for('setup'))
+
+        # 检查系统是否已初始化
+        initialized = is_system_initialized()
+        logger.info(f"系统初始化状态: {initialized}")
+
+        if not initialized:
+            logger.info("系统未初始化，重定向到初始化页面")
+            return redirect(url_for('setup'))
+
+        if 'user_id' not in session:
+            logger.info("用户未登录，重定向到登录页面")
+            return redirect(url_for('login'))
+
+        logger.info("用户已登录，显示首页")
+        # 继续正常的首页逻辑
+    except Exception as e:
+        logger.error(f"首页处理过程中出错: {str(e)}")
+        # 出现错误时，尝试重定向到初始化页面
         return redirect(url_for('setup'))
-
-    # 检查系统是否已初始化
-    if not is_system_initialized():
-        return redirect(url_for('setup'))
-
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
 
     # 获取统计数据
     account_count = SocialAccount.query.count()
@@ -789,53 +850,96 @@ def get_analytics_summary():
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
     """系统初始化设置页面"""
-    # 检查系统是否已初始化
-    if is_system_initialized():
-        flash('系统已初始化')
-        return redirect(url_for('index'))
+    try:
+        logger.info("访问初始化页面")
 
-    if request.method == 'POST':
-        # 创建管理员账号
-        admin_username = request.form.get('admin_username', 'admin')
-        admin_password = request.form.get('admin_password')
-
-        if not admin_password or len(admin_password) < 6:
-            flash('管理员密码不能为空且长度不能少于6个字符')
-            return render_template('setup.html')
-
-        # 保存LLM配置
-        llm_api_key = request.form.get('llm_api_key')
-        llm_api_model = request.form.get('llm_api_model', 'gpt-3.5-turbo')
-        llm_api_base = request.form.get('llm_api_base', 'https://api.openai.com/v1')
-
-        if not llm_api_key:
-            flash('LLM API密钥不能为空')
-            return render_template('setup.html')
-
+        # 确保数据库已初始化
         try:
-            # 创建管理员用户
-            user = User(username=admin_username)
-            user.set_password(admin_password)
-            db.session.add(user)
-
-            # 保存LLM配置
-            save_llm_config(
-                api_key=llm_api_key,
-                api_model=llm_api_model,
-                api_base=llm_api_base
-            )
-
-            db.session.commit()
-            logger.info("系统初始化成功")
-
-            flash('系统初始化成功，请使用创建的管理员账号登录')
-            return redirect(url_for('login'))
+            logger.info("确保数据库已初始化")
+            # 检查数据库连接
+            db.engine.execute("SELECT 1").fetchall()
+            logger.info("数据库连接正常")
         except Exception as e:
-            db.session.rollback()
-            logger.error(f"系统初始化失败: {str(e)}")
-            flash(f'系统初始化失败: {str(e)}')
+            logger.error(f"数据库连接测试失败: {str(e)}")
+            # 尝试初始化数据库
+            try:
+                logger.info("尝试初始化数据库")
+                init_db()
+                logger.info("数据库初始化成功")
+            except Exception as e:
+                logger.error(f"数据库初始化失败: {str(e)}")
+                error_msg = f"数据库初始化失败: {str(e)}"
+                return render_template('setup.html', error=error_msg)
 
-    return render_template('setup.html')
+        # 检查系统是否已初始化
+        initialized = is_system_initialized()
+        logger.info(f"系统初始化状态: {initialized}")
+
+        if initialized and request.method == 'GET':
+            logger.info("系统已初始化，重定向到首页")
+            flash('系统已初始化', 'info')
+            return redirect(url_for('index'))
+
+        if request.method == 'POST':
+            logger.info("处理初始化表单提交")
+
+            try:
+                # 创建管理员账号
+                admin_username = request.form.get('admin_username', 'admin')
+                admin_password = request.form.get('admin_password')
+
+                logger.info(f"创建管理员用户: {admin_username}")
+
+                if not admin_password or len(admin_password) < 6:
+                    logger.warning("管理员密码不能为空且长度不能少于6个字符")
+                    flash('管理员密码不能为空且长度不能少于6个字符', 'danger')
+                    return render_template('setup.html')
+
+                # 保存LLM配置
+                llm_api_key = request.form.get('llm_api_key')
+                llm_api_model = request.form.get('llm_api_model', 'gpt-3.5-turbo')
+                llm_api_base = request.form.get('llm_api_base', 'https://api.openai.com/v1')
+
+                if not llm_api_key:
+                    logger.warning("LLM API密钥不能为空")
+                    flash('LLM API密钥不能为空', 'danger')
+                    return render_template('setup.html')
+
+                # 创建管理员用户
+                user = User(username=admin_username)
+                user.set_password(admin_password)
+                db.session.add(user)
+                logger.info(f"已创建用户: {admin_username}")
+
+                # 保存LLM配置
+                logger.info("保存LLM配置")
+                save_llm_config(
+                    api_key=llm_api_key,
+                    api_model=llm_api_model,
+                    api_base=llm_api_base
+                )
+
+                # 设置环境变量，标记已经不是首次登录
+                os.environ['FIRST_LOGIN'] = 'false'
+                logger.info("已将 FIRST_LOGIN 环境变量设置为 false")
+
+                # 提交更改
+                db.session.commit()
+                logger.info("系统初始化成功")
+
+                flash('系统初始化成功，请使用创建的管理员账号登录', 'success')
+                return redirect(url_for('login'))
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"系统初始化失败: {str(e)}")
+                flash(f'系统初始化失败: {str(e)}', 'danger')
+                return render_template('setup.html', error=str(e))
+
+        logger.info("显示初始化页面")
+        return render_template('setup.html')
+    except Exception as e:
+        logger.error(f"初始化页面处理过程中出错: {str(e)}")
+        return render_template('setup.html', error=str(e))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():

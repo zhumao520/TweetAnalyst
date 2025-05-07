@@ -6,11 +6,19 @@ services:
       - "5000:5000"
     volumes:
       - ./data:/data
+      - ./config:/app/config
     environment:
       - FLASK_SECRET_KEY=your_random_secret_key_please_change_this
       - DATABASE_PATH=/data/tweetanalyst.db
       - LOG_DIR=/data/logs
       - FIRST_LOGIN=true
+    # 确保容器启动前数据目录存在并有正确权限
+    command: >
+      bash -c "
+        mkdir -p /data /data/logs &&
+        chmod -R 755 /data &&
+        python /app/run_all.py
+      "
     env_file:
       - .env
     restart: always
