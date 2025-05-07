@@ -3,8 +3,8 @@ FROM python:3.9-slim
 WORKDIR /app
 
 # 安装依赖
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # 创建数据和日志目录
 RUN mkdir -p /data /data/logs
