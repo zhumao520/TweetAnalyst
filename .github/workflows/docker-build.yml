@@ -128,6 +128,7 @@ jobs:
 
       # 构建并推送
       - name: 构建并推送 Docker 镜像
+        timeout-minutes: ${{ matrix.timeout }}
         uses: docker/build-push-action@v5
         with:
           context: /tmp/build
@@ -149,9 +150,6 @@ jobs:
           # 启用并行构建
           provenance: false
           sbom: false
-          # 使用 BuildKit 并行构建
-          builder-pool-size: 4
-          timeout-minutes: ${{ matrix.timeout }}
 
       # 移动缓存以避免缓存增长问题
       - name: 移动构建缓存
