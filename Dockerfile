@@ -16,6 +16,7 @@ COPY . .
 ENV DATABASE_PATH=/data/tweetanalyst.db
 ENV FLASK_SECRET_KEY=default_secret_key_please_change_in_env
 ENV LOG_DIR=/data/logs
+ENV FIRST_LOGIN=true
 
 # 暴露端口
 EXPOSE 5000

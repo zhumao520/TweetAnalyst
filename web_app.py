@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func, cast, Date
 from werkzeug.security import generate_password_hash, check_password_hash
 from utils.yaml import load_config_with_env, replace_env_vars
 from utils.logger import get_logger
@@ -13,8 +14,19 @@ logger = get_logger('web_app')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev_key_please_change')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///secretary.db')
+
+# 获取数据库路径
+db_path = os.getenv('DATABASE_PATH', 'instance/tweetanalyst.db')
+# 确保路径是绝对路径
+if not os.path.isabs(db_path):
+    db_path = os.path.join(os.getcwd(), db_path)
+# 确保目录存在
+os.makedirs(os.path.dirname(db_path), exist_ok=True)
+# 设置数据库URI
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+logger.info(f"数据库路径: {db_path}")
 
 db = SQLAlchemy(app)
 
@@ -199,6 +211,27 @@ def is_system_initialized():
     llm_api_key = get_config('LLM_API_KEY')
 
     return admin_exists and llm_api_key
+
+def create_default_admin():
+    """创建默认管理员用户（如果不存在）"""
+    with app.app_context():
+        # 检查是否已存在用户
+        if User.query.first() is not None:
+            logger.debug("已存在用户，不创建默认管理员")
+            return False
+
+        # 创建默认管理员用户
+        try:
+            admin = User(username='admin')
+            admin.set_password('admin123')
+            db.session.add(admin)
+            db.session.commit()
+            logger.info("已创建默认管理员用户: admin/admin123")
+            return True
+        except Exception as e:
+            logger.error(f"创建默认管理员用户时出错: {str(e)}")
+            db.session.rollback()
+            return False
 
 def save_llm_config(api_key=None, api_model=None, api_base=None):
     """保存LLM配置"""
@@ -419,7 +452,12 @@ analytical_briefing的内容是markdown格式的，它需要符合下面的规�
 def import_accounts_from_yaml():
     """从YAML配置文件导入账号到数据库"""
     try:
-        config_path = 'config/social-networks.yml'
+        config_path = os.path.join(os.getcwd(), 'config/social-networks.yml')
+
+        # 检查配置文件是否存在
+        if not os.path.exists(config_path):
+            logger.warning(f"配置文件不存在: {config_path}")
+            return False
 
         # 读取配置文件
         with open(config_path, 'r', encoding='utf-8') as f:
@@ -488,6 +526,42 @@ def import_accounts_from_yaml():
 # 路由
 @app.route('/')
 def index():
+    # 检查是否是首次登录
+    is_first_login = os.getenv('FIRST_LOGIN', 'true').lower() == 'true'
+
+    # 如果是首次登录，强制进行初始化
+    if is_first_login:
+        # 设置环境变量，标记已经不是首次登录
+        os.environ['FIRST_LOGIN'] = 'false'
+        # 尝试更新 .env 文件
+        try:
+            env_file = os.path.join(os.path.dirname(os.environ.get('DATABASE_PATH', '.')), '.env')
+            env_lines = []
+
+            # 读取现有.env文件
+            if os.path.exists(env_file):
+                with open(env_file, 'r') as f:
+                    env_lines = f.readlines()
+
+            # 更新或添加环境变量
+            key_found = False
+            for i, line in enumerate(env_lines):
+                if line.startswith("FIRST_LOGIN="):
+                    env_lines[i] = "FIRST_LOGIN=false\n"
+                    key_found = True
+                    break
+
+            if not key_found:
+                env_lines.append("FIRST_LOGIN=false\n")
+
+            # 写回.env文件
+            with open(env_file, 'w') as f:
+                f.writelines(env_lines)
+        except Exception as e:
+            logger.error(f"更新环境变量文件时出错: {str(e)}")
+
+        return redirect(url_for('setup'))
+
     # 检查系统是否已初始化
     if not is_system_initialized():
         return redirect(url_for('setup'))
@@ -673,7 +747,6 @@ def get_analytics_summary():
         ]
 
         # 获取时间趋势数据（按天统计）
-        from sqlalchemy import func, cast, Date
 
         # 获取最近30天的数据
         thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
@@ -1126,12 +1199,57 @@ def api_accounts():
 
 # 初始化数据库
 def init_db():
+    """
+    初始化数据库，创建表结构，导入配置
+    """
+    logger.info("开始初始化数据库...")
+
     with app.app_context():
-        db.create_all()
+        # 创建所有表
+        try:
+            db.create_all()
+            logger.info("数据库表创建成功")
+        except Exception as e:
+            logger.error(f"创建数据库表时出错: {str(e)}")
+            raise
+
+        # 确保配置目录存在
+        config_dir = os.path.join(os.getcwd(), 'config')
+        if not os.path.exists(config_dir):
+            try:
+                os.makedirs(config_dir)
+                logger.info(f"创建配置目录: {config_dir}")
+            except Exception as e:
+                logger.error(f"创建配置目录时出错: {str(e)}")
+
+        # 确保配置文件存在
+        config_file = os.path.join(config_dir, 'social-networks.yml')
+        if not os.path.exists(config_file):
+            try:
+                # 创建默认配置文件
+                with open(config_file, 'w', encoding='utf-8') as f:
+                    f.write("""social_networks:
+  - type: twitter
+    socialNetworkId: elonmusk
+    prompt: |
+      请分析以下推文内容，判断是否与科技、创新或太空探索相关。
+
+      内容: {content}
+
+      请以JSON格式返回分析结果，包含以下字段：
+      1. is_relevant: 是否相关 (1表示相关，0表示不相关)
+      2. analytical_briefing: 如果相关，请提供简要分析（不超过200字）；如果不相关，请简述原因
+    tag: tech
+    enableAutoReply: false
+""")
+                logger.info(f"创建默认配置文件: {config_file}")
+            except Exception as e:
+                logger.error(f"创建默认配置文件时出错: {str(e)}")
 
         # 导入配置文件中的账号
         try:
             import_accounts_from_yaml()
+            logger.info("从配置文件导入账号成功")
         except Exception as e:
             logger.error(f"导入账号时出错: {str(e)}")
 
@@ -1183,8 +1301,21 @@ def init_db():
             auto_reply_prompt = os.getenv('AUTO_REPLY_PROMPT')
             if auto_reply_prompt:
                 set_config('AUTO_REPLY_PROMPT', auto_reply_prompt, description='自动回复提示词模板', update_env=False)
+
+            logger.info("从环境变量导入系统配置成功")
         except Exception as e:
             logger.error(f"导入系统配置时出错: {str(e)}")
+
+        # 创建默认管理员用户
+        try:
+            if create_default_admin():
+                logger.info("创建默认管理员用户成功")
+            else:
+                logger.debug("未创建默认管理员用户")
+        except Exception as e:
+            logger.error(f"创建默认管理员用户时出错: {str(e)}")
+
+    logger.info("数据库初始化完成")
 
 # API用于保存分析结果
 @app.route('/api/save_result', methods=['POST'])
@@ -1208,6 +1339,336 @@ def save_result():
         return jsonify({'success': True, 'id': result.id})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+# 数据导出功能
+@app.route('/export_data')
+def export_data():
+    """导出所有数据为JSON文件"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    try:
+        # 导出监控的账号数据（这是最重要的配置）
+        accounts = SocialAccount.query.all()
+        account_data = [account.to_dict() for account in accounts]
+
+        # 导出关键系统配置
+        # 1. 获取所有配置
+        all_configs = SystemConfig.query.all()
+
+        # 2. 分类配置
+        llm_configs = []
+        twitter_configs = []
+        notification_configs = []
+        other_configs = []
+
+        for config in all_configs:
+            # 创建配置项基本信息
+            config_item = {
+                'key': config.key,
+                'description': config.description
+            }
+
+            # 对敏感信息进行特殊处理
+            if config.is_secret:
+                # 标记敏感信息已设置，但不导出实际值
+                config_item['value'] = '******' if config.value else ''
+                config_item['is_set'] = bool(config.value)
+            else:
+                config_item['value'] = config.value
+
+            # 根据配置类型分类
+            if config.key.startswith('LLM_'):
+                llm_configs.append(config_item)
+            elif config.key.startswith('TWITTER_'):
+                twitter_configs.append(config_item)
+            elif config.key in ['APPRISE_URLS', 'ENABLE_AUTO_REPLY', 'AUTO_REPLY_PROMPT']:
+                notification_configs.append(config_item)
+            else:
+                other_configs.append(config_item)
+
+        # 获取通知服务配置
+        notification_services = []
+        apprise_urls = get_config('APPRISE_URLS', '')
+        if apprise_urls:
+            for url in apprise_urls.split(','):
+                url = url.strip()
+                if url:
+                    # 提取通知服务类型和基本信息
+                    parts = url.split('://')
+                    if len(parts) > 1:
+                        service_type = parts[0]
+                        # 提取服务的基本信息，但隐藏敏感细节
+                        service_info = parts[1].split('/')[0] if '/' in parts[1] else '***'
+                        notification_services.append({
+                            'type': service_type,
+                            'info': service_info,
+                            'full_url': f"{service_type}://***"
+                        })
+
+        # 创建导出数据，专注于关键配置
+        export_data = {
+            'accounts': account_data,  # 监控的账号数据
+            'configs': {
+                'llm': llm_configs,  # LLM API 配置
+                'twitter': twitter_configs,  # Twitter 账号配置
+                'notification': notification_configs,  # 通知系统配置
+                'other': other_configs  # 其他配置
+            },
+            'notification_services': notification_services,  # 通知服务详情
+            'export_time': datetime.now(timezone.utc).isoformat(),
+            'version': '1.1',  # 更新版本号
+            'export_type': 'essential'  # 标记为核心配置导出
+        }
+
+        # 创建响应
+        response = jsonify(export_data)
+        response.headers['Content-Disposition'] = f'attachment; filename=tweetanalyst_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        return response
+    except Exception as e:
+        logger.error(f"导出数据时出错: {str(e)}")
+        flash(f"导出数据失败: {str(e)}", 'danger')
+        return redirect(url_for('index'))
+
+# 数据导入功能
+@app.route('/import_data', methods=['GET', 'POST'])
+def import_data():
+    """导入数据"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        # 检查是否有文件上传
+        if 'import_file' not in request.files:
+            flash('没有选择文件', 'danger')
+            return redirect(request.url)
+
+        file = request.files['import_file']
+
+        # 检查文件名
+        if file.filename == '':
+            flash('没有选择文件', 'danger')
+            return redirect(request.url)
+
+        # 检查文件类型
+        if not file.filename.endswith('.json'):
+            flash('只支持导入JSON文件', 'danger')
+            return redirect(request.url)
+
+        try:
+            # 读取并解析JSON数据
+            import_data = json.loads(file.read().decode('utf-8'))
+
+            # 验证数据格式
+            if 'accounts' not in import_data or 'version' not in import_data:
+                flash('导入文件格式不正确，缺少必要的数据字段', 'danger')
+                return redirect(request.url)
+
+            # 检测导出文件版本
+            version = import_data.get('version', '1.0')
+            is_essential_export = import_data.get('export_type') == 'essential'
+
+            logger.info(f"导入数据版本: {version}, 类型: {'核心配置' if is_essential_export else '完整数据'}")
+
+            # 导入账号数据
+            if request.form.get('import_accounts') == 'on':
+                imported_accounts = 0
+                for account_data in import_data['accounts']:
+                    # 检查账号是否已存在
+                    existing = SocialAccount.query.filter_by(
+                        type=account_data['type'],
+                        account_id=account_data['account_id']
+                    ).first()
+
+                    if not existing:
+                        # 创建新账号
+                        new_account = SocialAccount(
+                            type=account_data['type'],
+                            account_id=account_data['account_id'],
+                            tag=account_data.get('tag', 'all'),
+                            enable_auto_reply=account_data.get('enable_auto_reply', False),
+                            prompt_template=account_data.get('prompt_template', '')
+                        )
+                        db.session.add(new_account)
+                        imported_accounts += 1
+
+                if imported_accounts > 0:
+                    db.session.commit()
+                    # 同步到配置文件
+                    sync_accounts_to_yaml()
+                    flash(f'成功导入 {imported_accounts} 个账号', 'success')
+
+            # 导入分析结果数据
+            if request.form.get('import_results') == 'on':
+                imported_results = 0
+                for result_data in import_data['results']:
+                    # 检查结果是否已存在
+                    existing = AnalysisResult.query.filter_by(
+                        social_network=result_data['social_network'],
+                        account_id=result_data['account_id'],
+                        post_id=result_data['post_id']
+                    ).first()
+
+                    if not existing:
+                        # 创建新结果
+                        new_result = AnalysisResult(
+                            social_network=result_data['social_network'],
+                            account_id=result_data['account_id'],
+                            post_id=result_data['post_id'],
+                            post_time=datetime.fromisoformat(result_data['post_time']),
+                            content=result_data['content'],
+                            analysis=result_data['analysis'],
+                            is_relevant=result_data['is_relevant']
+                        )
+                        db.session.add(new_result)
+                        imported_results += 1
+
+                if imported_results > 0:
+                    db.session.commit()
+                    flash(f'成功导入 {imported_results} 条分析结果', 'success')
+
+            # 导入系统配置数据
+            if request.form.get('import_configs') == 'on':
+                imported_configs = 0
+
+                # 处理不同版本的配置格式
+                if is_essential_export:
+                    # 新版本格式（分类配置）
+                    config_categories = import_data['configs']
+
+                    # 导入LLM配置
+                    for config in config_categories.get('llm', []):
+                        if not config.get('is_set', False) and config.get('value', '') == '******':
+                            # 跳过敏感信息，这些信息在导出时被屏蔽
+                            continue
+
+                        set_config(
+                            config['key'],
+                            config['value'],
+                            is_secret=config.get('value') == '******',
+                            description=config.get('description', ''),
+                            update_env=False
+                        )
+                        imported_configs += 1
+
+                    # 导入Twitter配置
+                    for config in config_categories.get('twitter', []):
+                        if not config.get('is_set', False) and config.get('value', '') == '******':
+                            # 跳过敏感信息，这些信息在导出时被屏蔽
+                            continue
+
+                        set_config(
+                            config['key'],
+                            config['value'],
+                            is_secret=config.get('value') == '******',
+                            description=config.get('description', ''),
+                            update_env=False
+                        )
+                        imported_configs += 1
+
+                    # 导入通知配置
+                    for config in config_categories.get('notification', []):
+                        if not config.get('is_set', False) and config.get('value', '') == '******':
+                            # 跳过敏感信息，这些信息在导出时被屏蔽
+                            continue
+
+                        set_config(
+                            config['key'],
+                            config['value'],
+                            is_secret=config.get('value') == '******',
+                            description=config.get('description', ''),
+                            update_env=False
+                        )
+                        imported_configs += 1
+
+                    # 导入其他配置
+                    for config in config_categories.get('other', []):
+                        if not config.get('is_set', False) and config.get('value', '') == '******':
+                            # 跳过敏感信息，这些信息在导出时被屏蔽
+                            continue
+
+                        set_config(
+                            config['key'],
+                            config['value'],
+                            is_secret=config.get('value') == '******',
+                            description=config.get('description', ''),
+                            update_env=False
+                        )
+                        imported_configs += 1
+                else:
+                    # 旧版本格式（平铺配置）
+                    for config_data in import_data.get('configs', []):
+                        # 设置配置
+                        set_config(
+                            config_data['key'],
+                            config_data['value'],
+                            is_secret=False,
+                            description=config_data.get('description', ''),
+                            update_env=False
+                        )
+                        imported_configs += 1
+
+                if imported_configs > 0:
+                    flash(f'成功导入 {imported_configs} 项系统配置', 'success')
+
+            # 导入通知配置（如果存在）
+            if request.form.get('import_notifications') == 'on':
+                notification_imported = False
+
+                # 处理不同版本的通知配置
+                if is_essential_export:
+                    # 新版本格式
+                    if 'notification_services' in import_data:
+                        # 注意：通知URL在导出时已被屏蔽，这里只提示用户
+                        service_types = [service['type'] for service in import_data['notification_services']]
+                        if service_types:
+                            flash(f'检测到通知服务配置: {", ".join(service_types)}。请在系统配置中手动设置完整的通知URL。', 'info')
+                            notification_imported = True
+                else:
+                    # 旧版本格式
+                    if 'notifications' in import_data:
+                        # 旧版本通知配置处理
+                        notification_imported = True
+
+                # 导入自动回复配置（适用于所有版本）
+                auto_reply_imported = False
+
+                # 新版本格式
+                if is_essential_export:
+                    # 从分类配置中查找自动回复设置
+                    config_categories = import_data['configs']
+                    for config in config_categories.get('notification', []):
+                        if config['key'] == 'ENABLE_AUTO_REPLY':
+                            set_config(
+                                'ENABLE_AUTO_REPLY',
+                                config['value'],
+                                description='是否启用自动回复',
+                                update_env=False
+                            )
+                            auto_reply_imported = True
+                # 旧版本格式
+                elif 'auto_reply' in import_data:
+                    auto_reply = import_data['auto_reply']
+                    if 'enabled' in auto_reply:
+                        set_config(
+                            'ENABLE_AUTO_REPLY',
+                            'true' if auto_reply['enabled'] else 'false',
+                            description='是否启用自动回复',
+                            update_env=False
+                        )
+                        auto_reply_imported = True
+
+                if notification_imported or auto_reply_imported:
+                    flash('成功导入通知和自动回复配置', 'success')
+
+            return redirect(url_for('index'))
+        except Exception as e:
+            logger.error(f"导入数据时出错: {str(e)}")
+            flash(f"导入数据失败: {str(e)}", 'danger')
+            return redirect(request.url)
+
+    # GET 请求，显示导入表单
+    return render_template('import_data.html')
 
 if __name__ == '__main__':
     init_db()
