@@ -1,0 +1,175 @@
+name: Docker Build and Push
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  # 为每个平台单独构建镜像
+  build-per-platform:
+    name: Build ${{ matrix.platform }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # 即使一个平台失败，也继续构建其他平台
+      max-parallel: 2   # 限制并行运行的作业数量，只有两个架构
+      matrix:
+        include:
+          - platform: linux/amd64
+            timeout: 30
+          - platform: linux/arm64
+            timeout: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: ${{ matrix.platform }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      # 提取平台名称作为标签后缀
+      - name: Extract platform suffix
+        id: platform_suffix
+        run: |
+          SUFFIX=$(echo "${{ matrix.platform }}" | sed 's/linux\///' | sed 's/\//-/')
+          echo "suffix=$SUFFIX" >> $GITHUB_OUTPUT
+
+      # 提取版本信息
+      - name: Extract version info
+        id: version_info
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "tag_suffix=-$VERSION" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/heads/main || "${{ github.ref }}" == refs/heads/master ]]; then
+            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "tag_suffix=" >> $GITHUB_OUTPUT
+          else
+            SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            echo "version=$SHA" >> $GITHUB_OUTPUT
+            echo "tag_suffix=-$SHA" >> $GITHUB_OUTPUT
+          fi
+
+      # 构建并推送单平台镜像
+      # 设置构建缓存
+      - name: Set up Docker Buildx cache
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ matrix.platform }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-${{ matrix.platform }}-
+            ${{ runner.os }}-buildx-
+
+      # 构建并推送
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:${{ steps.platform_suffix.outputs.suffix }}${{ steps.version_info.outputs.tag_suffix }}
+          platforms: ${{ matrix.platform }}
+          cache-from: |
+            type=gha
+            type=local,src=/tmp/.buildx-cache
+          cache-to: |
+            type=gha,mode=max
+            type=local,dest=/tmp/.buildx-cache-new,mode=max
+          # 优化构建参数
+          build-args: |
+            BUILDKIT_STEP_LOG_MAX_SIZE=10485760
+            BUILDKIT_STEP_LOG_MAX_SPEED=10485760
+            BUILDKIT_PROGRESS=plain
+          # 启用并行构建
+          provenance: false
+          sbom: false
+          # 使用 BuildKit 并行构建
+          builder-pool-size: 4
+          timeout-minutes: ${{ matrix.timeout }}
+
+      # 移动缓存以避免缓存增长问题
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+  # 创建多架构清单
+  create-manifest:
+    name: Create multi-arch manifest
+    needs: build-per-platform
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      # 提取版本信息
+      - name: Extract version info
+        id: version_info
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "tag_suffix=-$VERSION" >> $GITHUB_OUTPUT
+            echo "tags=${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:$VERSION,${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:latest" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/heads/main || "${{ github.ref }}" == refs/heads/master ]]; then
+            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "tag_suffix=" >> $GITHUB_OUTPUT
+            echo "tags=${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:latest" >> $GITHUB_OUTPUT
+          else
+            SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            echo "version=$SHA" >> $GITHUB_OUTPUT
+            echo "tag_suffix=-$SHA" >> $GITHUB_OUTPUT
+            echo "tags=${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:$SHA" >> $GITHUB_OUTPUT
+          fi
+
+      # 创建并推送多架构清单
+      - name: Create and push manifest
+        run: |
+          VERSION="${{ steps.version_info.outputs.version }}"
+          DOCKER_CLI_EXPERIMENTAL=enabled
+
+          # 创建并推送多架构清单
+          docker manifest create ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:${VERSION} \
+            ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:amd64${{ steps.version_info.outputs.tag_suffix }} \
+            ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:arm64${{ steps.version_info.outputs.tag_suffix }}
+
+          # 添加架构注释
+          docker manifest annotate ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:${VERSION} \
+            ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:arm64${{ steps.version_info.outputs.tag_suffix }} --arch arm64
+
+          # 推送清单
+          docker manifest push ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:${VERSION}
+
+          # 如果是发布版本，也更新 latest 标签
+          if [[ "$VERSION" != "latest" && "${{ github.ref }}" == refs/tags/v* ]]; then
+            docker manifest create ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:latest \
+              ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:amd64${{ steps.version_info.outputs.tag_suffix }} \
+              ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:arm64${{ steps.version_info.outputs.tag_suffix }}
+
+            docker manifest annotate ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:latest \
+              ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:arm64${{ steps.version_info.outputs.tag_suffix }} --arch arm64
+
+            docker manifest push ${{ secrets.DOCKER_HUB_USERNAME }}/tweetanalyst:latest
+          fi
