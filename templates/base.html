@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Secretary - 社交媒体监控{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="theme-color" content="#343a40">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">Secretary</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                {% if session.get('user_id') %}
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('accounts') }}">账号管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('results') }}">分析结果</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('analytics_page') }}">数据分析</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('config') }}">配置管理</a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="settingsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            系统设置
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="settingsDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('settings') }}">基本设置</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('system_config') }}">系统配置</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('test_page') }}">系统测试</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle position-relative" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-bell"></i>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="notification-badge">
+                                0
+                                <span class="visually-hidden">未读通知</span>
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" id="notifications-container" style="width: 300px; max-height: 400px; overflow-y: auto;">
+                            <li><h6 class="dropdown-header">通知</h6></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-center" href="#">加载中...</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">退出</a>
+                    </li>
+                </ul>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer class="mt-5 py-3 bg-light">
+        <div class="container text-center">
+            <p class="text-muted">Secretary v0.10.0 - 社交媒体监控与分析</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    {% if session.get('user_id') %}
+    <script>
+        // 通知功能
+        document.addEventListener('DOMContentLoaded', function() {
+            const notificationBadge = document.getElementById('notification-badge');
+            const notificationsContainer = document.getElementById('notifications-container');
+
+            // 从本地存储获取已读通知
+            let readNotifications = JSON.parse(localStorage.getItem('readNotifications') || '[]');
+
+            // 加载通知
+            function loadNotifications() {
+                fetch('/api/notifications')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            updateNotifications(data.data);
+                        } else {
+                            console.error('Failed to load notifications:', data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading notifications:', error);
+                    });
+            }
+
+            // 更新通知UI
+            function updateNotifications(notifications) {
+                // 清空容器
+                notificationsContainer.innerHTML = '';
+
+                // 添加标题
+                const header = document.createElement('li');
+                header.innerHTML = '<h6 class="dropdown-header">通知</h6>';
+                notificationsContainer.appendChild(header);
+
+                // 添加分隔线
+                const divider = document.createElement('li');
+                divider.innerHTML = '<hr class="dropdown-divider">';
+                notificationsContainer.appendChild(divider);
+
+                // 如果没有通知
+                if (notifications.length === 0) {
+                    const emptyItem = document.createElement('li');
+                    emptyItem.innerHTML = '<a class="dropdown-item text-center" href="#">暂无通知</a>';
+                    notificationsContainer.appendChild(emptyItem);
+                    notificationBadge.classList.add('d-none');
+                    return;
+                }
+
+                // 计算未读通知数量
+                let unreadCount = 0;
+
+                // 添加通知项
+                notifications.forEach(notification => {
+                    // 检查是否已读
+                    const isRead = readNotifications.includes(notification.id);
+                    if (!isRead) {
+                        unreadCount++;
+                    }
+
+                    // 创建通知项
+                    const item = document.createElement('li');
+                    const notificationTime = new Date(notification.time);
+                    const timeString = notificationTime.toLocaleString('zh-CN', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+
+                    item.innerHTML = `
+                        <a class="dropdown-item ${isRead ? 'text-muted' : 'fw-bold'}" href="${notification.url}">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${notification.title}</h6>
+                                <small>${timeString}</small>
+                            </div>
+                            <p class="mb-1 small">${notification.content}</p>
+                        </a>
+                    `;
+
+                    // 点击事件：标记为已读
+                    item.querySelector('a').addEventListener('click', function() {
+                        markAsRead(notification.id);
+                    });
+
+                    notificationsContainer.appendChild(item);
+                });
+
+                // 添加"全部标记为已读"按钮
+                if (unreadCount > 0) {
+                    const markAllItem = document.createElement('li');
+                    markAllItem.innerHTML = '<hr class="dropdown-divider">';
+                    notificationsContainer.appendChild(markAllItem);
+
+                    const markAllButton = document.createElement('li');
+                    markAllButton.innerHTML = '<a class="dropdown-item text-center" href="#">全部标记为已读</a>';
+                    markAllButton.querySelector('a').addEventListener('click', function(e) {
+                        e.preventDefault();
+                        markAllAsRead(notifications);
+                    });
+                    notificationsContainer.appendChild(markAllButton);
+                }
+
+                // 更新未读数量徽章
+                if (unreadCount > 0) {
+                    notificationBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                    notificationBadge.classList.remove('d-none');
+                } else {
+                    notificationBadge.classList.add('d-none');
+                }
+            }
+
+            // 标记单个通知为已读
+            function markAsRead(id) {
+                if (!readNotifications.includes(id)) {
+                    readNotifications.push(id);
+                    localStorage.setItem('readNotifications', JSON.stringify(readNotifications));
+                }
+            }
+
+            // 标记所有通知为已读
+            function markAllAsRead(notifications) {
+                notifications.forEach(notification => {
+                    if (!readNotifications.includes(notification.id)) {
+                        readNotifications.push(notification.id);
+                    }
+                });
+                localStorage.setItem('readNotifications', JSON.stringify(readNotifications));
+
+                // 更新UI
+                document.querySelectorAll('#notifications-container .dropdown-item').forEach(item => {
+                    item.classList.remove('fw-bold');
+                    item.classList.add('text-muted');
+                });
+
+                notificationBadge.classList.add('d-none');
+            }
+
+            // 初始加载通知
+            loadNotifications();
+
+            // 每分钟刷新一次通知
+            setInterval(loadNotifications, 60000);
+        });
+    </script>
+    {% endif %}
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

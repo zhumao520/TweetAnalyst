@@ -1,0 +1,188 @@
+# TweetAnalyst - 推文分析与监控平台
+
+## 项目简介
+
+TweetAnalyst 是一个自动化的社交媒体分析工具，专门用于监控和分析Twitter上的内容，并通过AI进行智能分析。该工具能够自动抓取指定账号的最新推文，根据配置的分析提示词进行内容分析，并将分析结果通过多种渠道推送给用户。通过灵活配置分析提示词，可以针对不同主题（如财经、政治、科技等）进行定制化分析。
+
+## 主要功能
+
+- **Twitter监控**：支持监控多个Twitter账号，实时获取最新推文
+- **AI内容分析**：使用大语言模型对推文进行智能分析和翻译
+- **自动回复**：支持根据推文内容自动生成回复
+- **多渠道推送**：使用Apprise支持多种推送方式（Telegram、Discord、企业微信等）
+- **Web管理界面**：提供直观的Web界面，方便配置和管理
+- **代理支持**：内置代理支持，方便访问Twitter
+- **灵活配置**：支持自定义分析提示词和回复模板
+- **本地存储**：使用SQLite数据库，无需额外服务
+
+## 安装说明
+
+### 方式一：使用 Docker（推荐）
+
+1. 使用 Docker Compose 部署（最简单）：
+
+```bash
+# 创建数据目录
+mkdir -p data
+
+# 下载 docker-compose.yml
+curl -O https://raw.githubusercontent.com/your-github-username/tweetanalyst/main/docker-compose.yml
+
+# 启动容器
+docker-compose up -d
+```
+
+2. 访问 Web 界面完成初始化设置：
+
+打开浏览器访问 http://localhost:5000，系统会自动跳转到初始化页面，您需要：
+- 设置管理员账号和密码
+- 配置 LLM API 密钥（如 OpenAI API 密钥）
+- 点击"完成初始化"按钮
+
+3. 登录系统并完成其他配置：
+
+使用您设置的管理员账号和密码登录系统，然后在系统设置中配置：
+- Twitter 账号信息
+- 推送设置（Apprise URLs）
+- 代理设置（如果需要）
+- 自动回复设置（如果需要）
+
+4. 添加要监控的Twitter账号：
+
+在"账号管理"页面添加要监控的Twitter账号，并配置分析提示词。
+
+### 方式二：手动安装
+
+1. 克隆项目到本地：
+```bash
+git clone https://github.com/your-github-username/tweetanalyst.git
+cd tweetanalyst
+```
+
+2. 安装依赖：
+```bash
+pip install -r requirements.txt
+```
+
+3. 配置环境变量：
+创建 `.env` 文件并添加以下配置：
+```
+# 基础配置
+FLASK_SECRET_KEY=your_random_secret_key
+
+# LLM API 配置
+LLM_API_MODEL=gpt-3.5-turbo
+LLM_API_KEY=your_api_key
+LLM_API_BASE=https://api.openai.com/v1
+
+# Twitter 配置
+TWITTER_USERNAME=your_twitter_username
+TWITTER_PASSWORD=your_twitter_password
+# 或者使用会话数据
+# TWITTER_SESSION=your_twitter_session_data
+
+# 推送配置（Apprise）
+APPRISE_URLS=tgram://bottoken/ChatID,discord://webhook_id/webhook_token
+
+# 代理配置（如果需要）
+HTTP_PROXY=http://127.0.0.1:7890
+
+# 自动回复配置
+ENABLE_AUTO_REPLY=false
+# AUTO_REPLY_PROMPT=
+
+# 定时任务配置
+SCHEDULER_INTERVAL_MINUTES=30
+
+# 日志配置
+LOG_DIR=logs
+LOG_LEVEL=info
+```
+
+4. 启动应用：
+```bash
+# 启动 Web 应用和定时任务
+python run_all.py
+
+# 或者分别启动
+# 只启动 Web 应用
+python run_web.py
+# 只启动定时任务
+python run_scheduler.py
+```
+
+5. 访问 Web 界面：
+打开浏览器访问 http://localhost:5000
+
+环境变量说明：
+- `FLASK_SECRET_KEY`: Web应用的密钥，用于会话安全
+- `DATABASE_PATH`: 数据库文件路径，默认为 `tweetanalyst.db`
+- `TWITTER_USERNAME`: Twitter 平台的用户名
+- `TWITTER_PASSWORD`: Twitter 平台的密码
+- `TWITTER_SESSION`: 之前登录过的 Twitter 平台的登录票据
+- `LLM_API_MODEL`: 使用的 LLM 模型名称，如 `gpt-3.5-turbo`
+- `LLM_API_KEY`: LLM API 密钥
+- `LLM_API_BASE`: LLM API 基础地址，默认为 `https://api.openai.com/v1`
+- `LLM_PROCESS_MAX_RETRIED`: LLM 处理失败时的最大重试次数，默认为 3
+- `APPRISE_URLS`: Apprise 推送 URL，支持多种推送方式，多个 URL 用逗号分隔
+- `HTTP_PROXY`: HTTP 代理地址，用于访问 Twitter 等需要代理的网站
+- `ENABLE_AUTO_REPLY`: 是否启用自动回复功能，值为 `true`/`false`
+- `AUTO_REPLY_PROMPT`: 自动回复的提示词模板
+- `SCHEDULER_INTERVAL_MINUTES`: 定时任务执行间隔（分钟），默认为 30
+- `LOG_DIR`: 日志文件目录，默认为 `logs`
+- `LOG_LEVEL`: 日志级别，可选值为 `debug`、`info`、`warning`、`error`、`critical`，默认为 `info`
+- `LOG_TO_CONSOLE`: 是否将日志输出到控制台，值为 `true`/`false`，默认为 `true`
+
+## 使用方法
+
+### Web 管理界面
+
+1. 访问 Web 界面：http://localhost:5000
+2. 使用管理员账号登录
+3. 在"账号管理"页面添加要监控的 Twitter 账号
+4. 在"系统设置"页面配置推送、代理等选项
+5. 系统会自动按照设定的时间间隔执行监控任务
+
+### 手动执行
+
+如果需要手动执行监控任务：
+
+```bash
+# 使用 Docker
+docker exec -it tweetanalyst-tweetanalyst-1 python main.py
+
+# 本地安装
+python main.py
+```
+
+程序会自动：
+- 抓取配置的Twitter账号的最新推文
+- 根据每个账号配置的提示词进行 AI 分析和翻译
+- 生成分析报告
+- 通过配置的 Apprise 推送分析结果
+
+## 输出格式
+
+分析结果将以 Markdown 格式推送，包含：
+- 发布时间
+- 原文内容（如果是英文内容会以引用格式显示）
+- 中文翻译（仅当原文为英文时显示）
+- 分析结果（根据提示词配置的格式）
+- 分析总结
+
+## 注意事项
+
+- 确保网络连接正常，访问 Twitter 可能需要代理
+- 首次使用时需要在 Web 界面完成初始化设置
+- 推送通知需要正确配置 Apprise URLs
+- 建议使用 Python 3.9 或更高版本
+- 每个监控账号可以配置不同的分析提示词和推送目标
+- 提示词配置决定了分析的主题和维度，可以根据需求灵活调整
+- Twitter 登录后会生成会话文件，可以在系统配置中保存会话数据
+- 当 LLM 返回的 JSON 格式无法解析时，系统会自动重试，重试次数由环境变量 `LLM_PROCESS_MAX_RETRIED` 控制，默认为 3 次
+- 如果重试次数用完仍然无法解析 JSON，系统会跳过当前内容的处理并继续处理下一条内容
+- 使用 Docker 部署时，数据会保存在 `./data` 目录中，请确保该目录有足够的权限
+
+## 许可证
+
+本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
