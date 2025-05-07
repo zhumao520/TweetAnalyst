@@ -1,4 +1,4 @@
-name: Docker Build and Push
+name: Docker 镜像构建与发布
 
 on:
   workflow_dispatch:  # 只允许手动触发
@@ -15,7 +15,7 @@ on:
 jobs:
   # 为每个平台单独构建镜像
   build-per-platform:
-    name: Build ${{ matrix.platform }}
+    name: 构建 ${{ matrix.platform }} 平台镜像
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # 即使一个平台失败，也继续构建其他平台
@@ -28,32 +28,32 @@ jobs:
             timeout: 60
 
     steps:
-      - name: Checkout code
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
+      - name: 设置 QEMU
         uses: docker/setup-qemu-action@v2
         with:
           platforms: ${{ matrix.platform }}
 
-      - name: Set up Docker Buildx
+      - name: 设置 Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to DockerHub
+      - name: 登录 DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       # 提取平台名称作为标签后缀
-      - name: Extract platform suffix
+      - name: 提取平台后缀
         id: platform_suffix
         run: |
           SUFFIX=$(echo "${{ matrix.platform }}" | sed 's/linux\///' | sed 's/\//-/')
           echo "suffix=$SUFFIX" >> $GITHUB_OUTPUT
 
       # 使用手动输入的版本信息
-      - name: Extract version info
+      - name: 提取版本信息
         id: version_info
         run: |
           VERSION="${{ github.event.inputs.version }}"
@@ -68,7 +68,7 @@ jobs:
 
       # 构建并推送单平台镜像
       # 设置构建缓存
-      - name: Set up Docker Buildx cache
+      - name: 设置 Docker Buildx 缓存
         uses: actions/cache@v3
         with:
           path: /tmp/.buildx-cache
@@ -78,22 +78,38 @@ jobs:
             ${{ runner.os }}-buildx-
 
       # 列出工作目录内容（调试用）
-      - name: List directory contents
-        run: ls -la
-
-      # 确认 requirements.txt 存在
-      - name: Check requirements.txt
+      - name: 列出工作目录内容
         run: |
-          if [ -f "requirements.txt" ]; then
-            echo "requirements.txt exists"
-            cat requirements.txt | head -5
-          else
-            echo "requirements.txt does not exist!"
-            exit 1
-          fi
+          echo "当前工作目录: $(pwd)"
+          ls -la
+
+      # 创建 requirements.txt 文件
+      - name: 创建 requirements.txt 文件
+        run: |
+          echo "创建 requirements.txt 文件..."
+          cat > requirements.txt << 'EOL'
+          python-dotenv>=1.0.0
+          pyyaml>=6.0
+          langchain-openai>=0.0.1
+          langchain-core>=0.1.0
+          requests>=2.28.2
+          pytz>=2023.3
+          schedule>=1.2.0
+
+          tweety-ns>=0.9.0
+
+          Flask>=2.3.0
+          Flask-SQLAlchemy>=3.0.0
+          Werkzeug>=2.3.0
+
+          apprise>=1.9.0
+          EOL
+
+          echo "requirements.txt 文件已创建:"
+          cat requirements.txt
 
       # 创建临时构建目录
-      - name: Create build directory
+      - name: 创建临时构建目录
         run: |
           mkdir -p /tmp/build
           cp -r . /tmp/build/
@@ -104,18 +120,14 @@ jobs:
             cat /tmp/build/requirements.txt | head -5
           else
             echo "临时目录中 requirements.txt 不存在！"
-            # 手动创建一个基本的 requirements.txt 文件
-            echo "python-dotenv>=1.0.0" > /tmp/build/requirements.txt
-            echo "pyyaml>=6.0" >> /tmp/build/requirements.txt
-            echo "langchain-openai>=0.0.1" >> /tmp/build/requirements.txt
-            echo "langchain-core>=0.1.0" >> /tmp/build/requirements.txt
-            echo "requests>=2.28.2" >> /tmp/build/requirements.txt
-            echo "手动创建的 requirements.txt:"
-            cat /tmp/build/requirements.txt
+            # 复制刚刚创建的 requirements.txt 文件
+            cp requirements.txt /tmp/build/
+            echo "已复制 requirements.txt 到临时目录"
+            cat /tmp/build/requirements.txt | head -5
           fi
 
       # 构建并推送
-      - name: Build and push
+      - name: 构建并推送 Docker 镜像
         uses: docker/build-push-action@v5
         with:
           context: /tmp/build
@@ -142,27 +154,27 @@ jobs:
           timeout-minutes: ${{ matrix.timeout }}
 
       # 移动缓存以避免缓存增长问题
-      - name: Move cache
+      - name: 移动构建缓存
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
   # 创建多架构清单
   create-manifest:
-    name: Create multi-arch manifest
+    name: 创建多架构清单
     needs: build-per-platform
     runs-on: ubuntu-latest
     # 手动触发时总是执行
 
     steps:
-      - name: Login to DockerHub
+      - name: 登录 DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       # 使用手动输入的版本信息
-      - name: Extract version info
+      - name: 提取版本信息
         id: version_info
         run: |
           VERSION="${{ github.event.inputs.version }}"
@@ -178,7 +190,7 @@ jobs:
           echo "使用版本: $VERSION"
 
       # 创建并推送多架构清单
-      - name: Create and push manifest
+      - name: 创建并推送多架构清单
         run: |
           VERSION="${{ steps.version_info.outputs.version }}"
           DOCKER_CLI_EXPERIMENTAL=enabled
