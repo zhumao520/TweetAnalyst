@@ -21,5 +21,9 @@ ENV FIRST_LOGIN=true
 # 暴露端口
 EXPOSE 5000
 
+# 添加启动脚本
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # 启动命令
-CMD ["python", "run_all.py"]
+CMD ["/app/docker-entrypoint.sh"]

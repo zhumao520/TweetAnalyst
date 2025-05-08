@@ -21,7 +21,44 @@ def test_twitter_connection(account_id=None):
         dict: 测试结果，包含success, message和data字段
     """
     try:
-        from modules.socialmedia.twitter import fetch
+        # 检查代理设置
+        proxy = os.getenv('HTTP_PROXY', '')
+        if proxy:
+            logger.info(f"使用代理连接Twitter: {proxy}")
+            # 如果是SOCKS代理，检查是否安装了支持
+            if proxy.startswith('socks'):
+                try:
+                    import socksio
+                    logger.info("已安装SOCKS代理支持")
+                except ImportError:
+                    logger.warning("未安装SOCKS代理支持，可能无法正常连接Twitter")
+                    try:
+                        import pip
+                        logger.info("尝试安装SOCKS代理支持...")
+                        pip.main(['install', 'httpx[socks]', '--quiet'])
+                        logger.info("成功安装SOCKS代理支持")
+                    except Exception as e:
+                        logger.error(f"安装SOCKS代理支持失败: {str(e)}")
+                        return {
+                            "success": False,
+                            "message": f"SOCKS代理支持安装失败，无法连接Twitter: {str(e)}",
+                            "data": None
+                        }
+
+        # 导入Twitter模块
+        try:
+            from modules.socialmedia.twitter import fetch, reinit_twitter_client
+
+            # 尝试重新初始化Twitter客户端
+            logger.info("尝试重新初始化Twitter客户端...")
+            reinit_twitter_client()
+        except ImportError as e:
+            logger.error(f"导入Twitter模块失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"导入Twitter模块失败: {str(e)}",
+                "data": None
+            }
 
         # 如果没有提供账号ID，使用默认测试账号
         if not account_id:
@@ -47,7 +84,8 @@ def test_twitter_connection(account_id=None):
                         "content": posts[0].content[:100] + "..." if len(posts[0].content) > 100 else posts[0].content,
                         "time": posts[0].get_local_time().strftime("%Y-%m-%d %H:%M:%S")
                     },
-                    "response_time": f"{end_time - start_time:.2f}秒"
+                    "response_time": f"{end_time - start_time:.2f}秒",
+                    "proxy_used": proxy if proxy else "未使用代理"
                 }
             }
         else:
@@ -57,7 +95,8 @@ def test_twitter_connection(account_id=None):
                 "message": "成功连接到Twitter API，但未获取到推文",
                 "data": {
                     "account_id": account_id,
-                    "response_time": f"{end_time - start_time:.2f}秒"
+                    "response_time": f"{end_time - start_time:.2f}秒",
+                    "proxy_used": proxy if proxy else "未使用代理"
                 }
             }
     except Exception as e:
@@ -65,7 +104,11 @@ def test_twitter_connection(account_id=None):
         return {
             "success": False,
             "message": f"连接Twitter API失败: {str(e)}",
-            "data": None
+            "data": {
+                "account_id": account_id if account_id else "elonmusk",
+                "proxy_used": os.getenv('HTTP_PROXY', '未使用代理'),
+                "error_details": str(e)
+            }
         }
 
 def test_llm_connection(prompt=None):
@@ -253,13 +296,32 @@ def check_system_status():
 
     # 检查Twitter API状态
     try:
-        from modules.socialmedia.twitter import app as twitter_app
-        if twitter_app is not None and hasattr(twitter_app, 'me') and twitter_app.me is not None:
+        from modules.socialmedia.twitter import app as twitter_app, reinit_twitter_client
+
+        # 如果Twitter客户端未初始化或连接失败，尝试重新初始化
+        if twitter_app is None or not hasattr(twitter_app, 'me') or twitter_app.me is None:
+            logger.info("Twitter客户端未初始化或连接失败，尝试重新初始化")
+            reinit_success = reinit_twitter_client()
+
+            if reinit_success and twitter_app is not None and hasattr(twitter_app, 'me') and twitter_app.me is not None:
+                status["components"]["twitter_api"]["status"] = "正常"
+                status["components"]["twitter_api"]["message"] = f"已连接 ({twitter_app.me.username})"
+            else:
+                status["components"]["twitter_api"]["status"] = "异常"
+                status["components"]["twitter_api"]["message"] = "重新初始化失败，请检查Twitter凭据和网络连接"
+        else:
             status["components"]["twitter_api"]["status"] = "正常"
             status["components"]["twitter_api"]["message"] = f"已连接 ({twitter_app.me.username})"
-        else:
-            status["components"]["twitter_api"]["status"] = "异常"
-            status["components"]["twitter_api"]["message"] = "未连接或连接失败"
+
+        # 添加代理信息
+        proxy = os.getenv('HTTP_PROXY', '')
+        if proxy:
+            status["components"]["twitter_api"]["proxy"] = proxy
+
+    except ImportError as e:
+        logger.error(f"导入Twitter模块失败: {str(e)}")
+        status["components"]["twitter_api"]["status"] = "异常"
+        status["components"]["twitter_api"]["message"] = f"导入Twitter模块失败: {str(e)}"
     except Exception as e:
         logger.error(f"检查Twitter API状态时出错: {str(e)}")
         status["components"]["twitter_api"]["status"] = "异常"

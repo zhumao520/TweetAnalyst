@@ -12,13 +12,8 @@ services:
       - DATABASE_PATH=/data/tweetanalyst.db
       - LOG_DIR=/data/logs
       - FIRST_LOGIN=true
-    # 确保容器启动前数据目录存在并有正确权限
-    command: >
-      bash -c "
-        mkdir -p /data /data/logs &&
-        chmod -R 755 /data &&
-        python /app/run_all.py
-      "
+    # 使用entrypoint脚本启动
+    command: ["/app/docker-entrypoint.sh"]
     env_file:
       - .env
     restart: always

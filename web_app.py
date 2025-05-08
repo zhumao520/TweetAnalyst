@@ -310,6 +310,23 @@ def load_configs_to_env():
         for config in configs:
             os.environ[config.key] = config.value
             logger.info(f"已加载配置 {config.key} 到环境变量")
+
+        # 检查代理设置
+        proxy = os.getenv('HTTP_PROXY', '')
+        if proxy and proxy.startswith('socks'):
+            logger.info(f"检测到SOCKS代理: {proxy}")
+            try:
+                import socksio
+                logger.info("SOCKS代理支持已安装")
+            except ImportError:
+                logger.warning("未安装SOCKS代理支持，尝试安装...")
+                try:
+                    import pip
+                    pip.main(['install', 'httpx[socks]', '--quiet'])
+                    logger.info("成功安装SOCKS代理支持")
+                except Exception as e:
+                    logger.error(f"安装SOCKS代理支持失败: {str(e)}")
+
         return True
     except Exception as e:
         logger.error(f"加载配置到环境变量时出错: {str(e)}")
