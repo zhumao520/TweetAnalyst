@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container mt-4">
     <h1 class="mb-4">系统测试</h1>
-    
+
     <div class="row mb-4">
         <div class="col-md-6">
             <div class="card">
@@ -30,7 +30,7 @@
                             </li>
                         </ul>
                     </div>
-                    
+
                     <div class="mb-3">
                         <h6>配置信息</h6>
                         <ul class="list-group">
@@ -51,7 +51,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
@@ -76,7 +76,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="row">
         <div class="col-md-4 mb-4">
             <div class="card">
@@ -101,7 +101,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-4 mb-4">
             <div class="card">
                 <div class="card-header">
@@ -125,7 +125,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-4 mb-4">
             <div class="card">
                 <div class="card-header">
@@ -162,12 +162,17 @@
         const resultDiv = document.getElementById('twitter-test-result');
         const button = document.getElementById('twitter-test-btn');
         const spinner = button.querySelector('.spinner-border');
-        
+
         // 显示加载状态
         button.disabled = true;
         spinner.classList.remove('d-none');
         resultDiv.classList.add('d-none');
-        
+
+        // 显示初始状态信息
+        resultDiv.classList.remove('d-none');
+        resultDiv.classList.add('alert-info');
+        resultDiv.innerHTML = '<h5>正在测试...</h5><p>正在连接Twitter API，请稍候...</p>';
+
         // 发送请求
         fetch('/api/test/twitter', {
             method: 'POST',
@@ -184,10 +189,10 @@
                 statusBadge.textContent = '正常';
                 statusBadge.classList.remove('bg-secondary', 'bg-danger');
                 statusBadge.classList.add('bg-success');
-                
+
                 resultDiv.classList.remove('alert-danger');
                 resultDiv.classList.add('alert-success');
-                
+
                 let resultHtml = `<h5>测试成功</h5><p>${data.message}</p>`;
                 if (data.data) {
                     resultHtml += '<ul>';
@@ -195,7 +200,7 @@
                     if (data.data.post_count) resultHtml += `<li>获取推文数: ${data.data.post_count}</li>`;
                     if (data.data.response_time) resultHtml += `<li>响应时间: ${data.data.response_time}</li>`;
                     resultHtml += '</ul>';
-                    
+
                     if (data.data.first_post) {
                         resultHtml += '<h6>第一条推文:</h6>';
                         resultHtml += '<ul>';
@@ -210,7 +215,7 @@
                 statusBadge.textContent = '异常';
                 statusBadge.classList.remove('bg-secondary', 'bg-success');
                 statusBadge.classList.add('bg-danger');
-                
+
                 resultDiv.classList.remove('alert-success');
                 resultDiv.classList.add('alert-danger');
                 resultDiv.innerHTML = `<h5>测试失败</h5><p>${data.message}</p>`;
@@ -218,9 +223,24 @@
         })
         .catch(error => {
             console.error('Error:', error);
-            resultDiv.classList.remove('alert-success');
+            // 更新状态标签
+            const statusBadge = document.getElementById('twitter-status');
+            statusBadge.textContent = '异常';
+            statusBadge.classList.remove('bg-secondary', 'bg-success');
+            statusBadge.classList.add('bg-danger');
+
+            resultDiv.classList.remove('alert-success', 'alert-info');
             resultDiv.classList.add('alert-danger');
-            resultDiv.innerHTML = `<h5>请求错误</h5><p>${error.message}</p>`;
+            resultDiv.innerHTML = `<h5>请求错误</h5>
+                <p>${error.message}</p>
+                <div class="mt-2">
+                    <strong>调试信息:</strong>
+                    <ul>
+                        <li>请求URL: /api/test/twitter</li>
+                        <li>请求方法: POST</li>
+                        <li>请求参数: account_id=${accountId || '(空)'}</li>
+                    </ul>
+                </div>`;
         })
         .finally(() => {
             // 恢复按钮状态
@@ -229,7 +249,7 @@
             resultDiv.classList.remove('d-none');
         });
     });
-    
+
     // LLM测试
     document.getElementById('llm-test-form').addEventListener('submit', function(e) {
         e.preventDefault();
@@ -237,12 +257,17 @@
         const resultDiv = document.getElementById('llm-test-result');
         const button = document.getElementById('llm-test-btn');
         const spinner = button.querySelector('.spinner-border');
-        
+
         // 显示加载状态
         button.disabled = true;
         spinner.classList.remove('d-none');
         resultDiv.classList.add('d-none');
-        
+
+        // 显示初始状态信息
+        resultDiv.classList.remove('d-none');
+        resultDiv.classList.add('alert-info');
+        resultDiv.innerHTML = '<h5>正在测试...</h5><p>正在连接LLM API，请稍候...</p>';
+
         // 发送请求
         fetch('/api/test/llm', {
             method: 'POST',
@@ -259,17 +284,17 @@
                 statusBadge.textContent = '正常';
                 statusBadge.classList.remove('bg-secondary', 'bg-danger');
                 statusBadge.classList.add('bg-success');
-                
+
                 resultDiv.classList.remove('alert-danger');
                 resultDiv.classList.add('alert-success');
-                
+
                 let resultHtml = `<h5>测试成功</h5><p>${data.message}</p>`;
                 if (data.data) {
                     resultHtml += '<ul>';
                     if (data.data.prompt) resultHtml += `<li>提示词: ${data.data.prompt}</li>`;
                     if (data.data.response_time) resultHtml += `<li>响应时间: ${data.data.response_time}</li>`;
                     resultHtml += '</ul>';
-                    
+
                     if (data.data.response) {
                         resultHtml += '<h6>LLM响应:</h6>';
                         resultHtml += `<div class="p-2 bg-light">${data.data.response}</div>`;
@@ -280,7 +305,7 @@
                 statusBadge.textContent = '异常';
                 statusBadge.classList.remove('bg-secondary', 'bg-success');
                 statusBadge.classList.add('bg-danger');
-                
+
                 resultDiv.classList.remove('alert-success');
                 resultDiv.classList.add('alert-danger');
                 resultDiv.innerHTML = `<h5>测试失败</h5><p>${data.message}</p>`;
@@ -288,9 +313,24 @@
         })
         .catch(error => {
             console.error('Error:', error);
-            resultDiv.classList.remove('alert-success');
+            // 更新状态标签
+            const statusBadge = document.getElementById('llm-status');
+            statusBadge.textContent = '异常';
+            statusBadge.classList.remove('bg-secondary', 'bg-success');
+            statusBadge.classList.add('bg-danger');
+
+            resultDiv.classList.remove('alert-success', 'alert-info');
             resultDiv.classList.add('alert-danger');
-            resultDiv.innerHTML = `<h5>请求错误</h5><p>${error.message}</p>`;
+            resultDiv.innerHTML = `<h5>请求错误</h5>
+                <p>${error.message}</p>
+                <div class="mt-2">
+                    <strong>调试信息:</strong>
+                    <ul>
+                        <li>请求URL: /api/test/llm</li>
+                        <li>请求方法: POST</li>
+                        <li>请求参数: prompt=${prompt ? '已提供' : '(空)'}</li>
+                    </ul>
+                </div>`;
         })
         .finally(() => {
             // 恢复按钮状态
@@ -299,7 +339,7 @@
             resultDiv.classList.remove('d-none');
         });
     });
-    
+
     // 代理测试
     document.getElementById('proxy-test-form').addEventListener('submit', function(e) {
         e.preventDefault();
@@ -307,12 +347,17 @@
         const resultDiv = document.getElementById('proxy-test-result');
         const button = document.getElementById('proxy-test-btn');
         const spinner = button.querySelector('.spinner-border');
-        
+
         // 显示加载状态
         button.disabled = true;
         spinner.classList.remove('d-none');
         resultDiv.classList.add('d-none');
-        
+
+        // 显示初始状态信息
+        resultDiv.classList.remove('d-none');
+        resultDiv.classList.add('alert-info');
+        resultDiv.innerHTML = '<h5>正在测试...</h5><p>正在测试代理连接，请稍候...</p>';
+
         // 发送请求
         fetch('/api/test/proxy', {
             method: 'POST',
@@ -329,10 +374,10 @@
                 statusBadge.textContent = '正常';
                 statusBadge.classList.remove('bg-secondary', 'bg-danger');
                 statusBadge.classList.add('bg-success');
-                
+
                 resultDiv.classList.remove('alert-danger');
                 resultDiv.classList.add('alert-success');
-                
+
                 let resultHtml = `<h5>测试成功</h5><p>${data.message}</p>`;
                 if (data.data) {
                     resultHtml += '<ul>';
@@ -347,7 +392,7 @@
                 statusBadge.textContent = '异常';
                 statusBadge.classList.remove('bg-secondary', 'bg-success');
                 statusBadge.classList.add('bg-danger');
-                
+
                 resultDiv.classList.remove('alert-success');
                 resultDiv.classList.add('alert-danger');
                 resultDiv.innerHTML = `<h5>测试失败</h5><p>${data.message}</p>`;
@@ -355,9 +400,24 @@
         })
         .catch(error => {
             console.error('Error:', error);
-            resultDiv.classList.remove('alert-success');
+            // 更新状态标签
+            const statusBadge = document.getElementById('proxy-status');
+            statusBadge.textContent = '异常';
+            statusBadge.classList.remove('bg-secondary', 'bg-success');
+            statusBadge.classList.add('bg-danger');
+
+            resultDiv.classList.remove('alert-success', 'alert-info');
             resultDiv.classList.add('alert-danger');
-            resultDiv.innerHTML = `<h5>请求错误</h5><p>${error.message}</p>`;
+            resultDiv.innerHTML = `<h5>请求错误</h5>
+                <p>${error.message}</p>
+                <div class="mt-2">
+                    <strong>调试信息:</strong>
+                    <ul>
+                        <li>请求URL: /api/test/proxy</li>
+                        <li>请求方法: POST</li>
+                        <li>请求参数: url=${url || '(空)'}</li>
+                    </ul>
+                </div>`;
         })
         .finally(() => {
             // 恢复按钮状态

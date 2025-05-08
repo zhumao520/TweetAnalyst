@@ -179,6 +179,8 @@ def test_proxy_connection(test_url=None):
         if not test_url:
             test_url = "https://api.ipify.org?format=json"
 
+        logger.info(f"开始测试代理连接，测试URL: {test_url}")
+
         # 获取当前代理设置
         proxy = os.getenv("HTTP_PROXY", "")
         proxies = {}
@@ -193,7 +195,55 @@ def test_proxy_connection(test_url=None):
 
         # 尝试连接测试URL
         start_time = time.time()
-        response = requests.get(test_url, proxies=proxies, timeout=10)
+        try:
+            response = requests.get(test_url, proxies=proxies, timeout=10)
+            end_time = time.time()
+            logger.info(f"请求完成，状态码: {response.status_code}, 耗时: {end_time - start_time:.2f}秒")
+        except requests.exceptions.Timeout:
+            logger.error(f"连接超时: {test_url}")
+            return {
+                "success": False,
+                "message": f"连接超时，请检查网络或代理设置",
+                "data": {
+                    "url": test_url,
+                    "proxy": proxy if proxy else "未使用代理",
+                    "error_type": "timeout"
+                }
+            }
+        except requests.exceptions.ProxyError as e:
+            logger.error(f"代理错误: {str(e)}")
+            return {
+                "success": False,
+                "message": f"代理连接错误: {str(e)}",
+                "data": {
+                    "url": test_url,
+                    "proxy": proxy if proxy else "未使用代理",
+                    "error_type": "proxy_error"
+                }
+            }
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"连接错误: {str(e)}")
+            return {
+                "success": False,
+                "message": f"网络连接错误: {str(e)}",
+                "data": {
+                    "url": test_url,
+                    "proxy": proxy if proxy else "未使用代理",
+                    "error_type": "connection_error"
+                }
+            }
+        except Exception as e:
+            logger.error(f"请求异常: {str(e)}")
+            return {
+                "success": False,
+                "message": f"请求异常: {str(e)}",
+                "data": {
+                    "url": test_url,
+                    "proxy": proxy if proxy else "未使用代理",
+                    "error_type": "request_error"
+                }
+            }
+
         end_time = time.time()
 
         if response.status_code == 200:
