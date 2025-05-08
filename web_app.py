@@ -303,6 +303,18 @@ def get_system_config():
 
     return result
 
+def load_configs_to_env():
+    """将数据库中的配置加载到环境变量中"""
+    try:
+        configs = SystemConfig.query.all()
+        for config in configs:
+            os.environ[config.key] = config.value
+            logger.info(f"已加载配置 {config.key} 到环境变量")
+        return True
+    except Exception as e:
+        logger.error(f"加载配置到环境变量时出错: {str(e)}")
+        return False
+
 # 状态存储管理函数（替代Redis）
 class DBStateStore:
     def __init__(self, auto_cleanup=True, cleanup_interval=3600):
@@ -856,8 +868,10 @@ def setup():
         # 确保数据库已初始化
         try:
             logger.info("确保数据库已初始化")
-            # 检查数据库连接
-            db.engine.execute("SELECT 1").fetchall()
+            # 检查数据库连接 - 使用SQLAlchemy 2.0兼容的方式
+            from sqlalchemy import text
+            with db.engine.connect() as conn:
+                conn.execute(text("SELECT 1")).fetchall()
             logger.info("数据库连接正常")
         except Exception as e:
             logger.error(f"数据库连接测试失败: {str(e)}")
@@ -1776,4 +1790,6 @@ def import_data():
 
 if __name__ == '__main__':
     init_db()
+    # 加载数据库中的配置到环境变量
+    load_configs_to_env()
     app.run(debug=True, host='0.0.0.0', port=5000)

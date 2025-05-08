@@ -40,7 +40,13 @@ def init_twitter_client():
     if twitter_session and twitter_session.strip():
         logger.info("使用会话文件登录Twitter")
         try:
-            with open('session.tw_session', 'w') as f:
+            # 确保session文件目录存在
+            session_file = 'session.tw_session'
+            session_dir = os.path.dirname(os.path.abspath(session_file))
+            if not os.path.exists(session_dir):
+                os.makedirs(session_dir)
+
+            with open(session_file, 'w') as f:
                 f.write(twitter_session)
 
             app = Twitter('session')
@@ -96,8 +102,39 @@ def init_twitter_client():
     logger.error("所有Twitter登录方式均失败")
     return None
 
-# 初始化Twitter客户端
-app = init_twitter_client()
+# 初始化Twitter客户端变量
+app = None
+
+# 延迟初始化，确保在使用时已加载配置
+def ensure_initialized():
+    """确保Twitter客户端已初始化"""
+    global app
+    if app is None:
+        try:
+            logger.info("首次使用时初始化Twitter客户端")
+            app = init_twitter_client()
+            return app is not None
+        except Exception as e:
+            logger.error(f"初始化Twitter客户端时出错: {str(e)}")
+            return False
+    return True
+
+# 添加重新初始化函数，用于在需要时重新连接
+def reinit_twitter_client():
+    """
+    重新初始化Twitter客户端
+
+    Returns:
+        bool: 是否成功初始化
+    """
+    global app
+    try:
+        logger.info("尝试重新初始化Twitter客户端")
+        app = init_twitter_client()
+        return app is not None
+    except Exception as e:
+        logger.error(f"重新初始化Twitter客户端时出错: {str(e)}")
+        return False
 
 
 def fetch(user_id: str, limit: int = None) -> list[Post]:
@@ -111,9 +148,13 @@ def fetch(user_id: str, limit: int = None) -> list[Post]:
     Returns:
         list[Post]: 帖子列表
     """
-    if app is None:
-        logger.error("Twitter客户端未初始化，无法获取推文")
-        return []
+    global app
+    # 确保Twitter客户端已初始化
+    if not ensure_initialized():
+        logger.warning("Twitter客户端未初始化，尝试重新初始化")
+        if not reinit_twitter_client():
+            logger.error("Twitter客户端初始化失败，无法获取推文")
+            return []
 
     logger.info(f"开始获取用户 {user_id} 的最新推文")
 
@@ -195,9 +236,13 @@ def reply_to_post(post_id: str, content: str) -> bool:
     Returns:
         bool: 是否成功回复
     """
-    if app is None:
-        logger.error("Twitter客户端未初始化，无法回复帖子")
-        return False
+    global app
+    # 确保Twitter客户端已初始化
+    if not ensure_initialized():
+        logger.warning("Twitter客户端未初始化，尝试重新初始化")
+        if not reinit_twitter_client():
+            logger.error("Twitter客户端初始化失败，无法回复帖子")
+            return False
 
     logger.info(f"准备回复帖子 {post_id}")
     logger.debug(f"回复内容: {content}")

@@ -4,6 +4,7 @@ import time
 import urllib.request
 import urllib.error
 import datetime
+import requests
 from utils.logger import get_logger
 
 # 创建日志记录器
@@ -249,5 +250,75 @@ def check_system_status():
         status["system"]["memory_usage"] = "系统信息不可用"
     except:
         pass
+
+    # 检查Twitter API状态
+    try:
+        from modules.socialmedia.twitter import app as twitter_app
+        if twitter_app is not None and hasattr(twitter_app, 'me') and twitter_app.me is not None:
+            status["components"]["twitter_api"]["status"] = "正常"
+            status["components"]["twitter_api"]["message"] = f"已连接 ({twitter_app.me.username})"
+        else:
+            status["components"]["twitter_api"]["status"] = "异常"
+            status["components"]["twitter_api"]["message"] = "未连接或连接失败"
+    except Exception as e:
+        logger.error(f"检查Twitter API状态时出错: {str(e)}")
+        status["components"]["twitter_api"]["status"] = "异常"
+        status["components"]["twitter_api"]["message"] = f"检查状态出错: {str(e)}"
+
+    # 检查LLM API状态
+    try:
+        # 简单检查LLM API密钥是否存在
+        llm_api_key = os.getenv("LLM_API_KEY", "")
+        if llm_api_key:
+            # 尝试进行一个简单的API调用测试
+            try:
+                # 导入但不执行，避免每次检查都调用API
+                from modules.langchain.llm import get_llm_response
+                status["components"]["llm_api"]["status"] = "正常"
+                status["components"]["llm_api"]["message"] = "API密钥已配置"
+            except Exception as e:
+                status["components"]["llm_api"]["status"] = "异常"
+                status["components"]["llm_api"]["message"] = f"API模块加载失败: {str(e)}"
+        else:
+            status["components"]["llm_api"]["status"] = "异常"
+            status["components"]["llm_api"]["message"] = "API密钥未配置"
+    except Exception as e:
+        logger.error(f"检查LLM API状态时出错: {str(e)}")
+        status["components"]["llm_api"]["status"] = "异常"
+        status["components"]["llm_api"]["message"] = f"检查状态出错: {str(e)}"
+
+    # 检查代理状态
+    try:
+        proxy = os.getenv("HTTP_PROXY", "")
+        if proxy:
+            # 尝试使用代理连接到百度
+            try:
+                response = requests.get("http://www.baidu.com", proxies={"http": proxy, "https": proxy}, timeout=5)
+                if response.status_code == 200:
+                    status["components"]["proxy"]["status"] = "正常"
+                    status["components"]["proxy"]["message"] = f"代理可用: {proxy}"
+                else:
+                    status["components"]["proxy"]["status"] = "异常"
+                    status["components"]["proxy"]["message"] = f"代理连接失败: {response.status_code}"
+            except Exception as e:
+                status["components"]["proxy"]["status"] = "异常"
+                status["components"]["proxy"]["message"] = f"代理测试失败: {str(e)}"
+        else:
+            # 尝试直接连接到百度
+            try:
+                response = requests.get("http://www.baidu.com", timeout=5)
+                if response.status_code == 200:
+                    status["components"]["proxy"]["status"] = "正常"
+                    status["components"]["proxy"]["message"] = "直接连接可用"
+                else:
+                    status["components"]["proxy"]["status"] = "异常"
+                    status["components"]["proxy"]["message"] = f"直接连接失败: {response.status_code}"
+            except Exception as e:
+                status["components"]["proxy"]["status"] = "异常"
+                status["components"]["proxy"]["message"] = f"网络连接测试失败: {str(e)}"
+    except Exception as e:
+        logger.error(f"检查代理状态时出错: {str(e)}")
+        status["components"]["proxy"]["status"] = "异常"
+        status["components"]["proxy"]["message"] = f"检查状态出错: {str(e)}"
 
     return status
