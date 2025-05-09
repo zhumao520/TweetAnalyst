@@ -17,6 +17,11 @@ ENV DATABASE_PATH=/data/tweetanalyst.db
 ENV FLASK_SECRET_KEY=default_secret_key_please_change_in_env
 ENV LOG_DIR=/data/logs
 ENV FIRST_LOGIN=true
+ENV FLASK_DEBUG=false
+
+# 设置默认LLM API
+ENV LLM_API_BASE=https://api.x.ai/v1
+ENV LLM_API_MODEL=grok-2-latest
 
 # 暴露端口
 EXPOSE 5000

@@ -81,9 +81,9 @@ pip install -r requirements.txt
 FLASK_SECRET_KEY=your_random_secret_key
 
 # LLM API 配置
-LLM_API_MODEL=gpt-3.5-turbo
+LLM_API_MODEL=grok-2-latest
 LLM_API_KEY=your_api_key
-LLM_API_BASE=https://api.openai.com/v1
+LLM_API_BASE=https://api.x.ai/v1
 
 # Twitter 配置
 TWITTER_USERNAME=your_twitter_username
@@ -130,9 +130,9 @@ python run_scheduler.py
 - `TWITTER_USERNAME`: Twitter 平台的用户名
 - `TWITTER_PASSWORD`: Twitter 平台的密码
 - `TWITTER_SESSION`: 之前登录过的 Twitter 平台的登录票据
-- `LLM_API_MODEL`: 使用的 LLM 模型名称，如 `gpt-3.5-turbo`
+- `LLM_API_MODEL`: 使用的 LLM 模型名称，如 `grok-2-latest`
 - `LLM_API_KEY`: LLM API 密钥
-- `LLM_API_BASE`: LLM API 基础地址，默认为 `https://api.openai.com/v1`
+- `LLM_API_BASE`: LLM API 基础地址，默认为 `https://api.x.ai/v1`
 - `LLM_PROCESS_MAX_RETRIED`: LLM 处理失败时的最大重试次数，默认为 3
 - `APPRISE_URLS`: Apprise 推送 URL，支持多种推送方式，多个 URL 用逗号分隔
 - `HTTP_PROXY`: HTTP 代理地址，用于访问 Twitter 等需要代理的网站
