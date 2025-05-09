@@ -90,18 +90,25 @@ jobs:
           cat > requirements.txt << 'EOL'
           python-dotenv>=1.0.0
           pyyaml>=6.0
-          langchain-openai>=0.0.1
-          langchain-core>=0.1.0
           requests>=2.28.2
           pytz>=2023.3
           schedule>=1.2.0
 
+          # LLM支持
+          openai>=1.0.0
+
+          # Twitter支持
           tweety-ns>=0.9.0
 
+          # Web应用
           Flask>=2.3.0
           Flask-SQLAlchemy>=3.0.0
           Werkzeug>=2.3.0
 
+          # 系统监控
+          psutil>=5.9.0
+
+          # 推送通知
           apprise>=1.9.0
 
           # SOCKS代理支持
@@ -143,9 +150,20 @@ jobs:
           python -c "import tweety" || pip install --no-cache-dir tweety-ns
           python -c "import flask" || pip install --no-cache-dir Flask
           python -c "import flask_sqlalchemy" || pip install --no-cache-dir Flask-SQLAlchemy
-          python -c "import langchain_openai" || pip install --no-cache-dir langchain-openai
-          python -c "import langchain_core" || pip install --no-cache-dir langchain-core
+          python -c "import openai" || pip install --no-cache-dir openai
+          python -c "import psutil" || pip install --no-cache-dir psutil
           python -c "import apprise" || pip install --no-cache-dir apprise
+
+          # 设置默认LLM API
+          if [ -z "$LLM_API_BASE" ]; then
+              echo -e "${YELLOW}未设置LLM_API_BASE，使用默认值: https://api.x.ai/v1${NC}"
+              export LLM_API_BASE="https://api.x.ai/v1"
+          fi
+
+          if [ -z "$LLM_API_MODEL" ]; then
+              echo -e "${YELLOW}未设置LLM_API_MODEL，使用默认值: grok-2-latest${NC}"
+              export LLM_API_MODEL="grok-2-latest"
+          fi
 
           # 启动应用
           echo -e "${GREEN}启动应用...${NC}"
