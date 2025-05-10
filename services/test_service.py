@@ -107,7 +107,7 @@ def test_llm_connection(prompt=None, model=None):
 
         # 如果未提供模型，使用配置中的模型
         if not model:
-            model = get_config('LLM_API_MODEL', 'grok-2-latest')
+            model = get_config('LLM_API_MODEL', 'grok-3-mini-beta')
 
         # 获取API密钥和基础URL
         api_key = get_config('LLM_API_KEY', '')
@@ -133,24 +133,43 @@ def test_llm_connection(prompt=None, model=None):
 
         # 发送请求
         start_time = time.time()
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+
+        # 检查是否为xAI的grok-3模型，添加reasoning_effort参数
+        if model and 'grok-3' in model:
+            logger.info(f"检测到grok-3模型，添加reasoning_effort参数")
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                reasoning_effort="high"  # 添加推理努力参数
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
         end_time = time.time()
+
+        # 构建响应数据
+        response_data = {
+            "prompt": prompt,
+            "response": response.choices[0].message.content,
+            "response_time": f"{end_time - start_time:.2f}秒",
+            "model": model
+        }
+
+        # 如果有reasoning_content，添加到响应中
+        if hasattr(response.choices[0].message, 'reasoning_content') and response.choices[0].message.reasoning_content:
+            response_data["reasoning_content"] = response.choices[0].message.reasoning_content
 
         # 返回成功结果
         return {
             "success": True,
             "message": f"成功连接LLM API并获取响应",
-            "data": {
-                "prompt": prompt,
-                "response": response.choices[0].message.content,
-                "response_time": f"{end_time - start_time:.2f}秒",
-                "model": model
-            }
+            "data": response_data
         }
     except Exception as e:
         logger.error(f"测试LLM连接时出错: {str(e)}")
@@ -246,7 +265,7 @@ def check_system_status():
 
         # 获取配置信息
         config_info = {
-            "llm_model": get_config('LLM_API_MODEL', 'grok-2-latest'),
+            "llm_model": get_config('LLM_API_MODEL', 'grok-3-mini-beta'),
             "scheduler_interval": get_config('SCHEDULER_INTERVAL_MINUTES', '30'),
             "proxy": get_config('HTTP_PROXY', '未设置')
         }

@@ -1,19 +1,20 @@
 /**
  * TweetAnalyst UI组件库
  * 提供统一的UI交互组件
+ * 社交媒体监控与分析助手
  */
 
 // 命名空间
 const TweetAnalyst = {
     // 版本信息
     version: '1.0.0',
-    
+
     // 组件库
     components: {},
-    
+
     // 工具函数
     utils: {},
-    
+
     // 初始化
     init: function() {
         // 初始化所有组件
@@ -22,7 +23,7 @@ const TweetAnalyst = {
                 this.components[name].init();
             }
         }
-        
+
         console.log(`TweetAnalyst UI组件库 v${this.version} 已初始化`);
     }
 };
@@ -38,10 +39,10 @@ TweetAnalyst.components.notification = {
         duration: 5000,
         maxCount: 5
     },
-    
+
     // 通知计数
     count: 0,
-    
+
     // 初始化
     init: function() {
         // 创建通知容器
@@ -50,7 +51,7 @@ TweetAnalyst.components.notification = {
         document.body.appendChild(container);
         this.container = container;
     },
-    
+
     // 显示通知
     show: function(options) {
         // 默认选项
@@ -61,15 +62,15 @@ TweetAnalyst.components.notification = {
             duration: this.config.duration,
             closable: true
         };
-        
+
         // 合并选项
         const settings = Object.assign({}, defaults, options);
-        
+
         // 创建通知元素
         const notification = document.createElement('div');
         notification.className = 'ta-notification ta-notification-' + settings.type;
         notification.id = 'ta-notification-' + (++this.count);
-        
+
         // 设置内容
         let html = '';
         if (settings.closable) {
@@ -80,16 +81,16 @@ TweetAnalyst.components.notification = {
         }
         html += '<div class="ta-notification-message">' + settings.message + '</div>';
         notification.innerHTML = html;
-        
+
         // 添加到容器
         this.container.appendChild(notification);
-        
+
         // 限制最大数量
         const notifications = this.container.querySelectorAll('.ta-notification');
         if (notifications.length > this.config.maxCount) {
             this.container.removeChild(notifications[0]);
         }
-        
+
         // 绑定关闭事件
         if (settings.closable) {
             const closeBtn = notification.querySelector('.ta-notification-close');
@@ -97,29 +98,29 @@ TweetAnalyst.components.notification = {
                 this.close(notification.id);
             });
         }
-        
+
         // 自动关闭
         if (settings.duration > 0) {
             setTimeout(() => {
                 this.close(notification.id);
             }, settings.duration);
         }
-        
+
         // 显示动画
         setTimeout(() => {
             notification.classList.add('ta-notification-show');
         }, 10);
-        
+
         return notification.id;
     },
-    
+
     // 关闭通知
     close: function(id) {
         const notification = document.getElementById(id);
         if (notification) {
             notification.classList.remove('ta-notification-show');
             notification.classList.add('ta-notification-hide');
-            
+
             // 移除元素
             setTimeout(() => {
                 if (notification.parentNode) {
@@ -128,7 +129,7 @@ TweetAnalyst.components.notification = {
             }, 300);
         }
     },
-    
+
     // 成功通知
     success: function(message, title = '成功') {
         return this.show({
@@ -137,7 +138,7 @@ TweetAnalyst.components.notification = {
             message: message
         });
     },
-    
+
     // 错误通知
     error: function(message, title = '错误') {
         return this.show({
@@ -147,7 +148,7 @@ TweetAnalyst.components.notification = {
             duration: 0
         });
     },
-    
+
     // 警告通知
     warning: function(message, title = '警告') {
         return this.show({
@@ -156,7 +157,7 @@ TweetAnalyst.components.notification = {
             message: message
         });
     },
-    
+
     // 信息通知
     info: function(message, title = '提示') {
         return this.show({
@@ -185,10 +186,10 @@ TweetAnalyst.components.confirm = {
             onConfirm: null,
             onCancel: null
         };
-        
+
         // 合并选项
         const settings = Object.assign({}, defaults, options);
-        
+
         // 创建对话框元素
         const modal = document.createElement('div');
         modal.className = 'ta-modal';
@@ -209,20 +210,20 @@ TweetAnalyst.components.confirm = {
                 </div>
             </div>
         `;
-        
+
         // 添加到文档
         document.body.appendChild(modal);
-        
+
         // 显示对话框
         setTimeout(() => {
             modal.classList.add('ta-modal-show');
         }, 10);
-        
+
         // 绑定事件
         const closeBtn = modal.querySelector('.ta-modal-close');
         const cancelBtn = modal.querySelector('.ta-modal-cancel');
         const confirmBtn = modal.querySelector('.ta-modal-confirm');
-        
+
         // 关闭函数
         const close = () => {
             modal.classList.remove('ta-modal-show');
@@ -230,7 +231,7 @@ TweetAnalyst.components.confirm = {
                 document.body.removeChild(modal);
             }, 300);
         };
-        
+
         // 关闭按钮
         closeBtn.addEventListener('click', () => {
             close();
@@ -238,7 +239,7 @@ TweetAnalyst.components.confirm = {
                 settings.onCancel();
             }
         });
-        
+
         // 取消按钮
         cancelBtn.addEventListener('click', () => {
             close();
@@ -246,7 +247,7 @@ TweetAnalyst.components.confirm = {
                 settings.onCancel();
             }
         });
-        
+
         // 确认按钮
         confirmBtn.addEventListener('click', () => {
             close();
@@ -254,7 +255,7 @@ TweetAnalyst.components.confirm = {
                 settings.onConfirm();
             }
         });
-        
+
         // 点击背景关闭
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
@@ -284,18 +285,18 @@ TweetAnalyst.components.loader = {
                 <div class="ta-loader-text">${message}</div>
             </div>
         `;
-        
+
         // 添加到文档
         document.body.appendChild(loader);
-        
+
         // 显示加载器
         setTimeout(() => {
             loader.classList.add('ta-loader-show');
         }, 10);
-        
+
         return loader;
     },
-    
+
     // 隐藏加载器
     hide: function(loader) {
         if (loader) {

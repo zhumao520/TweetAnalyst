@@ -1,6 +1,6 @@
 version: "3"
 services:
-  tweetanalyst:
+  tweetAnalyst:
     build: .
     ports:
       - "5000:5000"
@@ -9,9 +9,9 @@ services:
       - ./config:/app/config
     environment:
       - FLASK_SECRET_KEY=your_random_secret_key_please_change_this
-      - DATABASE_PATH=/data/tweetanalyst.db
+      - DATABASE_PATH=/data/tweetAnalyst.db
       - LOG_DIR=/data/logs
-      - FIRST_LOGIN=true
+      - FIRST_LOGIN=${FIRST_LOGIN:-auto}
     # 使用entrypoint脚本启动
     command: ["/app/docker-entrypoint.sh"]
     env_file:

@@ -1,8 +1,8 @@
-# SocialInsight - 社交媒体内容分析与监控平台
+# TweetAnalyst - 社交媒体监控与分析助手
 
 ## 项目简介
 
-Secretary 是一个自动化的社交媒体分析工具，专门用于监控和分析社交媒体平台上的内容，并通过 AI 进行智能分析。该工具能够自动抓取指定账号的最新发言，根据配置的分析提示词进行内容分析，并将分析结果通过企业微信机器人、个人微信号推送给指定用户。通过灵活配置分析提示词，可以针对不同主题（如财经、政治、科技等）进行定制化分析。
+TweetAnalyst 是一个自动化的社交媒体分析工具，专门用于监控和分析社交媒体平台上的内容，并通过 AI 进行智能分析。该工具能够自动抓取指定账号的最新发言，根据配置的分析提示词进行内容分析，并将分析结果通过企业微信机器人、个人微信号推送给指定用户。通过灵活配置分析提示词，可以针对不同主题（如财经、政治、科技等）进行定制化分析。
 
 ## 主要功能
 
@@ -36,7 +36,7 @@ Secretary 是一个自动化的社交媒体分析工具，专门用于监控和�
 mkdir -p data
 
 # 下载 docker-compose.yml
-curl -O https://raw.githubusercontent.com/zkd8907/secretary/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/zhumao520/tweetAnalyst/main/docker-compose.yml
 
 # 启动容器
 docker-compose up -d
@@ -65,8 +65,8 @@ docker-compose up -d
 
 1. 克隆项目到本地：
 ```bash
-git clone https://github.com/zkd8907/secretary.git
-cd secretary
+git clone https://github.com/zhumao520/tweetAnalyst.git
+cd tweetAnalyst
 ```
 
 2. 安装依赖：
@@ -126,7 +126,7 @@ python run_scheduler.py
 
 环境变量说明：
 - `FLASK_SECRET_KEY`: Web应用的密钥，用于会话安全
-- `DATABASE_PATH`: 数据库文件路径，默认为 `secretary.db`
+- `DATABASE_PATH`: 数据库文件路径，默认为 `tweetanalyst.db`
 - `TWITTER_USERNAME`: Twitter 平台的用户名
 - `TWITTER_PASSWORD`: Twitter 平台的密码
 - `TWITTER_SESSION`: 之前登录过的 Twitter 平台的登录票据
@@ -243,7 +243,7 @@ social_networks:
 
 ```bash
 # 使用 Docker
-docker exec -it secretary-secretary-1 python main.py
+docker exec -it tweetAnalyst-tweetAnalyst-1 python main.py
 
 # 本地安装
 python main.py
@@ -264,6 +264,70 @@ python main.py
 - 分析结果（根据提示词配置的格式）
 - 分析总结
 
+## 重置数据
+
+如果需要重置系统（例如，在测试后或出现问题时），可以使用以下方法：
+
+1. 停止容器：
+```bash
+docker-compose down
+```
+
+2. 删除数据目录：
+```bash
+rm -rf ./data
+```
+
+3. 设置环境变量强制初始化：
+```bash
+echo "FIRST_LOGIN=true" > .env
+```
+
+4. 重新启动容器：
+```bash
+docker-compose up -d
+```
+
+这将删除所有数据并重新初始化系统。请注意，此操作不可逆，请确保在执行前备份重要数据。
+
+## 故障排除
+
+### 缺少依赖问题
+
+如果在启动容器时遇到以下错误：
+
+```
+ModuleNotFoundError: No module named 'flask_wtf'
+```
+
+这是因为容器中缺少必要的Python依赖。可以通过以下方法解决：
+
+#### 方法1: 在现有容器中安装依赖
+
+```bash
+# 找到容器ID
+docker ps
+
+# 在容器中安装依赖
+docker exec -it <容器ID> pip install Flask-WTF==1.1.1 Flask==2.3.3 Werkzeug==2.3.7
+
+# 重启容器
+docker restart <容器ID>
+```
+
+#### 方法2: 重新构建镜像
+
+```bash
+# 停止并删除现有容器
+docker-compose down
+
+# 重新构建镜像（不使用缓存）
+docker-compose build --no-cache
+
+# 启动新容器
+docker-compose up -d
+```
+
 ## 注意事项
 
 - 确保网络连接正常，访问 Twitter 可能需要代理
@@ -276,6 +340,15 @@ python main.py
 - 当 LLM 返回的 JSON 格式无法解析时，系统会自动重试，重试次数由环境变量 `LLM_PROCESS_MAX_RETRIED` 控制，默认为 3 次
 - 如果重试次数用完仍然无法解析 JSON，系统会跳过当前内容的处理并继续处理下一条内容
 - 使用 Docker 部署时，数据会保存在 `./data` 目录中，请确保该目录有足够的权限
+- 容器重启后数据会保持不变，因为数据库文件存储在持久化卷中
+- 系统会自动检测是否是首次部署，首次部署时会自动初始化数据库
+- 如果遇到容器重启后数据丢失问题，请检查以下几点：
+  1. 确保 `./data` 目录存在且有正确的权限
+  2. 确保 `docker-compose.yml` 中的卷映射配置正确
+  3. 可以在 `.env` 文件中设置 `FIRST_LOGIN` 环境变量：
+     - `FIRST_LOGIN=auto`：自动检测（默认值，检查数据库文件是否存在）
+     - `FIRST_LOGIN=true`：强制初始化（谨慎使用，会重置数据）
+     - `FIRST_LOGIN=false`：禁止初始化（确保数据保留）
 
 ## 许可证
 

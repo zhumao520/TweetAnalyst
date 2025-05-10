@@ -26,6 +26,7 @@
                                 <th>发布时间</th>
                                 <th>内容</th>
                                 <th>相关性</th>
+                                <th>置信度</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
@@ -51,6 +52,23 @@
                                     {% endif %}
                                 </td>
                                 <td>
+                                    {% if result.confidence is not none %}
+                                        <div class="progress" style="height: 20px;" title="{{ result.confidence }}%">
+                                            <div class="progress-bar
+                                                {% if result.confidence >= 80 %}bg-success
+                                                {% elif result.confidence >= 50 %}bg-info
+                                                {% elif result.confidence >= 30 %}bg-warning
+                                                {% else %}bg-danger{% endif %}"
+                                                role="progressbar" style="width: {{ result.confidence }}%;"
+                                                aria-valuenow="{{ result.confidence }}" aria-valuemin="0" aria-valuemax="100">
+                                                {{ result.confidence }}%
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">未知</span>
+                                    {% endif %}
+                                </td>
+                                <td>
                                     <button type="button" class="btn btn-sm btn-info view-btn"
                                             data-id="{{ result.id }}" data-bs-toggle="modal"
                                             data-bs-target="#resultModal">
@@ -60,7 +78,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="7" class="text-center">暂无数据</td>
+                                <td colspan="8" class="text-center">暂无数据</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -74,11 +92,22 @@
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <h5 class="card-title mb-0">{{ result.social_network }}: {{ result.account_id }}</h5>
-                                {% if result.is_relevant %}
-                                    <span class="badge bg-success">相关</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">不相关</span>
-                                {% endif %}
+                                <div class="d-flex align-items-center">
+                                    {% if result.confidence is not none %}
+                                        <span class="badge
+                                            {% if result.confidence >= 80 %}bg-success
+                                            {% elif result.confidence >= 50 %}bg-info
+                                            {% elif result.confidence >= 30 %}bg-warning
+                                            {% else %}bg-danger{% endif %} me-2">
+                                            {{ result.confidence }}%
+                                        </span>
+                                    {% endif %}
+                                    {% if result.is_relevant %}
+                                        <span class="badge bg-success">相关</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">不相关</span>
+                                    {% endif %}
+                                </div>
                             </div>
                             <p class="card-text">
                                 {% if result.content|length > 100 %}
@@ -168,9 +197,16 @@
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h6 class="mb-0">分析结果</h6>
-                        <small class="text-muted" id="modal-time"></small>
+                        <div>
+                            <span class="badge bg-primary me-2" id="modal-confidence">置信度: 0%</span>
+                            <small class="text-muted" id="modal-time"></small>
+                        </div>
                     </div>
                     <div class="border rounded p-3 overflow-auto" id="modal-analysis" style="max-height: 300px;"></div>
+                </div>
+                <div class="mb-3">
+                    <h6 class="mb-0">AI决策理由</h6>
+                    <div class="border rounded p-3 bg-light" id="modal-reason"></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -209,6 +245,30 @@
                             // 设置平台和账号信息
                             document.getElementById('modal-platform-account').textContent =
                                 `${result.social_network}: ${result.account_id}`;
+
+                            // 设置置信度
+                            const confidenceElem = document.getElementById('modal-confidence');
+                            if (result.confidence !== null && result.confidence !== undefined) {
+                                let confidenceClass = 'bg-primary';
+                                if (result.confidence >= 80) confidenceClass = 'bg-success';
+                                else if (result.confidence >= 50) confidenceClass = 'bg-info';
+                                else if (result.confidence >= 30) confidenceClass = 'bg-warning';
+                                else confidenceClass = 'bg-danger';
+
+                                confidenceElem.textContent = `置信度: ${result.confidence}%`;
+                                confidenceElem.className = `badge ${confidenceClass} me-2`;
+                            } else {
+                                confidenceElem.textContent = '置信度: 未知';
+                                confidenceElem.className = 'badge bg-secondary me-2';
+                            }
+
+                            // 设置理由
+                            const reasonElem = document.getElementById('modal-reason');
+                            if (result.reason) {
+                                reasonElem.textContent = result.reason;
+                            } else {
+                                reasonElem.textContent = result.is_relevant ? '符合预设主题' : '不符合预设主题';
+                            }
 
                             // 设置时间
                             const postTime = new Date(result.post_time);

@@ -116,10 +116,10 @@ def get_results():
         is_relevant = request.args.get('is_relevant')
         limit = request.args.get('limit', 100, type=int)
         offset = request.args.get('offset', 0, type=int)
-        
+
         # 构建查询
         query = AnalysisResult.query
-        
+
         # 按ID查询
         if result_id:
             result = AnalysisResult.query.get(result_id)
@@ -139,22 +139,22 @@ def get_results():
                     "limit": limit,
                     "offset": offset
                 })
-        
+
         # 按账号过滤
         if account_id:
             query = query.filter_by(account_id=account_id)
-        
+
         # 按相关性过滤
         if is_relevant is not None:
             is_relevant_bool = is_relevant.lower() == 'true'
             query = query.filter_by(is_relevant=is_relevant_bool)
-        
+
         # 获取总数
         total = query.count()
-        
+
         # 分页查询
         results = query.order_by(AnalysisResult.created_at.desc()).offset(offset).limit(limit).all()
-        
+
         return jsonify({
             "success": True,
             "data": [result.to_dict() for result in results],
@@ -191,7 +191,9 @@ def get_notifications():
                 'content': notification.content[:100] + ('...' if len(notification.content) > 100 else ''),
                 'time': notification.created_at.isoformat(),
                 'read': False,  # 默认未读
-                'url': url_for('results', _external=True) + f'?id={notification.id}'
+                'url': url_for('results', _external=True) + f'?id={notification.id}',
+                'confidence': notification.confidence,  # 添加置信度
+                'reason': notification.reason  # 添加理由
             })
 
         return jsonify({"success": True, "data": result})
@@ -223,7 +225,9 @@ def save_result():
             post_time=datetime.fromisoformat(data['post_time']),
             content=data['content'],
             analysis=data['analysis'],
-            is_relevant=data['is_relevant']
+            is_relevant=data['is_relevant'],
+            confidence=data.get('confidence'),  # 新字段，可选
+            reason=data.get('reason')  # 新字段，可选
         )
 
         db.session.add(result)

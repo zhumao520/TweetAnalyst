@@ -1,5 +1,5 @@
 [project]
-name = "secretary"
+name = "tweetanalyst"
 version = "0.1.0"
 description = "社交媒体内容分析助手"
 authors = [

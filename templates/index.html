@@ -6,8 +6,11 @@
 <div class="row">
     <div class="col-md-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">系统概览</h4>
+                <button id="run-all-accounts-btn" class="btn btn-success">
+                    <i class="bi bi-play-fill"></i> 立即执行监控任务
+                </button>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -73,72 +76,280 @@
         </div>
     </div>
 </div>
+<!-- 任务状态模态框 -->
+<div class="modal fade" id="taskStatusModal" tabindex="-1" aria-labelledby="taskStatusModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taskStatusModalLabel">任务状态</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="task-status-content">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="spinner-border text-primary me-2" role="status" id="task-spinner">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <div id="task-message">正在准备任务...</div>
+                    </div>
+                    <div class="progress mb-3" id="task-progress-container" style="display: none;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="task-progress" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div id="task-details" class="mt-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">任务详情</h6>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>状态:</span>
+                                        <span id="task-status-text">准备中</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>处理的帖子:</span>
+                                        <span id="task-posts-count">0</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>相关内容:</span>
+                                        <span id="task-relevant-count">0</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>开始时间:</span>
+                                        <span id="task-start-time">-</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between">
+                                        <span>运行时间:</span>
+                                        <span id="task-duration">0秒</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <a href="{{ url_for('results') }}" class="btn btn-primary" id="view-results-btn" style="display: none;">查看结果</a>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    // 获取最近分析结果
-    fetch('/api/results')
+    // 全局变量
+    let taskStatusModal;
+    let taskStatusInterval;
+    let taskStartTime;
+
+    // 初始化模态框
+    document.addEventListener('DOMContentLoaded', function() {
+        taskStatusModal = new bootstrap.Modal(document.getElementById('taskStatusModal'));
+
+        // 绑定全局抓取按钮事件
+        document.getElementById('run-all-accounts-btn').addEventListener('click', function() {
+            runTask();
+        });
+
+        // 获取最近分析结果
+        fetch('/api/results')
+            .then(response => response.json())
+            .then(data => {
+                const recentResults = document.getElementById('recent-results');
+                recentResults.innerHTML = '';
+
+                // 显示最近10条结果
+                const results = data.slice(0, 10);
+
+                if (results.length === 0) {
+                    recentResults.innerHTML = '<tr><td colspan="5" class="text-center">暂无数据</td></tr>';
+                    return;
+                }
+
+                // 统计数据
+                document.getElementById('account-count').textContent = new Set(data.map(r => r.account_id)).size;
+
+                const today = new Date().toISOString().split('T')[0];
+                const todayResults = data.filter(r => r.created_at.startsWith(today));
+                document.getElementById('today-count').textContent = todayResults.length;
+
+                const relevantResults = data.filter(r => r.is_relevant);
+                document.getElementById('relevant-count').textContent = relevantResults.length;
+
+                // 填充表格
+                results.forEach(result => {
+                    const row = document.createElement('tr');
+
+                    const platformCell = document.createElement('td');
+                    platformCell.textContent = result.social_network;
+
+                    const accountCell = document.createElement('td');
+                    accountCell.textContent = result.account_id;
+
+                    const timeCell = document.createElement('td');
+                    const date = new Date(result.post_time);
+                    timeCell.textContent = date.toLocaleString();
+
+                    const contentCell = document.createElement('td');
+                    contentCell.textContent = result.content.length > 50
+                        ? result.content.substring(0, 50) + '...'
+                        : result.content;
+
+                    const relevantCell = document.createElement('td');
+                    relevantCell.innerHTML = result.is_relevant
+                        ? '<span class="badge bg-success">相关</span>'
+                        : '<span class="badge bg-secondary">不相关</span>';
+
+                    row.appendChild(platformCell);
+                    row.appendChild(accountCell);
+                    row.appendChild(timeCell);
+                    row.appendChild(contentCell);
+                    row.appendChild(relevantCell);
+
+                    recentResults.appendChild(row);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching results:', error);
+                document.getElementById('recent-results').innerHTML =
+                    '<tr><td colspan="5" class="text-center text-danger">加载失败</td></tr>';
+            });
+    });
+
+    // 运行任务函数
+    function runTask(accountId = null) {
+        // 重置模态框状态
+        resetTaskModal();
+
+        // 显示模态框
+        taskStatusModal.show();
+
+        // 准备请求数据
+        const requestData = {};
+        if (accountId) {
+            requestData.account_id = accountId;
+            document.getElementById('task-message').textContent = `正在抓取账号: ${accountId}`;
+        } else {
+            document.getElementById('task-message').textContent = '正在抓取所有账号';
+        }
+
+        // 发送请求启动任务
+        fetch('/api/tasks/run', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData),
+        })
         .then(response => response.json())
         .then(data => {
-            const recentResults = document.getElementById('recent-results');
-            recentResults.innerHTML = '';
-            
-            // 显示最近10条结果
-            const results = data.slice(0, 10);
-            
-            if (results.length === 0) {
-                recentResults.innerHTML = '<tr><td colspan="5" class="text-center">暂无数据</td></tr>';
-                return;
+            if (data.success) {
+                // 记录开始时间
+                taskStartTime = new Date();
+
+                // 更新状态
+                updateTaskStatus(data.status);
+
+                // 启动定时查询状态
+                taskStatusInterval = setInterval(checkTaskStatus, 1000);
+            } else {
+                // 显示错误
+                document.getElementById('task-spinner').style.display = 'none';
+                document.getElementById('task-message').textContent = `启动任务失败: ${data.message}`;
+                document.getElementById('task-status-text').textContent = '失败';
+                document.getElementById('task-status-text').className = 'text-danger';
             }
-            
-            // 统计数据
-            document.getElementById('account-count').textContent = new Set(data.map(r => r.account_id)).size;
-            
-            const today = new Date().toISOString().split('T')[0];
-            const todayResults = data.filter(r => r.created_at.startsWith(today));
-            document.getElementById('today-count').textContent = todayResults.length;
-            
-            const relevantResults = data.filter(r => r.is_relevant);
-            document.getElementById('relevant-count').textContent = relevantResults.length;
-            
-            // 填充表格
-            results.forEach(result => {
-                const row = document.createElement('tr');
-                
-                const platformCell = document.createElement('td');
-                platformCell.textContent = result.social_network;
-                
-                const accountCell = document.createElement('td');
-                accountCell.textContent = result.account_id;
-                
-                const timeCell = document.createElement('td');
-                const date = new Date(result.post_time);
-                timeCell.textContent = date.toLocaleString();
-                
-                const contentCell = document.createElement('td');
-                contentCell.textContent = result.content.length > 50 
-                    ? result.content.substring(0, 50) + '...' 
-                    : result.content;
-                
-                const relevantCell = document.createElement('td');
-                relevantCell.innerHTML = result.is_relevant 
-                    ? '<span class="badge bg-success">相关</span>' 
-                    : '<span class="badge bg-secondary">不相关</span>';
-                
-                row.appendChild(platformCell);
-                row.appendChild(accountCell);
-                row.appendChild(timeCell);
-                row.appendChild(contentCell);
-                row.appendChild(relevantCell);
-                
-                recentResults.appendChild(row);
-            });
         })
         .catch(error => {
-            console.error('Error fetching results:', error);
-            document.getElementById('recent-results').innerHTML = 
-                '<tr><td colspan="5" class="text-center text-danger">加载失败</td></tr>';
+            console.error('Error:', error);
+            document.getElementById('task-spinner').style.display = 'none';
+            document.getElementById('task-message').textContent = `请求错误: ${error.message}`;
+            document.getElementById('task-status-text').textContent = '错误';
+            document.getElementById('task-status-text').className = 'text-danger';
         });
+    }
+
+    // 查询任务状态
+    function checkTaskStatus() {
+        fetch('/api/tasks/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateTaskStatus(data.status);
+
+                // 如果任务已完成，停止查询
+                if (!data.status.is_running) {
+                    clearInterval(taskStatusInterval);
+                    document.getElementById('task-spinner').style.display = 'none';
+                    document.getElementById('view-results-btn').style.display = 'block';
+
+                    // 刷新统计数据
+                    setTimeout(function() {
+                        location.reload();
+                    }, 2000);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            clearInterval(taskStatusInterval);
+            document.getElementById('task-spinner').style.display = 'none';
+            document.getElementById('task-message').textContent = `获取状态失败: ${error.message}`;
+        });
+    }
+
+    // 更新任务状态显示
+    function updateTaskStatus(status) {
+        // 更新消息
+        document.getElementById('task-message').textContent = status.message;
+
+        // 更新状态文本
+        const statusText = document.getElementById('task-status-text');
+        statusText.textContent = status.status;
+
+        // 根据状态设置样式
+        if (status.status === 'running') {
+            statusText.className = 'text-primary';
+        } else if (status.status === 'completed') {
+            statusText.className = 'text-success';
+        } else if (status.status === 'failed') {
+            statusText.className = 'text-danger';
+        }
+
+        // 更新计数
+        document.getElementById('task-posts-count').textContent = status.total_posts;
+        document.getElementById('task-relevant-count').textContent = status.relevant_posts;
+
+        // 更新时间信息
+        if (status.start_time) {
+            const startTime = new Date(status.start_time * 1000);
+            document.getElementById('task-start-time').textContent = startTime.toLocaleTimeString();
+
+            // 计算运行时间
+            const now = status.is_running ? new Date() : new Date(status.end_time * 1000);
+            const durationSec = Math.floor((now - startTime) / 1000);
+            document.getElementById('task-duration').textContent = `${durationSec}秒`;
+        }
+    }
+
+    // 重置模态框状态
+    function resetTaskModal() {
+        // 清除之前的定时器
+        if (taskStatusInterval) {
+            clearInterval(taskStatusInterval);
+        }
+
+        // 重置显示
+        document.getElementById('task-spinner').style.display = 'inline-block';
+        document.getElementById('task-message').textContent = '正在准备任务...';
+        document.getElementById('task-status-text').textContent = '准备中';
+        document.getElementById('task-status-text').className = 'text-secondary';
+        document.getElementById('task-posts-count').textContent = '0';
+        document.getElementById('task-relevant-count').textContent = '0';
+        document.getElementById('task-start-time').textContent = '-';
+        document.getElementById('task-duration').textContent = '0秒';
+        document.getElementById('view-results-btn').style.display = 'none';
+    }
 </script>
 {% endblock %}

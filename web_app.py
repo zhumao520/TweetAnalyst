@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask_wtf.csrf import CSRFProtect
 from sqlalchemy import func, cast, Date
 from utils.logger import get_logger
 import yaml
@@ -27,8 +28,11 @@ logger = get_logger('web_app')
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev_key_please_change')
 
+# 初始化CSRF保护
+csrf = CSRFProtect(app)
+
 # 获取数据库路径
-db_path = os.getenv('DATABASE_PATH', 'instance/tweetanalyst.db')
+db_path = os.getenv('DATABASE_PATH', 'instance/tweetAnalyst.db')
 # 确保路径是绝对路径
 if not os.path.isabs(db_path):
     db_path = os.path.join(os.getcwd(), db_path)
@@ -93,6 +97,7 @@ def create_default_admin():
         try:
             admin = User(username='admin')
             admin.set_password('admin123')
+            # 不设置is_admin字段，使用默认值
             db.session.add(admin)
             db.session.commit()
             logger.info("已创建默认管理员用户: admin/admin123")
@@ -120,8 +125,18 @@ def index():
         logger.info("访问首页，检查初始化状态")
 
         # 检查是否是首次登录
-        is_first_login = os.getenv('FIRST_LOGIN', 'true').lower() == 'true'
-        logger.info(f"FIRST_LOGIN 环境变量值: {is_first_login}")
+        first_login_env = os.getenv('FIRST_LOGIN', 'auto').lower()
+        logger.info(f"FIRST_LOGIN 环境变量值: {first_login_env}")
+
+        # 自动检测模式：检查数据库文件是否存在
+        if first_login_env == 'auto':
+            db_path = os.getenv('DATABASE_PATH', 'instance/tweetAnalyst.db')
+            is_first_login = not os.path.exists(db_path) or os.path.getsize(db_path) == 0
+            logger.info(f"自动检测首次登录状态: {is_first_login} (数据库路径: {db_path})")
+        else:
+            # 显式设置模式
+            is_first_login = first_login_env == 'true'
+            logger.info(f"使用环境变量设置的首次登录状态: {is_first_login}")
 
         # 如果是首次登录，强制进行初始化
         if is_first_login:
@@ -140,42 +155,50 @@ def index():
             os.environ['FIRST_LOGIN'] = 'false'
             logger.info("已将 FIRST_LOGIN 环境变量设置为 false")
 
-            # 尝试更新 .env 文件
+            # 尝试更新所有可能的.env文件位置
             try:
-                db_path = os.environ.get('DATABASE_PATH', 'instance/tweetanalyst.db')
-                env_dir = os.path.dirname(db_path)
-                env_file = os.path.join(env_dir, '.env')
+                # 1. 尝试更新项目根目录的.env文件
+                root_env_file = os.path.join(os.getcwd(), '.env')
 
-                logger.info(f"尝试更新环境变量文件: {env_file}")
+                # 2. 尝试更新数据目录的.env文件
+                db_path = os.environ.get('DATABASE_PATH', 'instance/tweetAnalyst.db')
+                data_dir = os.path.dirname(db_path)
+                data_env_file = os.path.join(data_dir, '.env')
 
-                # 确保目录存在
-                os.makedirs(env_dir, exist_ok=True)
+                # 更新所有可能的.env文件
+                for env_file in [root_env_file, data_env_file]:
+                    try:
+                        # 确保目录存在
+                        os.makedirs(os.path.dirname(env_file), exist_ok=True)
 
-                env_lines = []
+                        env_lines = []
 
-                # 读取现有.env文件
-                if os.path.exists(env_file):
-                    with open(env_file, 'r') as f:
-                        env_lines = f.readlines()
-                    logger.info(f"已读取现有.env文件，包含 {len(env_lines)} 行")
-                else:
-                    logger.info(".env文件不存在，将创建新文件")
+                        # 读取现有.env文件
+                        if os.path.exists(env_file):
+                            with open(env_file, 'r') as f:
+                                env_lines = f.readlines()
+                            logger.info(f"已读取现有.env文件 {env_file}，包含 {len(env_lines)} 行")
+                        else:
+                            logger.info(f".env文件 {env_file} 不存在，将创建新文件")
 
-                # 更新或添加环境变量
-                key_found = False
-                for i, line in enumerate(env_lines):
-                    if line.startswith("FIRST_LOGIN="):
-                        env_lines[i] = "FIRST_LOGIN=false\n"
-                        key_found = True
-                        break
+                        # 更新或添加环境变量
+                        key_found = False
+                        for i, line in enumerate(env_lines):
+                            if line.startswith("FIRST_LOGIN="):
+                                env_lines[i] = "FIRST_LOGIN=false\n"
+                                key_found = True
+                                break
 
-                if not key_found:
-                    env_lines.append("FIRST_LOGIN=false\n")
+                        if not key_found:
+                            env_lines.append("FIRST_LOGIN=false\n")
 
-                # 写回.env文件
-                with open(env_file, 'w') as f:
-                    f.writelines(env_lines)
-                logger.info("已成功更新.env文件")
+                        # 写回.env文件
+                        with open(env_file, 'w') as f:
+                            f.writelines(env_lines)
+                        logger.info(f"已成功更新.env文件: {env_file}")
+                    except Exception as e:
+                        logger.error(f"更新环境变量文件 {env_file} 时出错: {str(e)}")
+                        # 继续尝试其他文件
             except Exception as e:
                 logger.error(f"更新环境变量文件时出错: {str(e)}")
                 # 继续执行，不影响初始化流程
@@ -301,6 +324,7 @@ def setup():
                 # 创建管理员用户
                 user = User(username=admin_username)
                 user.set_password(admin_password)
+                # 不设置is_admin字段，使用默认值
                 db.session.add(user)
                 logger.info(f"已创建用户: {admin_username}")
 
@@ -590,8 +614,21 @@ def init_db():
     with app.app_context():
         # 创建所有表
         try:
-            db.create_all()
-            logger.info("数据库表创建成功")
+            # 检查数据库是否已存在表
+            from sqlalchemy import inspect
+            inspector = inspect(db.engine)
+            existing_tables = inspector.get_table_names()
+
+            if existing_tables:
+                logger.info(f"数据库已存在表: {existing_tables}，跳过初始化")
+                # 只创建不存在的表，保留现有数据
+                db.create_all()
+                logger.info("已创建缺失的表（如果有）")
+            else:
+                # 首次创建所有表
+                logger.info("数据库为空，创建所有表")
+                db.create_all()
+                logger.info("数据库表创建成功")
         except Exception as e:
             logger.error(f"创建数据库表时出错: {str(e)}")
             raise

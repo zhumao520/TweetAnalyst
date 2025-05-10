@@ -1,5 +1,4 @@
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
+import openai
 from dotenv import load_dotenv
 import os
 import time
@@ -137,34 +136,69 @@ def get_llm_response(prompt: str) -> str:
     logger.debug(f"使用模型 {model} 处理提示词")
 
     try:
-        # 初始化 ChatOpenAI 客户端
-        chat = ChatOpenAI(
-            model=model,
-            openai_api_base=api_base,
-            openai_api_key=api_key,
-            request_timeout=60,  # 设置60秒超时
-            max_retries=0,  # 我们使用自己的重试机制
-        )
+        # 配置OpenAI客户端
+        openai.api_key = api_key
+        if api_base:
+            # 验证API基础URL格式
+            if not api_base.startswith(('http://', 'https://')):
+                logger.error(f"无效的API基础URL: {api_base}")
+                raise ValueError(f"无效的API基础URL: {api_base}")
+
+            openai.base_url = api_base
+            logger.debug(f"使用自定义API基础URL: {api_base}")
+        else:
+            logger.debug("使用默认API基础URL")
 
         # 创建消息
         messages = [
-            SystemMessage(
-                content="""
+            {
+                "role": "system",
+                "content": """
 你接下来回答的所有内容都只能是符合我要求的json字符串同。
 字符串中如果有一些特殊的字符需要做好转义，确保最终这个json字符串可以在python中被正确解析。
 在最终的回答中除了json字符串本身，不需要其它额外的信息，也不要在json内容前后额外增加markdown的三个点转义。
-"""),
-            HumanMessage(content=prompt)
+"""
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
         ]
 
         # 获取响应
+        logger.debug(f"开始请求LLM API，模型: {model}")
         start_time = time.time()
-        response = chat.invoke(messages)
-        end_time = time.time()
 
-        logger.debug(f"LLM响应时间: {end_time - start_time:.2f}秒")
+        try:
+            # 使用chat.completions端点
+            # 检查是否为xAI的grok-3模型，添加reasoning_effort参数
+            if model and 'grok-3' in model:
+                logger.debug(f"检测到grok-3模型，添加reasoning_effort参数")
+                response = openai.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    reasoning_effort="high",  # 添加推理努力参数
+                    timeout=60,  # 设置60秒超时
+                )
+            else:
+                response = openai.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    timeout=60,  # 设置60秒超时
+                )
+            end_time = time.time()
+            logger.debug(f"LLM响应时间: {end_time - start_time:.2f}秒")
+            return response.choices[0].message.content
+        except Exception as api_error:
+            error_message = str(api_error).lower()
 
-        return response.content
+            # 检查是否返回了HTML而不是JSON
+            if "unexpected token '<'" in error_message:
+                logger.error(f"API返回了HTML而不是JSON，可能是认证问题或API端点错误: {error_message}")
+                raise LLMAuthenticationError(f"API返回了非JSON响应，请检查API密钥和基础URL")
+            else:
+                # 重新抛出原始异常
+                raise
 
     except Exception as e:
         error_message = str(e).lower()

@@ -16,6 +16,8 @@ class AnalysisResult(db.Model):
     content = db.Column(db.Text, nullable=False)
     analysis = db.Column(db.Text, nullable=False)
     is_relevant = db.Column(db.Boolean, nullable=False, index=True)
+    confidence = db.Column(db.Integer, nullable=True)  # AI决策的置信度(0-100)
+    reason = db.Column(db.Text, nullable=True)  # AI决策的理由
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     # 添加复合索引
@@ -23,6 +25,7 @@ class AnalysisResult(db.Model):
         db.Index('idx_account_relevant', 'account_id', 'is_relevant'),
         db.Index('idx_network_account', 'social_network', 'account_id'),
         db.Index('idx_time_relevant', 'post_time', 'is_relevant'),
+        db.Index('idx_confidence', 'confidence'),  # 添加置信度索引
     )
 
     def to_dict(self):
@@ -36,8 +39,10 @@ class AnalysisResult(db.Model):
             'content': self.content,
             'analysis': self.analysis,
             'is_relevant': self.is_relevant,
+            'confidence': self.confidence,
+            'reason': self.reason,
             'created_at': self.created_at.isoformat()
         }
-    
+
     def __repr__(self):
         return f'<AnalysisResult {self.id} {self.social_network}:{self.account_id}>'
