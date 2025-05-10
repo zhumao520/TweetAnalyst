@@ -175,6 +175,10 @@
                     throw new Error('测试API响应解析失败');
                 }
             })
+            .then(response => {
+                report += `   - 日志API响应状态: ${response.status} ${response.statusText}\n`;
+                return response.text();
+            })
             .then(text => {
                 try {
                     // 尝试解析JSON

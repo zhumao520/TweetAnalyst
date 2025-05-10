@@ -119,66 +119,84 @@ def test_llm_connection(prompt=None, model=None):
                 "message": "未配置LLM API密钥"
             }
 
-        # 导入OpenAI模块
+        # 导入LangChain模块
         try:
-            from openai import OpenAI
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import HumanMessage, SystemMessage
         except ImportError:
             return {
                 "success": False,
-                "message": "未安装OpenAI模块，无法测试连接"
+                "message": "未安装LangChain模块，无法测试连接"
             }
-
-        # 创建OpenAI客户端
-        client = OpenAI(api_key=api_key, base_url=api_base)
 
         # 发送请求
         start_time = time.time()
 
-        # 准备基本参数
-        params = {
-            "model": model,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ]
-        }
-
-        # 根据API类型和模型添加特定参数
+        # 确定API提供商
         api_provider = "标准OpenAI兼容API"
-
         if api_base:
             if 'x.ai' in api_base:
                 api_provider = "X.AI API"
-                params["reasoning_effort"] = "high"
-                logger.info(f"检测到{api_provider}，添加reasoning_effort参数")
             elif 'groq.com' in api_base:
                 api_provider = "Groq API"
-                logger.info(f"检测到{api_provider}，使用标准参数")
             elif 'anthropic.com' in api_base:
                 api_provider = "Anthropic API"
-                logger.info(f"检测到{api_provider}，使用标准参数")
             elif 'mistral.ai' in api_base:
                 api_provider = "Mistral AI API"
-                logger.info(f"检测到{api_provider}，使用标准参数")
             elif 'openai.com' in api_base:
                 api_provider = "OpenAI API"
-                logger.info(f"检测到{api_provider}，使用标准参数")
             else:
                 logger.info(f"使用自定义API基础URL: {api_base}")
 
-        # 根据模型名称添加特定参数
-        if model:
-            if 'grok-' in model and 'reasoning_effort' not in params:
-                params["reasoning_effort"] = "high"
-                logger.info(f"检测到grok模型，添加reasoning_effort参数")
+        # 准备ChatOpenAI参数
+        chat_params = {
+            "model": model,
+            "openai_api_base": api_base,
+            "openai_api_key": api_key,
+            "temperature": 0,
+            "request_timeout": 60
+        }
+
+        # 根据API类型和模型添加特定参数
+        model_kwargs = {}
+
+        # 检查API类型和模型
+        if 'x.ai' in api_base:
+            logger.info(f"检测到{api_provider}，添加reasoning_effort参数")
+            model_kwargs["reasoning_effort"] = "high"
+        elif 'grok-' in model:
+            logger.info(f"检测到grok模型，添加reasoning_effort参数")
+            model_kwargs["reasoning_effort"] = "high"
+
+        # 如果有特定参数，添加到chat_params
+        if model_kwargs:
+            chat_params["model_kwargs"] = model_kwargs
 
         # 调用API
         try:
+            # 记录API信息
             logger.info(f"使用{api_provider}测试连接，模型: {model}")
-            response = client.chat.completions.create(**params)
+            logger.info(f"API基础URL: {api_base}")
+            logger.info(f"请求参数: {chat_params}")
+
+            # 创建ChatOpenAI实例
+            chat = ChatOpenAI(**chat_params)
+
+            # 创建消息
+            messages = [
+                HumanMessage(content=prompt)
+            ]
+
+            # 发送请求
+            response = chat.invoke(messages)
+
         except Exception as api_error:
             error_str = str(api_error).lower()
             if '404' in error_str:
                 logger.error(f"{api_provider}返回404错误，可能是API端点不正确或模型名称错误: {error_str}")
+                logger.error(f"尝试访问的URL: {api_base}")
+                logger.error(f"使用的模型: {model}")
+                logger.error(f"完整错误信息: {api_error}")
                 raise Exception(f"{api_provider}返回404错误。请检查:\n1. API基础URL是否正确\n2. 模型名称是否正确\n3. 您是否有访问该模型的权限\n\n错误详情: {error_str}")
             else:
                 raise
@@ -187,14 +205,13 @@ def test_llm_connection(prompt=None, model=None):
         # 构建响应数据
         response_data = {
             "prompt": prompt,
-            "response": response.choices[0].message.content,
+            "response": response.content,
             "response_time": f"{end_time - start_time:.2f}秒",
             "model": model
         }
 
-        # 如果有reasoning_content，添加到响应中
-        if hasattr(response.choices[0].message, 'reasoning_content') and response.choices[0].message.reasoning_content:
-            response_data["reasoning_content"] = response.choices[0].message.reasoning_content
+        # 注意：LangChain的响应对象没有reasoning_content属性
+        # 如果将来需要这个功能，可能需要通过其他方式获取
 
         # 返回成功结果
         return {

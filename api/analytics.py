@@ -31,7 +31,7 @@ def get_summary():
         platform_stats = db.session.query(
             AnalysisResult.social_network,
             db.func.count(AnalysisResult.id).label('total'),
-            db.func.sum(db.case([(AnalysisResult.is_relevant, 1)], else_=0)).label('relevant')
+            db.func.sum(db.case((AnalysisResult.is_relevant, 1), else_=0)).label('relevant')
         ).group_by(AnalysisResult.social_network).all()
 
         platform_data = [
@@ -49,7 +49,7 @@ def get_summary():
             AnalysisResult.social_network,
             AnalysisResult.account_id,
             db.func.count(AnalysisResult.id).label('total'),
-            db.func.sum(db.case([(AnalysisResult.is_relevant, 1)], else_=0)).label('relevant')
+            db.func.sum(db.case((AnalysisResult.is_relevant, 1), else_=0)).label('relevant')
         ).group_by(AnalysisResult.social_network, AnalysisResult.account_id).all()
 
         account_data = [
@@ -70,7 +70,7 @@ def get_summary():
         time_stats = db.session.query(
             cast(AnalysisResult.post_time, Date).label('date'),
             db.func.count(AnalysisResult.id).label('total'),
-            db.func.sum(db.case([(AnalysisResult.is_relevant, 1)], else_=0)).label('relevant')
+            db.func.sum(db.case((AnalysisResult.is_relevant, 1), else_=0)).label('relevant')
         ).filter(AnalysisResult.post_time >= thirty_days_ago)\
          .group_by(cast(AnalysisResult.post_time, Date))\
          .order_by(cast(AnalysisResult.post_time, Date)).all()
@@ -100,7 +100,26 @@ def get_summary():
         })
     except Exception as e:
         logger.error(f"获取分析数据摘要时出错: {str(e)}", exc_info=True)
-        return jsonify({"success": False, "message": f"获取数据失败: {str(e)}"}), 500
+
+        # 添加更详细的错误信息
+        error_type = type(e).__name__
+        error_message = str(e)
+
+        # 检查是否是SQLAlchemy错误
+        if 'sqlalchemy' in error_type.lower() or 'case()' in error_message.lower():
+            logger.error(f"可能是SQLAlchemy case()函数错误: {error_type} - {error_message}")
+            return jsonify({
+                "success": False,
+                "message": f"获取数据失败: SQLAlchemy错误 - {error_type}",
+                "error_details": error_message,
+                "error_type": error_type
+            }), 500
+
+        return jsonify({
+            "success": False,
+            "message": f"获取数据失败: {error_message}",
+            "error_type": error_type
+        }), 500
 
 @analytics_api.route('/results', methods=['GET'])
 def get_results():

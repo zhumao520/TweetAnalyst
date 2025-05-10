@@ -65,13 +65,13 @@
 {% block content %}
 <div class="container-fluid mt-4">
     <h1 class="mb-4">数据分析</h1>
-    
+
     <div id="loading-overlay" class="loading-overlay">
         <div class="spinner-border loading-spinner text-primary" role="status">
             <span class="visually-hidden">加载中...</span>
         </div>
     </div>
-    
+
     <div class="row">
         <div class="col-md-4">
             <div class="stats-card bg-primary-gradient">
@@ -95,7 +95,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="row mt-4">
         <div class="col-md-6">
             <div class="card">
@@ -122,7 +122,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="row mt-4">
         <div class="col-12">
             <div class="card">
@@ -160,60 +160,72 @@
     // 图表对象
     let timeChart = null;
     let platformChart = null;
-    
+
     // 加载数据
     function loadAnalyticsData() {
         document.getElementById('loading-overlay').style.display = 'flex';
-        
+
         fetch('/api/analytics/summary')
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     updateDashboard(data.data);
                 } else {
-                    alert('加载数据失败: ' + data.message);
+                    console.error('加载数据失败:', data);
+                    let errorMessage = data.message || '未知错误';
+                    let errorDetails = '';
+
+                    if (data.error_details) {
+                        errorDetails = '\n\n详细错误信息: ' + data.error_details;
+                    }
+
+                    if (data.error_type) {
+                        errorDetails += '\n错误类型: ' + data.error_type;
+                    }
+
+                    alert('加载数据失败: ' + errorMessage + errorDetails);
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('加载数据时出错');
+                alert('加载数据时出错: ' + (error.message || '未知错误'));
             })
             .finally(() => {
                 document.getElementById('loading-overlay').style.display = 'none';
             });
     }
-    
+
     // 更新仪表板
     function updateDashboard(data) {
         // 更新统计卡片
         document.getElementById('total-posts').textContent = data.summary.total_posts;
         document.getElementById('relevant-posts').textContent = data.summary.relevant_posts;
         document.getElementById('relevance-rate').textContent = data.summary.relevance_rate + '%';
-        
+
         // 更新时间趋势图表
         updateTimeChart(data.time_trend);
-        
+
         // 更新平台分布图表
         updatePlatformChart(data.platforms);
-        
+
         // 更新账号统计表格
         updateAccountTable(data.accounts);
     }
-    
+
     // 更新时间趋势图表
     function updateTimeChart(timeData) {
         const ctx = document.getElementById('time-trend-chart').getContext('2d');
-        
+
         // 准备数据
         const labels = timeData.map(item => item.date);
         const totalData = timeData.map(item => item.total);
         const relevantData = timeData.map(item => item.relevant);
-        
+
         // 如果图表已存在，销毁它
         if (timeChart) {
             timeChart.destroy();
         }
-        
+
         // 创建新图表
         timeChart = new Chart(ctx, {
             type: 'line',
@@ -270,21 +282,21 @@
             }
         });
     }
-    
+
     // 更新平台分布图表
     function updatePlatformChart(platformData) {
         const ctx = document.getElementById('platform-chart').getContext('2d');
-        
+
         // 准备数据
         const labels = platformData.map(item => item.platform);
         const totalData = platformData.map(item => item.total);
         const relevantData = platformData.map(item => item.relevant);
-        
+
         // 如果图表已存在，销毁它
         if (platformChart) {
             platformChart.destroy();
         }
-        
+
         // 创建新图表
         platformChart = new Chart(ctx, {
             type: 'bar',
@@ -331,24 +343,24 @@
             }
         });
     }
-    
+
     // 更新账号统计表格
     function updateAccountTable(accountData) {
         const tableBody = document.getElementById('account-stats-body');
-        
+
         // 清空表格
         tableBody.innerHTML = '';
-        
+
         // 如果没有数据
         if (accountData.length === 0) {
             tableBody.innerHTML = '<tr><td colspan="5" class="text-center">暂无数据</td></tr>';
             return;
         }
-        
+
         // 添加行
         accountData.forEach(account => {
             const row = document.createElement('tr');
-            
+
             row.innerHTML = `
                 <td>${account.platform}</td>
                 <td>${account.account_id}</td>
@@ -356,11 +368,11 @@
                 <td>${account.relevant}</td>
                 <td>${account.relevance_rate}%</td>
             `;
-            
+
             tableBody.appendChild(row);
         });
     }
-    
+
     // 页面加载完成后加载数据
     document.addEventListener('DOMContentLoaded', loadAnalyticsData);
 </script>

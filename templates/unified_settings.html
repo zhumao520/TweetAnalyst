@@ -167,6 +167,7 @@
                                         <li><hr class="dropdown-divider"></li>
                                         <li><h6 class="dropdown-header">其他xAI模型</h6></li>
                                         <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-3-beta'; return false;">grok-3-beta</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-3-mini-beta'; return false;">grok-3-mini-beta</a></li>
                                         <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-3-mini-fast-beta'; return false;">grok-3-mini-fast-beta</a></li>
                                         <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-3-fast-beta'; return false;">grok-3-fast-beta</a></li>
                                         <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-2-1212'; return false;">grok-2-1212</a></li>
@@ -527,27 +528,19 @@ window.onerror = function(message, source, lineno, colno, error) {
         }
     }
 
-    // 根据API基础URL设置默认模型
+    // 根据API基础URL提示可用模型
     function filterModelsByAPI() {
         const apiBase = document.getElementById('llm-api-base').value.toLowerCase();
         const modelInput = document.getElementById('llm-api-model');
 
-        // 根据API基础URL设置默认模型
+        // 显示提示信息，但不自动设置默认模型
+        // 让用户自己选择或输入模型名称
         if (apiBase.includes('x.ai')) {
-            // 如果是xAI API，默认选择grok-3-mini-beta
-            if (!modelInput.value || modelInput.value === '') {
-                modelInput.value = 'grok-3-mini-beta';
-            }
+            showDebugMessage('检测到xAI API，推荐模型: grok-3-beta, grok-3-mini-beta, grok-3-mini-fast-beta, grok-3-fast-beta', 'info');
         } else if (apiBase.includes('openai.com')) {
-            // 如果是OpenAI API，默认选择gpt-3.5-turbo
-            if (!modelInput.value || modelInput.value === '') {
-                modelInput.value = 'gpt-3.5-turbo';
-            }
+            showDebugMessage('检测到OpenAI API，推荐模型: gpt-3.5-turbo, gpt-4', 'info');
         } else if (apiBase.includes('groq.com')) {
-            // 如果是Groq API，默认选择llama3-8b-8192
-            if (!modelInput.value || modelInput.value === '') {
-                modelInput.value = 'llama3-8b-8192';
-            }
+            showDebugMessage('检测到Groq API，推荐模型: llama3-8b-8192', 'info');
         }
     }
 
@@ -794,11 +787,10 @@ window.onerror = function(message, source, lineno, colno, error) {
         'test-llm-btn',
         '/api/test/llm',
         (model) => {
-            // 确保使用正确的模型名称
-            const modelToUse = model || 'grok-3-mini-fast-beta';
+            // 使用用户输入的模型名称，不设置默认值
             return {
                 prompt: "请用一句话回答：今天天气怎么样？",
-                model: modelToUse
+                model: model
             };
         },
         (data, resultHtml) => {
@@ -914,7 +906,7 @@ window.onerror = function(message, source, lineno, colno, error) {
         '/api/test/proxy',
         (proxy) => {
             // 弹出对话框，让用户输入测试URL
-            const testUrl = prompt('请输入测试URL（留空使用默认URL）:', 'https://httpbin.org/ip');
+            const testUrl = prompt('请输入测试URL（留空使用默认URL）:', 'https://www.google.com/generate_204');
 
             // 如果用户取消了输入，使用默认URL
             if (testUrl === null || testUrl.trim() === '') {

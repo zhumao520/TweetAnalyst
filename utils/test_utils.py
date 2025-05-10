@@ -123,15 +123,17 @@ def test_llm_connection(prompt=None, model=None):
         dict: 测试结果，包含success, message和data字段
     """
     try:
+        from langchain_openai import ChatOpenAI
+        from langchain_core.messages import HumanMessage, SystemMessage
         from modules.langchain.llm import get_llm_response
 
         # 如果没有提供提示词，使用默认测试提示词
         if not prompt:
             prompt = "请用一句话回答：今天天气怎么样？"
 
-        # 如果没有提供模型，使用默认模型
+        # 如果没有提供模型，使用环境变量中的模型或默认模型
         if not model:
-            model = os.getenv("LLM_API_MODEL", "grok-3-mini-fast-beta")
+            model = os.getenv("LLM_API_MODEL", "")
 
         # 记录模型信息
         logger.info(f"开始测试LLM API连接，测试提示词: {prompt}，模型: {model}")
@@ -217,7 +219,8 @@ def test_proxy_connection(test_url=None):
         # 如果没有提供测试URL，使用环境变量中的测试URL或默认值
         if not test_url:
             # 从环境变量获取测试URL，如果未设置则使用默认值
-            test_url = os.getenv('PROXY_TEST_URL', 'https://httpbin.org/ip')
+            # 使用Google的generate_204测试URL，专门用于连接测试
+            test_url = os.getenv('PROXY_TEST_URL', 'https://www.google.com/generate_204')
 
         logger.info(f"开始测试代理连接，测试URL: {test_url}")
 
@@ -253,7 +256,9 @@ def test_proxy_connection(test_url=None):
         # 尝试连接测试URL
         start_time = time.time()
         try:
-            response = requests.get(test_url, proxies=proxies, timeout=10)
+            # 添加verify=False参数，禁用SSL证书验证，解决SSL错误
+            # 注意：在生产环境中应谨慎使用此选项，这里仅用于测试
+            response = requests.get(test_url, proxies=proxies, timeout=10, verify=False)
             end_time = time.time()
             logger.info(f"请求完成，状态码: {response.status_code}, 耗时: {end_time - start_time:.2f}秒")
         except requests.exceptions.Timeout:
@@ -322,7 +327,7 @@ def test_proxy_connection(test_url=None):
                 if ip_address == "未知" and proxy:
                     # 尝试使用另一个服务获取IP
                     logger.info("尝试获取外部IP地址")
-                    ip_response = requests.get("https://httpbin.org/ip", proxies=proxies, timeout=5)
+                    ip_response = requests.get("https://httpbin.org/ip", proxies=proxies, timeout=5, verify=False)
                     if ip_response.status_code == 200:
                         ip_data = ip_response.json()
                         if 'origin' in ip_data:
@@ -475,7 +480,7 @@ def check_system_status():
         if proxy:
             # 尝试使用代理连接到百度
             try:
-                response = requests.get("http://www.baidu.com", proxies={"http": proxy, "https": proxy}, timeout=5)
+                response = requests.get("http://www.baidu.com", proxies={"http": proxy, "https": proxy}, timeout=5, verify=False)
                 if response.status_code == 200:
                     status["components"]["proxy"]["status"] = "正常"
                     status["components"]["proxy"]["message"] = f"代理可用: {proxy}"
@@ -488,7 +493,7 @@ def check_system_status():
         else:
             # 尝试直接连接到百度
             try:
-                response = requests.get("http://www.baidu.com", timeout=5)
+                response = requests.get("http://www.baidu.com", timeout=5, verify=False)
                 if response.status_code == 200:
                     status["components"]["proxy"]["status"] = "正常"
                     status["components"]["proxy"]["message"] = "直接连接可用"
