@@ -88,6 +88,7 @@ jobs:
         run: |
           echo "创建 requirements.txt 文件..."
           cat > requirements.txt << 'EOL'
+          # 基础依赖
           python-dotenv>=1.0.0
           pyyaml>=6.0
           requests>=2.28.2
@@ -96,14 +97,17 @@ jobs:
 
           # LLM支持
           openai>=1.0.0
+          langchain-openai>=0.0.1
+          langchain-core>=0.1.0
 
           # Twitter支持
           tweety-ns>=0.9.0
 
           # Web应用
-          Flask>=2.3.0
+          Flask>=2.0.0,<2.4.0
           Flask-SQLAlchemy>=3.0.0
-          Werkzeug>=2.3.0
+          Flask-WTF>=1.0.0,<1.2.0
+          Werkzeug>=2.0.0,<2.4.0
 
           # 系统监控
           psutil>=5.9.0
@@ -112,7 +116,7 @@ jobs:
           apprise>=1.9.0
 
           # SOCKS代理支持
-          httpx[socks]>=0.24.0
+          httpx>=0.24.0
           EOL
 
           echo "requirements.txt 文件已创建:"
@@ -178,7 +182,68 @@ jobs:
           mkdir -p /tmp/build
           cp -r . /tmp/build/
           ls -la /tmp/build/
-          echo "检查临时目录中的 requirements.txt 文件"
+
+          # 创建简化版的Dockerfile
+          echo "创建简化版的Dockerfile..."
+          cat > /tmp/build/Dockerfile << 'EOL'
+          FROM python:3.11-slim
+
+          WORKDIR /app
+
+          # 安装系统依赖
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              gcc \
+              python3-dev \
+              build-essential \
+              curl \
+              && rm -rf /var/lib/apt/lists/*
+
+          # 升级pip和基本工具
+          RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+          # 复制requirements.txt
+          COPY requirements.txt /app/requirements.txt
+
+          # 安装所有依赖的最新版本
+          RUN pip install --no-cache-dir -r /app/requirements.txt
+          RUN pip install --no-cache-dir openai langchain-openai langchain-core
+          RUN pip install --no-cache-dir Flask Flask-WTF Werkzeug Flask-SQLAlchemy
+          RUN pip install --no-cache-dir tweety-ns apprise "httpx[socks]"
+
+          # 清理pip缓存
+          RUN pip cache purge
+
+          # 创建数据和日志目录
+          RUN mkdir -p /data /data/logs
+
+          # 复制应用代码
+          COPY . .
+
+          # 设置环境变量
+          ENV DATABASE_PATH=/data/tweetAnalyst.db
+          ENV FLASK_SECRET_KEY=default_secret_key_please_change_in_env
+          ENV LOG_DIR=/data/logs
+          ENV FIRST_LOGIN=auto
+          ENV FLASK_DEBUG=false
+          ENV PYTHONUNBUFFERED=1
+
+          # 设置默认LLM API
+          ENV LLM_API_BASE=https://api.x.ai/v1
+          ENV LLM_API_MODEL=grok-3-mini-beta
+
+          # 暴露端口
+          EXPOSE 5000
+
+          # 添加启动脚本
+          COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+          RUN chmod +x /app/docker-entrypoint.sh
+
+          # 启动命令
+          CMD ["/app/docker-entrypoint.sh"]
+          EOL
+          echo "简化版的Dockerfile已创建"
+
+          # 检查临时目录中的 requirements.txt 文件
           if [ -f "/tmp/build/requirements.txt" ]; then
             echo "临时目录中 requirements.txt 存在"
             cat /tmp/build/requirements.txt | head -5
