@@ -134,23 +134,54 @@ def test_llm_connection(prompt=None, model=None):
         # 发送请求
         start_time = time.time()
 
-        # 检查是否为xAI的grok-3模型，添加reasoning_effort参数
-        if model and 'grok-3' in model:
-            logger.info(f"检测到grok-3模型，添加reasoning_effort参数")
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                reasoning_effort="high"  # 添加推理努力参数
-            )
-        else:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
+        # 准备基本参数
+        params = {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ]
+        }
+
+        # 根据API类型和模型添加特定参数
+        api_provider = "标准OpenAI兼容API"
+
+        if api_base:
+            if 'x.ai' in api_base:
+                api_provider = "X.AI API"
+                params["reasoning_effort"] = "high"
+                logger.info(f"检测到{api_provider}，添加reasoning_effort参数")
+            elif 'groq.com' in api_base:
+                api_provider = "Groq API"
+                logger.info(f"检测到{api_provider}，使用标准参数")
+            elif 'anthropic.com' in api_base:
+                api_provider = "Anthropic API"
+                logger.info(f"检测到{api_provider}，使用标准参数")
+            elif 'mistral.ai' in api_base:
+                api_provider = "Mistral AI API"
+                logger.info(f"检测到{api_provider}，使用标准参数")
+            elif 'openai.com' in api_base:
+                api_provider = "OpenAI API"
+                logger.info(f"检测到{api_provider}，使用标准参数")
+            else:
+                logger.info(f"使用自定义API基础URL: {api_base}")
+
+        # 根据模型名称添加特定参数
+        if model:
+            if 'grok-' in model and 'reasoning_effort' not in params:
+                params["reasoning_effort"] = "high"
+                logger.info(f"检测到grok模型，添加reasoning_effort参数")
+
+        # 调用API
+        try:
+            logger.info(f"使用{api_provider}测试连接，模型: {model}")
+            response = client.chat.completions.create(**params)
+        except Exception as api_error:
+            error_str = str(api_error).lower()
+            if '404' in error_str:
+                logger.error(f"{api_provider}返回404错误，可能是API端点不正确或模型名称错误: {error_str}")
+                raise Exception(f"{api_provider}返回404错误。请检查:\n1. API基础URL是否正确\n2. 模型名称是否正确\n3. 您是否有访问该模型的权限\n\n错误详情: {error_str}")
+            else:
+                raise
         end_time = time.time()
 
         # 构建响应数据

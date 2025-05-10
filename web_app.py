@@ -490,6 +490,15 @@ def system_config():
     return redirect(url_for('unified_settings'))
 
 # 账号管理路由
+@app.route('/logs')
+def logs_page():
+    """系统日志页面"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    logger.info("访问系统日志页面")
+    return render_template('logs.html')
+
 @app.route('/accounts')
 def accounts():
     if 'user_id' not in session:

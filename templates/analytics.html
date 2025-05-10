@@ -1,0 +1,367 @@
+{% extends 'base.html' %}
+
+{% block title %}数据分析{% endblock %}
+
+{% block head %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+<style>
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 20px;
+    }
+    .stats-card {
+        text-align: center;
+        padding: 20px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        color: white;
+    }
+    .stats-card h3 {
+        margin-top: 0;
+        font-size: 1.2rem;
+    }
+    .stats-card .number {
+        font-size: 2rem;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    .stats-card .description {
+        font-size: 0.9rem;
+        opacity: 0.8;
+    }
+    .bg-primary-gradient {
+        background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+    }
+    .bg-success-gradient {
+        background: linear-gradient(135deg, #1cc88a 0%, #13855c 100%);
+    }
+    .bg-info-gradient {
+        background: linear-gradient(135deg, #36b9cc 0%, #258391 100%);
+    }
+    .table-responsive {
+        margin-top: 20px;
+    }
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+    .loading-spinner {
+        width: 3rem;
+        height: 3rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h1 class="mb-4">数据分析</h1>
+    
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner-border loading-spinner text-primary" role="status">
+            <span class="visually-hidden">加载中...</span>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-4">
+            <div class="stats-card bg-primary-gradient">
+                <h3>总帖子数</h3>
+                <div class="number" id="total-posts">-</div>
+                <div class="description">监控的所有帖子总数</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stats-card bg-success-gradient">
+                <h3>相关帖子数</h3>
+                <div class="number" id="relevant-posts">-</div>
+                <div class="description">被判定为相关的帖子数量</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stats-card bg-info-gradient">
+                <h3>相关率</h3>
+                <div class="number" id="relevance-rate">-</div>
+                <div class="description">相关帖子占总帖子的百分比</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">时间趋势</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="time-trend-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">平台分布</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="platform-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">账号统计</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>平台</th>
+                                    <th>账号ID</th>
+                                    <th>总帖子数</th>
+                                    <th>相关帖子数</th>
+                                    <th>相关率</th>
+                                </tr>
+                            </thead>
+                            <tbody id="account-stats-body">
+                                <tr>
+                                    <td colspan="5" class="text-center">加载中...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 图表对象
+    let timeChart = null;
+    let platformChart = null;
+    
+    // 加载数据
+    function loadAnalyticsData() {
+        document.getElementById('loading-overlay').style.display = 'flex';
+        
+        fetch('/api/analytics/summary')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateDashboard(data.data);
+                } else {
+                    alert('加载数据失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('加载数据时出错');
+            })
+            .finally(() => {
+                document.getElementById('loading-overlay').style.display = 'none';
+            });
+    }
+    
+    // 更新仪表板
+    function updateDashboard(data) {
+        // 更新统计卡片
+        document.getElementById('total-posts').textContent = data.summary.total_posts;
+        document.getElementById('relevant-posts').textContent = data.summary.relevant_posts;
+        document.getElementById('relevance-rate').textContent = data.summary.relevance_rate + '%';
+        
+        // 更新时间趋势图表
+        updateTimeChart(data.time_trend);
+        
+        // 更新平台分布图表
+        updatePlatformChart(data.platforms);
+        
+        // 更新账号统计表格
+        updateAccountTable(data.accounts);
+    }
+    
+    // 更新时间趋势图表
+    function updateTimeChart(timeData) {
+        const ctx = document.getElementById('time-trend-chart').getContext('2d');
+        
+        // 准备数据
+        const labels = timeData.map(item => item.date);
+        const totalData = timeData.map(item => item.total);
+        const relevantData = timeData.map(item => item.relevant);
+        
+        // 如果图表已存在，销毁它
+        if (timeChart) {
+            timeChart.destroy();
+        }
+        
+        // 创建新图表
+        timeChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '总帖子数',
+                        data: totalData,
+                        borderColor: '#4e73df',
+                        backgroundColor: 'rgba(78, 115, 223, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    },
+                    {
+                        label: '相关帖子数',
+                        data: relevantData,
+                        borderColor: '#1cc88a',
+                        backgroundColor: 'rgba(28, 200, 138, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: '日期'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '帖子数量'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // 更新平台分布图表
+    function updatePlatformChart(platformData) {
+        const ctx = document.getElementById('platform-chart').getContext('2d');
+        
+        // 准备数据
+        const labels = platformData.map(item => item.platform);
+        const totalData = platformData.map(item => item.total);
+        const relevantData = platformData.map(item => item.relevant);
+        
+        // 如果图表已存在，销毁它
+        if (platformChart) {
+            platformChart.destroy();
+        }
+        
+        // 创建新图表
+        platformChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '总帖子数',
+                        data: totalData,
+                        backgroundColor: 'rgba(78, 115, 223, 0.8)',
+                        borderWidth: 0
+                    },
+                    {
+                        label: '相关帖子数',
+                        data: relevantData,
+                        backgroundColor: 'rgba(28, 200, 138, 0.8)',
+                        borderWidth: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: '平台'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '帖子数量'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // 更新账号统计表格
+    function updateAccountTable(accountData) {
+        const tableBody = document.getElementById('account-stats-body');
+        
+        // 清空表格
+        tableBody.innerHTML = '';
+        
+        // 如果没有数据
+        if (accountData.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center">暂无数据</td></tr>';
+            return;
+        }
+        
+        // 添加行
+        accountData.forEach(account => {
+            const row = document.createElement('tr');
+            
+            row.innerHTML = `
+                <td>${account.platform}</td>
+                <td>${account.account_id}</td>
+                <td>${account.total}</td>
+                <td>${account.relevant}</td>
+                <td>${account.relevance_rate}%</td>
+            `;
+            
+            tableBody.appendChild(row);
+        });
+    }
+    
+    // 页面加载完成后加载数据
+    document.addEventListener('DOMContentLoaded', loadAnalyticsData);
+</script>
+{% endblock %}

@@ -1,0 +1,1261 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置 - TweetAnalyst{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">系统设置</h1>
+
+    <!-- 设置导航选项卡 -->
+    <ul class="nav nav-tabs mb-4" id="settingsTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab" aria-controls="general" aria-selected="true">
+                <i class="bi bi-gear"></i> 基本设置
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="twitter-tab" data-bs-toggle="tab" data-bs-target="#twitter" type="button" role="tab" aria-controls="twitter" aria-selected="false">
+                <i class="bi bi-twitter"></i> Twitter设置
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="llm-tab" data-bs-toggle="tab" data-bs-target="#llm" type="button" role="tab" aria-controls="llm" aria-selected="false">
+                <i class="bi bi-cpu"></i> LLM设置
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="proxy-tab" data-bs-toggle="tab" data-bs-target="#proxy" type="button" role="tab" aria-controls="proxy" aria-selected="false">
+                <i class="bi bi-hdd-network"></i> 代理设置
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="notification-tab" data-bs-toggle="tab" data-bs-target="#notification" type="button" role="tab" aria-controls="notification" aria-selected="false">
+                <i class="bi bi-bell"></i> 推送设置
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="account-tab" data-bs-toggle="tab" data-bs-target="#account" type="button" role="tab" aria-controls="account" aria-selected="false">
+                <i class="bi bi-person"></i> 账号设置
+            </button>
+        </li>
+    </ul>
+
+    <!-- 选项卡内容 -->
+    <div class="tab-content" id="settingsTabContent">
+        <!-- 基本设置 -->
+        <div class="tab-pane fade show active" id="general" role="tabpanel" aria-labelledby="general-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">定时任务配置</h4>
+                </div>
+                <div class="card-body">
+                    <form id="scheduler-form">
+                        <div class="mb-3">
+                            <label for="scheduler-interval" class="form-label">执行间隔（分钟）</label>
+                            <input type="number" class="form-control" id="scheduler-interval" name="scheduler_interval" value="{{ config.get('SCHEDULER_INTERVAL_MINUTES', '30') }}" min="1" max="1440">
+                            <div class="form-text">
+                                定时任务执行间隔，单位为分钟，默认为30分钟
+                            </div>
+                        </div>
+                        <button type="button" id="save-scheduler-btn" class="btn btn-primary">保存定时任务配置</button>
+                        <button type="button" onclick="testButtonClick()" class="btn btn-warning">测试按钮点击</button>
+                        <button type="button" onclick="testSaveFunction()" class="btn btn-danger">测试保存函数</button>
+                        <button type="button" onclick="alert('直接点击测试成功！')" class="btn btn-success">直接测试</button>
+                    </form>
+                    <div class="mt-3">
+                        <div id="scheduler-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h4 class="mb-0">自动回复设置</h4>
+                </div>
+                <div class="card-body">
+                    <form id="auto-reply-form">
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enable-auto-reply" name="enable_auto_reply" {% if enable_auto_reply %}checked{% endif %}>
+                                <label class="form-check-label" for="enable-auto-reply">启用自动回复</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="auto-reply-prompt" class="form-label">自动回复提示词</label>
+                            <textarea class="form-control" id="auto-reply-prompt" name="auto_reply_prompt" rows="5" placeholder="自动回复的LLM提示词">{{ auto_reply_prompt }}</textarea>
+                            <div class="form-text">
+                                用于生成回复内容的提示词模板，使用{content}作为内容占位符。<br>
+                                注意：此设置为全局设置，也可以在账号管理中为每个账号单独设置。
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <button type="button" id="save-auto-reply-btn" class="btn btn-primary">保存自动回复设置</button>
+                            <button type="button" class="btn btn-outline-primary" id="test-auto-reply-btn">测试自动回复</button>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <div id="auto-reply-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                        <div id="auto-reply-test-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Twitter设置 -->
+        <div class="tab-pane fade" id="twitter" role="tabpanel" aria-labelledby="twitter-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Twitter配置</h4>
+                </div>
+                <div class="card-body">
+                    <form id="twitter-form">
+                        <div class="mb-3">
+                            <label for="twitter-username" class="form-label">用户名</label>
+                            <input type="text" class="form-control" id="twitter-username" name="twitter_username" value="{{ config.get('TWITTER_USERNAME', '') }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="twitter-password" class="form-label">密码</label>
+                            <input type="password" class="form-control" id="twitter-password" name="twitter_password" value="{{ config.get('TWITTER_PASSWORD', '') }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="twitter-session" class="form-label">会话数据</label>
+                            <textarea class="form-control" id="twitter-session" name="twitter_session" rows="3">{{ config.get('TWITTER_SESSION', '') }}</textarea>
+                            <div class="form-text">
+                                可选，如果提供了会话数据，将优先使用会话数据登录
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <button type="button" id="save-twitter-btn" class="btn btn-primary">保存Twitter配置</button>
+                            <button type="button" class="btn btn-outline-primary" id="test-twitter-btn">测试Twitter连接</button>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <div id="twitter-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                        <div id="twitter-test-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LLM设置 -->
+        <div class="tab-pane fade" id="llm" role="tabpanel" aria-labelledby="llm-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">LLM配置</h4>
+                </div>
+                <div class="card-body">
+                    <form id="llm-form">
+                        <div class="mb-3">
+                            <label for="llm-api-key" class="form-label">API密钥 <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="llm-api-key" name="llm_api_key" value="{{ config.get('LLM_API_KEY', '') }}" required>
+                            <div class="form-text">
+                                输入对应API服务的密钥，不同服务商的获取方式不同。<br>
+                                <small class="text-muted">注意：API密钥是敏感信息，请妥善保管，不要泄露给他人。</small>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="llm-api-model" class="form-label">API模型 <span class="text-danger">*</span></label>
+                                <div class="input-group mb-2">
+                                    <input type="text" class="form-control" id="llm-api-model" name="llm_api_model" value="{{ config.get('LLM_API_MODEL', '') }}" placeholder="请选择或输入模型名称" required>
+                                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">选择</button>
+                                    <ul class="dropdown-menu dropdown-menu-end" id="model-dropdown">
+                                        <li><h6 class="dropdown-header">常用模型</h6></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-3-mini-beta'; return false;">grok-3-mini-beta (xAI)</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='gpt-3.5-turbo'; return false;">gpt-3.5-turbo (OpenAI)</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='llama3-8b-8192'; return false;">llama3-8b-8192 (Groq)</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><h6 class="dropdown-header">其他xAI模型</h6></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-3-beta'; return false;">grok-3-beta</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-3-mini-fast-beta'; return false;">grok-3-mini-fast-beta</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-3-fast-beta'; return false;">grok-3-fast-beta</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='grok-2-1212'; return false;">grok-2-1212</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><h6 class="dropdown-header">其他OpenAI模型</h6></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='gpt-4'; return false;">gpt-4</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-model').value='gpt-4-turbo'; return false;">gpt-4-turbo</a></li>
+                                    </ul>
+                                </div>
+                                <div class="form-text">
+                                    选择或输入模型名称，不同API服务商支持的模型不同。<br>
+                                    <small class="text-muted">提示：先选择API基础URL，再选择对应的模型。</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="llm-api-base" class="form-label">API基础URL <span class="text-danger">*</span></label>
+                                <div class="input-group mb-2">
+                                    <input type="text" class="form-control" id="llm-api-base" name="llm_api_base" value="{{ config.get('LLM_API_BASE', '') }}" placeholder="请选择或输入API基础URL" required>
+                                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">选择</button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-base').value='https://api.x.ai/v1'; filterModelsByAPI(); return false;">xAI API</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-base').value='https://api.groq.com/openai/v1'; filterModelsByAPI(); return false;">Groq API</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-base').value='https://api.openai.com/v1'; filterModelsByAPI(); return false;">OpenAI API</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-base').value='https://api.anthropic.com/v1'; filterModelsByAPI(); return false;">Anthropic API</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-base').value='https://api.moonshot.cn/v1'; filterModelsByAPI(); return false;">Moonshot AI</a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-base').value='https://api.baichuan-ai.com/v1'; filterModelsByAPI(); return false;">百川智能</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('llm-api-base').value='http://localhost:8000/v1'; filterModelsByAPI(); return false;">本地API (localhost:8000)</a></li>
+                                    </ul>
+                                </div>
+                                <div class="form-text">
+                                    选择或输入API服务器地址，支持各种OpenAI兼容API。<br>
+                                    <small class="text-muted">注意：不同API服务商支持的模型不同，请参考相应文档。</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <button type="button" id="save-llm-btn" class="btn btn-primary">保存LLM配置</button>
+                            <button type="button" class="btn btn-outline-primary" id="test-llm-btn">测试LLM连接</button>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <div id="llm-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                        <div id="llm-test-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 代理设置 -->
+        <div class="tab-pane fade" id="proxy" role="tabpanel" aria-labelledby="proxy-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">代理设置</h4>
+                </div>
+                <div class="card-body">
+                    <form id="proxy-form">
+                        <div class="mb-3">
+                            <label class="form-label">代理设置</label>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-3">
+                                            <label for="proxy-type" class="form-label">代理类型</label>
+                                            <select class="form-select" id="proxy-type" onchange="updateProxyPreview()">
+                                                <option value="none" {% if not http_proxy %}selected{% endif %}>不使用代理</option>
+                                                <option value="http" {% if http_proxy and http_proxy.startswith('http://') %}selected{% endif %}>HTTP</option>
+                                                <option value="https" {% if http_proxy and http_proxy.startswith('https://') %}selected{% endif %}>HTTPS</option>
+                                                <option value="socks5" {% if http_proxy and http_proxy.startswith('socks5://') %}selected{% endif %}>SOCKS5</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="proxy-host" class="form-label">主机地址</label>
+                                            <input type="text" class="form-control" id="proxy-host" placeholder="例如：127.0.0.1" onchange="updateProxyPreview()" onkeyup="updateProxyPreview()">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="proxy-port" class="form-label">端口</label>
+                                            <input type="number" class="form-control" id="proxy-port" placeholder="例如：7890" min="1" max="65535" onchange="updateProxyPreview()" onkeyup="updateProxyPreview()">
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <label for="http-proxy" class="form-label">完整代理URL</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" id="http-proxy" name="http_proxy" value="{{ http_proxy }}" readonly>
+                                                <button class="btn btn-outline-secondary" type="button" onclick="editProxyManually()">手动编辑</button>
+                                            </div>
+                                            <div class="form-text">
+                                                代理URL将根据上方设置自动生成。如需手动编辑，请点击"手动编辑"按钮。
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-text mt-2">
+                                设置代理，用于访问Twitter等需要代理的网站。<br>
+                                <small class="text-muted">注意：SOCKS5代理需要安装额外的依赖，系统会自动尝试安装。</small>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <button type="button" id="save-proxy-btn" class="btn btn-primary">保存代理设置</button>
+                            <button type="button" class="btn btn-outline-primary" id="test-proxy-btn">测试代理连接</button>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <div id="proxy-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                        <div id="proxy-test-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 推送设置 -->
+        <div class="tab-pane fade" id="notification" role="tabpanel" aria-labelledby="notification-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">推送设置</h4>
+                </div>
+                <div class="card-body">
+                    <form id="notification-form">
+                        <div class="mb-3">
+                            <label for="apprise-urls" class="form-label">Apprise URLs</label>
+                            <textarea class="form-control" id="apprise-urls" name="apprise_urls" rows="5" placeholder="每行一个Apprise URL">{{ apprise_urls }}</textarea>
+                            <div class="form-text">
+                                支持多种推送方式，每行一个URL。例如：<br>
+                                tgram://bottoken/ChatID<br>
+                                discord://webhook_id/webhook_token<br>
+                                wecombot://key<br>
+                                更多格式请参考 <a href="https://github.com/caronc/apprise/wiki" target="_blank">Apprise Wiki</a>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <button type="button" id="save-notification-btn" class="btn btn-primary">保存推送设置</button>
+                            <button type="button" class="btn btn-outline-primary" id="test-notification-btn">测试推送</button>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <div id="notification-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                        <div id="notification-test-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 账号设置 -->
+        <div class="tab-pane fade" id="account" role="tabpanel" aria-labelledby="account-tab">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">账号设置</h4>
+                </div>
+                <div class="card-body">
+                    <form id="account-form">
+                        <div class="mb-3">
+                            <label for="current-password" class="form-label">当前密码</label>
+                            <input type="password" class="form-control" id="current-password" name="current_password">
+                        </div>
+                        <div class="mb-3">
+                            <label for="new-password" class="form-label">新密码</label>
+                            <input type="password" class="form-control" id="new-password" name="new_password">
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirm-password" class="form-label">确认新密码</label>
+                            <input type="password" class="form-control" id="confirm-password" name="confirm_password">
+                        </div>
+                        <button type="button" id="save-account-btn" class="btn btn-primary">更改密码</button>
+                    </form>
+                    <div class="mt-3">
+                        <div id="account-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 添加CSRF令牌到所有表单
+function addCSRFTokenToForms() {
+    // 获取CSRF令牌
+    const csrfToken = "{{ csrf_token() }}";
+
+    // 为所有表单添加CSRF令牌
+    document.querySelectorAll('form').forEach(form => {
+        // 检查表单是否已有CSRF令牌
+        if (!form.querySelector('input[name="csrf_token"]')) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+            console.log('已添加CSRF令牌到表单:', form.id);
+        }
+    });
+}
+
+// 页面加载时添加CSRF令牌
+document.addEventListener('DOMContentLoaded', addCSRFTokenToForms);
+
+// 全局错误处理
+window.onerror = function(message, source, lineno, colno, error) {
+    alert(`JavaScript错误: ${message}\n在第 ${lineno} 行, 第 ${colno} 列\n来源: ${source}`);
+    console.error('JavaScript错误:', message, source, lineno, colno, error);
+    return true;
+};
+    // 添加调试函数
+    function showDebugMessage(message, type = 'info') {
+        console.log(`[${type.toUpperCase()}] ${message}`);
+
+        // 创建一个临时的消息元素
+        const debugDiv = document.createElement('div');
+        debugDiv.className = `alert alert-${type} position-fixed bottom-0 end-0 m-3`;
+        debugDiv.style.zIndex = '9999';
+        debugDiv.innerHTML = `<strong>${type.toUpperCase()}:</strong> ${message}`;
+        document.body.appendChild(debugDiv);
+
+        // 3秒后自动移除
+        setTimeout(() => {
+            debugDiv.remove();
+        }, 3000);
+    }
+
+    // 添加一个简单的测试函数
+    function testButtonClick() {
+        alert('按钮点击测试成功！');
+        showDebugMessage('按钮点击测试成功！', 'success');
+
+        // 检查是否有JavaScript错误
+        try {
+            // 尝试获取所有按钮
+            const buttons = document.querySelectorAll('button[type="button"]');
+            showDebugMessage(`找到 ${buttons.length} 个按钮`, 'info');
+
+            // 检查是否有console错误
+            console.error = (function(originalError) {
+                return function(message) {
+                    showDebugMessage(`控制台错误: ${message}`, 'error');
+                    originalError.apply(console, arguments);
+                };
+            })(console.error);
+
+            // 检查网络请求
+            const originalFetch = window.fetch;
+            window.fetch = function() {
+                showDebugMessage(`发起fetch请求: ${arguments[0]}`, 'info');
+                return originalFetch.apply(this, arguments)
+                    .catch(error => {
+                        showDebugMessage(`fetch错误: ${error.message}`, 'error');
+                        throw error;
+                    });
+            };
+        } catch (e) {
+            showDebugMessage(`测试函数错误: ${e.message}`, 'error');
+        }
+    }
+
+    // 测试保存函数
+    function testSaveFunction() {
+        showDebugMessage('测试保存函数', 'info');
+
+        try {
+            // 直接调用保存函数
+            const form = document.getElementById('scheduler-form');
+            const button = document.getElementById('save-scheduler-btn');
+            const resultDiv = document.getElementById('scheduler-result');
+
+            if (!form) {
+                showDebugMessage('未找到表单', 'error');
+                return;
+            }
+
+            if (!button) {
+                showDebugMessage('未找到按钮', 'error');
+                return;
+            }
+
+            if (!resultDiv) {
+                showDebugMessage('未找到结果显示区域', 'error');
+                return;
+            }
+
+            // 显示加载状态
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 保存中...';
+
+            // 显示初始状态信息
+            resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+            resultDiv.classList.add('alert-info');
+            resultDiv.innerHTML = `<h5><i class="bi bi-hourglass-split text-info"></i> 正在保存...</h5><p>请稍候...</p>`;
+
+            // 准备请求数据
+            const formData = new FormData(form);
+            const data = {};
+            formData.forEach((value, key) => {
+                data[key] = value;
+                showDebugMessage(`表单数据: ${key} = ${value}`, 'info');
+            });
+
+            // 构建请求数据
+            const requestData = { scheduler_interval: data.scheduler_interval };
+
+            // 发送请求
+            showDebugMessage(`发送请求到: /api/settings/scheduler`, 'info');
+            fetch('/api/settings/scheduler', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData),
+            })
+            .then(response => {
+                showDebugMessage(`收到响应，状态码: ${response.status}`, 'info');
+                if (!response.ok) {
+                    showDebugMessage(`响应状态不正常: ${response.status} ${response.statusText}`, 'error');
+                }
+                return response.json();
+            })
+            .then(data => {
+                showDebugMessage(`解析响应数据: ${JSON.stringify(data)}`, 'info');
+                if (data.success) {
+                    resultDiv.classList.remove('d-none', 'alert-danger', 'alert-info');
+                    resultDiv.classList.add('alert-success');
+                    resultDiv.innerHTML = `<h5><i class="bi bi-check-circle-fill text-success"></i> 保存成功</h5><p>${data.message || "定时任务设置已保存"}</p>`;
+                    showDebugMessage('保存成功', 'success');
+                } else {
+                    resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                    resultDiv.classList.add('alert-danger');
+                    resultDiv.innerHTML = `<h5><i class="bi bi-x-circle-fill text-danger"></i> 保存失败</h5><p>${data.message}</p>`;
+                    showDebugMessage(`保存失败: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                showDebugMessage(`请求错误: ${error.message}`, 'error');
+                console.error('Error:', error);
+                resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                resultDiv.classList.add('alert-danger');
+                resultDiv.innerHTML = `<h5><i class="bi bi-exclamation-triangle-fill text-warning"></i> 请求错误</h5>
+                    <p>${error.message}</p>
+                    <div class="mt-2">
+                        <strong>调试信息:</strong>
+                        <ul>
+                            <li>请求URL: /api/settings/scheduler</li>
+                            <li>请求方法: POST</li>
+                            <li>请求参数: ${JSON.stringify(requestData)}</li>
+                        </ul>
+                    </div>`;
+            })
+            .finally(() => {
+                // 恢复按钮状态
+                button.disabled = false;
+                button.innerHTML = '保存定时任务配置';
+                showDebugMessage('按钮已恢复正常状态', 'info');
+            });
+        } catch (e) {
+            showDebugMessage(`测试保存函数错误: ${e.message}`, 'error');
+            alert(`测试保存函数错误: ${e.message}`);
+        }
+    }
+
+    // 根据API基础URL设置默认模型
+    function filterModelsByAPI() {
+        const apiBase = document.getElementById('llm-api-base').value.toLowerCase();
+        const modelInput = document.getElementById('llm-api-model');
+
+        // 根据API基础URL设置默认模型
+        if (apiBase.includes('x.ai')) {
+            // 如果是xAI API，默认选择grok-3-mini-beta
+            if (!modelInput.value || modelInput.value === '') {
+                modelInput.value = 'grok-3-mini-beta';
+            }
+        } else if (apiBase.includes('openai.com')) {
+            // 如果是OpenAI API，默认选择gpt-3.5-turbo
+            if (!modelInput.value || modelInput.value === '') {
+                modelInput.value = 'gpt-3.5-turbo';
+            }
+        } else if (apiBase.includes('groq.com')) {
+            // 如果是Groq API，默认选择llama3-8b-8192
+            if (!modelInput.value || modelInput.value === '') {
+                modelInput.value = 'llama3-8b-8192';
+            }
+        }
+    }
+
+    // 处理URL中的锚点，激活对应的选项卡
+    document.addEventListener('DOMContentLoaded', function() {
+        showDebugMessage('页面加载完成，初始化事件处理程序');
+
+        // 为API基础URL输入框添加事件监听器
+        const apiBaseInput = document.getElementById('llm-api-base');
+        if (apiBaseInput) {
+            apiBaseInput.addEventListener('change', filterModelsByAPI);
+            apiBaseInput.addEventListener('input', filterModelsByAPI);
+
+            // 初始化时过滤一次
+            filterModelsByAPI();
+
+            // 为API基础URL下拉菜单项添加事件监听器
+            document.querySelectorAll('.dropdown-item').forEach(item => {
+                if (item.getAttribute('onclick') && item.getAttribute('onclick').includes('llm-api-base')) {
+                    const originalOnClick = item.getAttribute('onclick');
+                    item.setAttribute('onclick', originalOnClick.replace('return false;', 'filterModelsByAPI(); return false;'));
+                }
+            });
+        }
+
+        // 初始化代理表单
+        initProxyForm();
+
+        // 获取URL中的锚点
+        let hash = window.location.hash;
+        if (hash) {
+            // 移除开头的#号
+            hash = hash.substring(1);
+
+            // 尝试激活对应的选项卡
+            const tab = document.getElementById(hash + '-tab');
+            if (tab) {
+                const tabTrigger = new bootstrap.Tab(tab);
+                tabTrigger.show();
+
+                // 滚动到选项卡位置
+                setTimeout(function() {
+                    window.scrollTo(0, 0);
+                }, 100);
+            }
+        }
+
+        // 为选项卡添加点击事件，更新URL锚点
+        const tabs = document.querySelectorAll('button[data-bs-toggle="tab"]');
+        tabs.forEach(function(tab) {
+            tab.addEventListener('shown.bs.tab', function(event) {
+                // 获取激活的选项卡ID
+                const id = event.target.getAttribute('aria-controls');
+
+                // 更新URL锚点，但不刷新页面
+                if (history.pushState) {
+                    history.pushState(null, null, '#' + id);
+                } else {
+                    window.location.hash = id;
+                }
+            });
+        });
+
+        // 检查所有保存按钮是否存在
+        const saveButtons = [
+            'save-scheduler-btn',
+            'save-auto-reply-btn',
+            'save-twitter-btn',
+            'save-llm-btn',
+            'save-notification-btn',
+            'save-proxy-btn'
+        ];
+
+        saveButtons.forEach(btnId => {
+            const btn = document.getElementById(btnId);
+            if (btn) {
+                showDebugMessage(`找到按钮: ${btnId}`);
+            } else {
+                showDebugMessage(`未找到按钮: ${btnId}`, 'warning');
+            }
+        });
+    });
+    // 通用测试函数
+    function testConnection(type, inputId, resultDivId, buttonId, requestUrl, requestBodyFn, successHandler, failureHandler) {
+        showDebugMessage(`初始化测试函数: ${type}, ${buttonId}, ${requestUrl}`);
+
+        const button = document.getElementById(buttonId);
+        if (!button) {
+            showDebugMessage(`未找到测试按钮: ${buttonId}`, 'error');
+            return;
+        }
+
+        showDebugMessage(`为测试按钮 ${buttonId} 添加点击事件`);
+
+        // 直接添加onclick事件，避免事件绑定问题
+        button.onclick = function(event) {
+            event.preventDefault();
+            showDebugMessage(`测试按钮 ${buttonId} 被点击`);
+
+            const inputElement = inputId ? document.getElementById(inputId) : null;
+            const inputValue = inputElement ? inputElement.value : '';
+            showDebugMessage(`输入值: ${inputValue}`);
+
+            const resultDiv = document.getElementById(resultDivId);
+            if (!resultDiv) {
+                showDebugMessage(`未找到测试结果显示区域: ${resultDivId}`, 'error');
+                return;
+            }
+
+            // 显示加载状态
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 测试中...';
+            showDebugMessage('测试按钮已设置为加载状态');
+
+            // 显示初始状态信息
+            resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+            resultDiv.classList.add('alert-info');
+            resultDiv.innerHTML = `<h5><i class="bi bi-hourglass-split text-info"></i> 正在测试...</h5><p>正在连接${type}，请稍候...</p><div class="progress mt-2"><div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div></div>`;
+            showDebugMessage('测试结果区域已设置为加载状态');
+
+            // 准备请求体
+            const requestBody = requestBodyFn ? requestBodyFn(inputValue) : {};
+            showDebugMessage(`测试请求数据: ${JSON.stringify(requestBody)}`);
+
+            // 发送请求
+            showDebugMessage(`发送测试请求到: ${requestUrl}`);
+            fetch(requestUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+            })
+            .then(response => {
+                showDebugMessage(`收到测试响应，状态码: ${response.status}`);
+                if (!response.ok) {
+                    showDebugMessage(`测试响应状态不正常: ${response.status} ${response.statusText}`, 'error');
+                }
+                return response.json();
+            })
+            .then(data => {
+                showDebugMessage(`解析测试响应数据: ${JSON.stringify(data)}`);
+                if (data.success) {
+                    resultDiv.classList.remove('d-none', 'alert-danger', 'alert-info');
+                    resultDiv.classList.add('alert-success');
+
+                    let resultHtml = `<h5><i class="bi bi-check-circle-fill text-success"></i> 测试成功</h5><p>${data.message}</p>`;
+
+                    // 使用自定义成功处理函数
+                    if (successHandler) {
+                        resultHtml = successHandler(data, resultHtml);
+                    }
+
+                    resultDiv.innerHTML = resultHtml;
+                    showDebugMessage('测试成功', 'success');
+                } else {
+                    resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                    resultDiv.classList.add('alert-danger');
+
+                    let failureHtml = `<h5><i class="bi bi-x-circle-fill text-danger"></i> 测试失败</h5><p>${data.message}</p>`;
+
+                    // 使用自定义失败处理函数
+                    if (failureHandler) {
+                        failureHtml = failureHandler(data, failureHtml);
+                    }
+
+                    resultDiv.innerHTML = failureHtml;
+                    showDebugMessage(`测试失败: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                showDebugMessage(`测试请求错误: ${error.message}`, 'error');
+                console.error('Error:', error);
+                resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                resultDiv.classList.add('alert-danger');
+                resultDiv.innerHTML = `<h5><i class="bi bi-exclamation-triangle-fill text-warning"></i> 请求错误</h5>
+                    <p>${error.message}</p>
+                    <div class="mt-2">
+                        <strong>调试信息:</strong>
+                        <ul>
+                            <li>请求URL: ${requestUrl}</li>
+                            <li>请求方法: POST</li>
+                            <li>请求参数: ${JSON.stringify(requestBody)}</li>
+                        </ul>
+                    </div>`;
+            })
+            .finally(() => {
+                // 恢复按钮状态
+                button.disabled = false;
+                button.innerHTML = `测试${type}连接`;
+                showDebugMessage('测试按钮已恢复正常状态');
+            });
+        };
+
+        showDebugMessage(`已为测试按钮 ${buttonId} 设置点击事件处理程序`);
+    }
+
+    // 测试Twitter连接
+    testConnection(
+        'Twitter API',
+        'twitter-username',
+        'twitter-test-result',
+        'test-twitter-btn',
+        '/api/test/twitter',
+        (accountId) => ({ account_id: accountId }),
+        (data, resultHtml) => {
+            if (data.data) {
+                resultHtml += '<ul>';
+                if (data.data.account_id) resultHtml += `<li>账号ID: ${data.data.account_id}</li>`;
+                if (data.data.post_count) resultHtml += `<li>获取推文数: ${data.data.post_count}</li>`;
+                if (data.data.response_time) resultHtml += `<li>响应时间: ${data.data.response_time}</li>`;
+                resultHtml += '</ul>';
+
+                if (data.data.first_post) {
+                    resultHtml += '<h6>第一条推文:</h6>';
+                    resultHtml += '<ul>';
+                    resultHtml += `<li>ID: ${data.data.first_post.id}</li>`;
+                    resultHtml += `<li>时间: ${data.data.first_post.time}</li>`;
+                    resultHtml += `<li>内容: ${data.data.first_post.content}</li>`;
+                    resultHtml += '</ul>';
+                }
+            }
+            return resultHtml;
+        },
+        (data, failureHtml) => {
+            failureHtml += '<div class="mt-3 p-2 bg-light border-start border-warning border-4">';
+            failureHtml += '<p class="mb-1"><strong>可能的解决方案：</strong></p>';
+            failureHtml += '<ul class="mb-0">';
+            failureHtml += '<li>检查网络连接是否正常</li>';
+            failureHtml += '<li>确认Twitter账号和密码是否正确</li>';
+            failureHtml += '<li>检查代理设置是否正确</li>';
+            failureHtml += '<li>尝试使用会话数据登录</li>';
+            failureHtml += '</ul>';
+            failureHtml += '</div>';
+            return failureHtml;
+        }
+    );
+
+    // 测试LLM连接
+    testConnection(
+        'LLM API',
+        'llm-api-model',
+        'llm-test-result',
+        'test-llm-btn',
+        '/api/test/llm',
+        (model) => {
+            // 确保使用正确的模型名称
+            const modelToUse = model || 'grok-3-mini-fast-beta';
+            return {
+                prompt: "请用一句话回答：今天天气怎么样？",
+                model: modelToUse
+            };
+        },
+        (data, resultHtml) => {
+            if (data.data) {
+                resultHtml += '<ul>';
+                if (data.data.prompt) resultHtml += `<li>提示词: ${data.data.prompt}</li>`;
+                if (data.data.response_time) resultHtml += `<li>响应时间: ${data.data.response_time}</li>`;
+                resultHtml += '</ul>';
+
+                if (data.data.reasoning_content) {
+                    resultHtml += '<h6>推理过程:</h6>';
+                    resultHtml += `<div class="p-2 bg-light border-start border-info border-4 mb-3">${data.data.reasoning_content}</div>`;
+                }
+
+                if (data.data.response) {
+                    resultHtml += '<h6>LLM响应:</h6>';
+                    resultHtml += `<div class="p-2 bg-light">${data.data.response}</div>`;
+                }
+            }
+            return resultHtml;
+        },
+        (data, failureHtml) => {
+            failureHtml += '<div class="mt-3 p-2 bg-light border-start border-warning border-4">';
+            failureHtml += '<p class="mb-1"><strong>可能的解决方案：</strong></p>';
+            failureHtml += '<ul class="mb-0">';
+            failureHtml += '<li>检查LLM API密钥是否正确</li>';
+            failureHtml += '<li>确认API基础URL是否正确</li>';
+            failureHtml += '<li>检查网络连接是否正常</li>';
+            failureHtml += '<li>检查代理设置是否正确</li>';
+            failureHtml += '</ul>';
+            failureHtml += '</div>';
+            return failureHtml;
+        }
+    );
+
+    // 解析代理URL
+    function parseProxyUrl(url) {
+        if (!url) return { type: 'none', host: '', port: '' };
+
+        let type = 'http';
+        if (url.startsWith('https://')) type = 'https';
+        if (url.startsWith('socks5://')) type = 'socks5';
+
+        // 移除协议前缀
+        let hostPort = url.replace(/^(https?|socks5):\/\//, '');
+
+        // 分割主机和端口
+        let parts = hostPort.split(':');
+        let host = parts[0] || '';
+        let port = parts.length > 1 ? parts[1] : '';
+
+        return { type, host, port };
+    }
+
+    // 更新代理预览
+    function updateProxyPreview() {
+        const type = document.getElementById('proxy-type').value;
+        const host = document.getElementById('proxy-host').value.trim();
+        const port = document.getElementById('proxy-port').value.trim();
+        const proxyInput = document.getElementById('http-proxy');
+
+        if (type === 'none') {
+            proxyInput.value = '';
+        } else if (host && port) {
+            proxyInput.value = `${type}://${host}:${port}`;
+        } else if (host) {
+            proxyInput.value = `${type}://${host}`;
+        } else {
+            proxyInput.value = '';
+        }
+    }
+
+    // 手动编辑代理URL
+    function editProxyManually() {
+        const proxyInput = document.getElementById('http-proxy');
+        proxyInput.readOnly = false;
+        proxyInput.focus();
+
+        // 添加失去焦点事件，当用户完成编辑后更新表单
+        proxyInput.onblur = function() {
+            const url = proxyInput.value.trim();
+            const parsed = parseProxyUrl(url);
+
+            // 更新表单字段
+            document.getElementById('proxy-type').value = parsed.type;
+            document.getElementById('proxy-host').value = parsed.host;
+            document.getElementById('proxy-port').value = parsed.port;
+
+            // 恢复只读状态
+            proxyInput.readOnly = true;
+
+            // 移除事件处理程序
+            proxyInput.onblur = null;
+        };
+    }
+
+    // 初始化代理表单
+    function initProxyForm() {
+        const proxyUrl = document.getElementById('http-proxy').value;
+        const parsed = parseProxyUrl(proxyUrl);
+
+        document.getElementById('proxy-type').value = parsed.type;
+        document.getElementById('proxy-host').value = parsed.host;
+        document.getElementById('proxy-port').value = parsed.port;
+    }
+
+    // 测试代理连接
+    testConnection(
+        '代理',
+        'http-proxy',
+        'proxy-test-result',
+        'test-proxy-btn',
+        '/api/test/proxy',
+        (proxy) => ({ url: "https://www.google.com/generate_204" }),
+        (data, resultHtml) => {
+            if (data.data) {
+                resultHtml += '<ul>';
+                if (data.data.url) resultHtml += `<li>测试URL: ${data.data.url}</li>`;
+                if (data.data.ip) resultHtml += `<li>当前IP: ${data.data.ip}</li>`;
+                if (data.data.status_code) resultHtml += `<li>状态码: ${data.data.status_code}</li>`;
+                if (data.data.proxy) resultHtml += `<li>代理设置: ${data.data.proxy}</li>`;
+                if (data.data.response_time) resultHtml += `<li>响应时间: ${data.data.response_time}</li>`;
+                resultHtml += '</ul>';
+            }
+            return resultHtml;
+        },
+        (data, failureHtml) => {
+            failureHtml += '<div class="mt-3 p-2 bg-light border-start border-warning border-4">';
+            failureHtml += '<p class="mb-1"><strong>可能的解决方案：</strong></p>';
+            failureHtml += '<ul class="mb-0">';
+            failureHtml += '<li>检查代理地址和端口是否正确</li>';
+            failureHtml += '<li>确认代理服务器是否正常运行</li>';
+            failureHtml += '<li>检查网络连接是否正常</li>';
+            failureHtml += '<li>尝试使用不同的测试URL</li>';
+            failureHtml += '</ul>';
+            failureHtml += '</div>';
+            return failureHtml;
+        }
+    );
+
+    // 测试推送
+    testConnection(
+        '推送',
+        'apprise-urls',
+        'notification-test-result',
+        'test-notification-btn',
+        '/api/test/notification',
+        (urls) => ({ urls: urls }),
+        (data, resultHtml) => {
+            if (data.data) {
+                resultHtml += '<ul>';
+                if (data.data.sent_to) resultHtml += `<li>发送到: ${data.data.sent_to}</li>`;
+                if (data.data.response_time) resultHtml += `<li>响应时间: ${data.data.response_time}</li>`;
+                if (data.data.proxy_used) resultHtml += `<li>使用代理: ${data.data.proxy_used}</li>`;
+                resultHtml += '</ul>';
+            }
+            return resultHtml;
+        },
+        (data, failureHtml) => {
+            // 添加详细错误信息
+            if (data.data && data.data.error_details && data.data.error_details.length > 0) {
+                failureHtml += '<div class="mt-3 p-2 bg-light border-start border-danger border-4">';
+                failureHtml += '<p class="mb-1"><strong>错误详情：</strong></p>';
+                failureHtml += '<ul class="mb-0">';
+                data.data.error_details.forEach(error => {
+                    failureHtml += `<li>${error}</li>`;
+                });
+                failureHtml += '</ul>';
+                failureHtml += '</div>';
+            }
+
+            // 添加代理信息
+            if (data.data && data.data.proxy_used) {
+                failureHtml += `<p class="mt-2">当前代理设置: ${data.data.proxy_used}</p>`;
+            }
+
+            // 添加可能的解决方案
+            failureHtml += '<div class="mt-3 p-2 bg-light border-start border-warning border-4">';
+            failureHtml += '<p class="mb-1"><strong>可能的解决方案：</strong></p>';
+            failureHtml += '<ul class="mb-0">';
+
+            // 如果后端提供了解决方案，使用后端提供的
+            if (data.data && data.data.possible_solutions && data.data.possible_solutions.length > 0) {
+                data.data.possible_solutions.forEach(solution => {
+                    failureHtml += `<li>${solution}</li>`;
+                });
+            } else {
+                // 否则使用默认解决方案
+                failureHtml += '<li>检查Apprise URL格式是否正确</li>';
+                failureHtml += '<li>确认推送服务是否可用</li>';
+                failureHtml += '<li>检查网络连接是否正常</li>';
+                failureHtml += '<li>尝试使用不同的推送方式</li>';
+            }
+
+            failureHtml += '</ul>';
+            failureHtml += '</div>';
+
+            // 添加重试按钮
+            failureHtml += `<button type="button" class="btn btn-outline-primary mt-3" onclick="document.getElementById('test-notification-btn').click()">
+                <i class="bi bi-arrow-repeat"></i> 重试
+            </button>`;
+
+            return failureHtml;
+        }
+    );
+
+    // 通用设置保存函数
+    function saveSettings(formId, buttonId, resultDivId, apiUrl, getDataFn, successMessage = "设置已保存") {
+        showDebugMessage(`初始化保存函数: ${formId}, ${buttonId}, ${apiUrl}`);
+
+        const button = document.getElementById(buttonId);
+        if (!button) {
+            showDebugMessage(`未找到按钮: ${buttonId}`, 'error');
+            return;
+        }
+
+        showDebugMessage(`为按钮 ${buttonId} 添加点击事件`);
+
+        // 直接添加onclick事件，避免事件绑定问题
+        button.onclick = function(event) {
+            event.preventDefault();
+            showDebugMessage(`按钮 ${buttonId} 被点击`);
+
+            const form = document.getElementById(formId);
+            if (!form) {
+                showDebugMessage(`未找到表单: ${formId}`, 'error');
+                return;
+            }
+
+            const resultDiv = document.getElementById(resultDivId);
+            if (!resultDiv) {
+                showDebugMessage(`未找到结果显示区域: ${resultDivId}`, 'warning');
+            }
+
+            // 显示加载状态
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 保存中...';
+            showDebugMessage('按钮已设置为加载状态');
+
+            // 显示初始状态信息
+            if (resultDiv) {
+                resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+                resultDiv.classList.add('alert-info');
+                resultDiv.innerHTML = `<h5><i class="bi bi-hourglass-split text-info"></i> 正在保存...</h5><p>请稍候...</p>`;
+                showDebugMessage('结果区域已设置为加载状态');
+            }
+
+            // 准备请求数据
+            const formData = new FormData(form);
+            const data = {};
+            formData.forEach((value, key) => {
+                data[key] = value;
+                showDebugMessage(`表单数据: ${key} = ${value}`);
+            });
+
+            // 使用自定义数据处理函数
+            const requestData = getDataFn ? getDataFn(data) : data;
+
+            // 如果处理函数返回null，表示验证失败，不发送请求
+            if (requestData === null) {
+                showDebugMessage('表单验证失败，不发送请求', 'error');
+                button.disabled = false;
+                button.innerHTML = '保存设置';
+                if (resultDiv) {
+                    resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                    resultDiv.classList.add('alert-danger');
+                    resultDiv.innerHTML = `<h5><i class="bi bi-x-circle-fill text-danger"></i> 验证失败</h5><p>请检查表单数据是否正确</p>`;
+                }
+                return;
+            }
+
+            showDebugMessage(`请求数据: ${JSON.stringify(requestData)}`);
+
+            // 发送请求
+            showDebugMessage(`发送请求到: ${apiUrl}`);
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData),
+            })
+            .then(response => {
+                showDebugMessage(`收到响应，状态码: ${response.status}`);
+                if (!response.ok) {
+                    showDebugMessage(`响应状态不正常: ${response.status} ${response.statusText}`, 'error');
+                }
+                return response.json();
+            })
+            .then(data => {
+                showDebugMessage(`解析响应数据: ${JSON.stringify(data)}`);
+                if (resultDiv) {
+                    if (data.success) {
+                        resultDiv.classList.remove('d-none', 'alert-danger', 'alert-info');
+                        resultDiv.classList.add('alert-success');
+                        resultDiv.innerHTML = `<h5><i class="bi bi-check-circle-fill text-success"></i> 保存成功</h5><p>${data.message || successMessage}</p>`;
+                        showDebugMessage('保存成功', 'success');
+                    } else {
+                        resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                        resultDiv.classList.add('alert-danger');
+                        resultDiv.innerHTML = `<h5><i class="bi bi-x-circle-fill text-danger"></i> 保存失败</h5><p>${data.message}</p>`;
+                        showDebugMessage(`保存失败: ${data.message}`, 'error');
+                    }
+                }
+            })
+            .catch(error => {
+                showDebugMessage(`请求错误: ${error.message}`, 'error');
+                console.error('Error:', error);
+                if (resultDiv) {
+                    resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                    resultDiv.classList.add('alert-danger');
+                    resultDiv.innerHTML = `<h5><i class="bi bi-exclamation-triangle-fill text-warning"></i> 请求错误</h5>
+                        <p>${error.message}</p>
+                        <div class="mt-2">
+                            <strong>调试信息:</strong>
+                            <ul>
+                                <li>请求URL: ${apiUrl}</li>
+                                <li>请求方法: POST</li>
+                                <li>请求参数: ${JSON.stringify(requestData)}</li>
+                            </ul>
+                        </div>`;
+                }
+            })
+            .finally(() => {
+                // 恢复按钮状态
+                button.disabled = false;
+                button.innerHTML = '保存设置';
+                showDebugMessage('按钮已恢复正常状态');
+            });
+        };
+
+        showDebugMessage(`已为按钮 ${buttonId} 设置点击事件处理程序`);
+    }
+
+    // 直接绑定点击事件
+    document.getElementById('save-scheduler-btn').onclick = function() {
+        alert('直接绑定的点击事件被触发！');
+
+        const interval = document.getElementById('scheduler-interval').value;
+        const resultDiv = document.getElementById('scheduler-result');
+
+        // 显示结果
+        if (resultDiv) {
+            resultDiv.classList.remove('d-none');
+            resultDiv.innerHTML = `<div class="alert alert-info">正在保存定时任务设置，间隔: ${interval}分钟...</div>`;
+        }
+
+        // 发送请求
+        fetch('/api/settings/scheduler', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ scheduler_interval: interval }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (resultDiv) {
+                if (data.success) {
+                    resultDiv.innerHTML = `<div class="alert alert-success">保存成功: ${data.message}</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="alert alert-danger">保存失败: ${data.message}</div>`;
+                }
+            }
+        })
+        .catch(error => {
+            if (resultDiv) {
+                resultDiv.innerHTML = `<div class="alert alert-danger">请求错误: ${error.message}</div>`;
+            }
+        });
+    };
+
+    // 保存自动回复设置
+    saveSettings(
+        'auto-reply-form',
+        'save-auto-reply-btn',
+        'auto-reply-result',
+        '/api/settings/auto_reply',
+        (data) => ({
+            enable_auto_reply: document.getElementById('enable-auto-reply').checked,
+            auto_reply_prompt: data.auto_reply_prompt
+        }),
+        "自动回复设置已保存"
+    );
+
+    // 保存Twitter设置
+    saveSettings(
+        'twitter-form',
+        'save-twitter-btn',
+        'twitter-result',
+        '/api/settings/twitter',
+        (data) => ({
+            twitter_username: data.twitter_username,
+            twitter_password: data.twitter_password,
+            twitter_session: data.twitter_session
+        }),
+        "Twitter设置已保存"
+    );
+
+    // 保存LLM设置
+    saveSettings(
+        'llm-form',
+        'save-llm-btn',
+        'llm-result',
+        '/api/settings/llm',
+        (data) => ({
+            llm_api_key: data.llm_api_key,
+            llm_api_model: data.llm_api_model,
+            llm_api_base: data.llm_api_base
+        }),
+        "LLM设置已保存"
+    );
+
+    // 保存推送设置
+    saveSettings(
+        'notification-form',
+        'save-notification-btn',
+        'notification-result',
+        '/api/settings/notification',
+        (data) => ({
+            apprise_urls: data.apprise_urls
+        }),
+        "推送设置已保存"
+    );
+
+    // 保存代理设置
+    saveSettings(
+        'proxy-form',
+        'save-proxy-btn',
+        'proxy-result',
+        '/api/settings/proxy',
+        (data) => ({
+            http_proxy: data.http_proxy
+        }),
+        "代理设置已保存"
+    );
+
+    // 保存账号设置
+    saveSettings(
+        'account-form',
+        'save-account-btn',
+        'account-result',
+        '/api/settings/account',
+        (data) => {
+            // 验证密码
+            if (data.new_password !== document.getElementById('confirm-password').value) {
+                showDebugMessage('新密码和确认密码不匹配', 'error');
+                alert('新密码和确认密码不匹配');
+                return null;
+            }
+            return {
+                current_password: data.current_password,
+                new_password: data.new_password,
+                confirm_password: data.confirm_password
+            };
+        },
+        "密码已成功更改"
+    );
+</script>
+{% endblock extra_js %}

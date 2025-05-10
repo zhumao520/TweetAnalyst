@@ -1,0 +1,629 @@
+{% extends 'base.html' %}
+
+{% block title %}系统日志 - TweetAnalyst{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">系统日志</h1>
+
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">系统日志</h5>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary" id="refresh-logs-btn">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" id="download-logs-btn">
+                            <i class="bi bi-download"></i> 下载
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" id="debug-logs-btn" onclick="debugLogsFunction()">
+                            <i class="bi bi-bug"></i> 调试
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 此处显示系统日志，帮助您排查问题。
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="日志级别">
+                                <button type="button" class="btn btn-outline-secondary active" id="log-level-info">信息</button>
+                                <button type="button" class="btn btn-outline-secondary" id="log-level-debug">调试</button>
+                                <button type="button" class="btn btn-outline-secondary" id="log-level-warning">警告</button>
+                                <button type="button" class="btn btn-outline-secondary" id="log-level-error">错误</button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">显示行数</span>
+                                <select class="form-select" id="log-lines">
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                    <option value="500">500</option>
+                                    <option value="1000">1000</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-dark text-light p-3 rounded" style="max-height: 600px; overflow-y: auto;">
+                        <pre id="system-logs" class="mb-0"><code>正在加载系统日志...</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">应用日志</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group" id="app-logs-list">
+                        <a href="#" class="list-group-item list-group-item-action active" data-log-file="">所有日志</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-log-file="app.log">主应用日志</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-log-file="web_app.log">Web应用日志</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-log-file="scheduler.log">调度器日志</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-log-file="worker.log">工作进程日志</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">组件日志</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group" id="component-logs-list">
+                        <a href="#" class="list-group-item list-group-item-action" data-log-file="api.log">API日志</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-log-file="twitter.log">Twitter日志</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-log-file="llm.log">LLM日志</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-log-file="notification.log">通知日志</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 当前选择的日志文件
+    let currentLogFile = '';
+
+    // 调试函数
+    function debugLogsFunction() {
+        console.log('执行调试函数');
+        alert('开始执行日志调试...');
+
+        // 检查DOM元素
+        const elements = {
+            'system-logs': document.getElementById('system-logs'),
+            'refresh-logs-btn': document.getElementById('refresh-logs-btn'),
+            'download-logs-btn': document.getElementById('download-logs-btn'),
+            'log-level-info': document.getElementById('log-level-info'),
+            'log-level-debug': document.getElementById('log-level-debug'),
+            'log-level-warning': document.getElementById('log-level-warning'),
+            'log-level-error': document.getElementById('log-level-error'),
+            'log-lines': document.getElementById('log-lines'),
+            'app-logs-list': document.getElementById('app-logs-list'),
+            'component-logs-list': document.getElementById('component-logs-list')
+        };
+
+        let report = '调试报告:\n\n';
+
+        // 检查DOM元素
+        report += '1. DOM元素检查:\n';
+        for (const [id, element] of Object.entries(elements)) {
+            report += `   - ${id}: ${element ? '存在' : '不存在'}\n`;
+        }
+
+        // 检查事件监听器
+        report += '\n2. 事件监听器检查:\n';
+        if (elements['refresh-logs-btn']) {
+            report += '   - 刷新按钮: 尝试手动触发点击\n';
+            try {
+                elements['refresh-logs-btn'].click();
+                report += '     点击事件已触发\n';
+            } catch (e) {
+                report += `     点击事件触发失败: ${e.message}\n`;
+            }
+        }
+
+        // 检查网络连接
+        report += '\n3. 网络连接检查:\n';
+        report += '   - 尝试直接获取日志\n';
+
+        const timestamp = new Date().getTime();
+        const url = `/api/logs/system?lines=10&level=info&_=${timestamp}`;
+        const testUrl = `/api/logs/test?_=${timestamp}`;
+
+        // 先尝试测试API（不需要登录）
+        report += '   - 尝试访问测试API (不需要登录)\n';
+
+        fetch(testUrl)
+            .then(response => {
+                report += `   - 测试API响应状态: ${response.status} ${response.statusText}\n`;
+                return response.text();
+            })
+            .then(text => {
+                try {
+                    const data = JSON.parse(text);
+                    report += '   - 测试API响应解析: 成功\n';
+                    report += `   - 测试API响应内容: ${JSON.stringify(data).substring(0, 100)}...\n`;
+
+                    // 如果测试API成功，继续尝试正常API
+                    report += '\n   - 尝试访问正常日志API (需要登录)\n';
+                    return fetch(url);
+                } catch (e) {
+                    report += '   - 测试API响应解析: 失败\n';
+                    report += `   - 错误信息: ${e.message}\n`;
+                    report += `   - 响应内容: ${text.substring(0, 100)}...\n`;
+                    throw new Error('测试API响应解析失败');
+                }
+            })
+            .then(text => {
+                try {
+                    // 尝试解析JSON
+                    const data = JSON.parse(text);
+                    report += '   - 响应解析: 成功\n';
+                    report += `   - 响应内容: ${JSON.stringify(data).substring(0, 100)}...\n`;
+                } catch (e) {
+                    report += '   - 响应解析: 失败\n';
+                    report += `   - 错误信息: ${e.message}\n`;
+                    report += `   - 响应内容: ${text.substring(0, 100)}...\n`;
+                }
+
+                // 显示完整报告
+                console.log(report);
+                alert(report);
+
+                // 尝试直接更新日志内容
+                if (elements['system-logs']) {
+                    elements['system-logs'].innerHTML = `<code>调试报告:\n${report}</code>`;
+                }
+            })
+            .catch(error => {
+                report += `   - 请求错误: ${error.message}\n`;
+                console.log(report);
+                alert(report);
+
+                // 尝试直接更新日志内容
+                if (elements['system-logs']) {
+                    elements['system-logs'].innerHTML = `<code>调试报告:\n${report}</code>`;
+                }
+            });
+    }
+
+    // 获取系统日志
+    function fetchSystemLogs() {
+        console.log('开始执行fetchSystemLogs函数');
+
+        // 检查日志容器是否存在
+        const logsContainer = document.getElementById('system-logs');
+        if (!logsContainer) {
+            console.error('未找到日志容器元素 #system-logs');
+            alert('页面缺少日志容器元素，请检查HTML结构');
+            return;
+        }
+
+        logsContainer.innerHTML = '<code>正在加载系统日志...</code>';
+        console.log('已设置加载提示');
+
+        // 获取当前选择的日志级别和行数
+        let level = 'info';
+        let foundActiveBtn = false;
+        document.querySelectorAll('.btn-group .btn').forEach(btn => {
+            if (btn.classList.contains('active')) {
+                foundActiveBtn = true;
+                if (btn.id === 'log-level-debug') level = 'debug';
+                else if (btn.id === 'log-level-warning') level = 'warning';
+                else if (btn.id === 'log-level-error') level = 'error';
+                else level = 'info';
+            }
+        });
+
+        if (!foundActiveBtn) {
+            console.warn('未找到激活的日志级别按钮，使用默认级别: info');
+        }
+
+        // 获取行数
+        const linesElement = document.getElementById('log-lines');
+        let lines = '50';  // 默认值
+        if (linesElement) {
+            lines = linesElement.value;
+        } else {
+            console.error('未找到日志行数选择器 #log-lines');
+        }
+
+        const logFile = currentLogFile || '';
+
+        console.log(`准备获取日志: 文件=${logFile}, 级别=${level}, 行数=${lines}`);
+
+        // 添加时间戳防止缓存
+        const timestamp = new Date().getTime();
+        const url = `/api/logs/system?lines=${lines}&level=${level}&file=${logFile}&_=${timestamp}`;
+        console.log(`请求URL: ${url}`);
+
+        // 显示请求状态
+        logsContainer.innerHTML = `<code>正在请求日志...<br>URL: ${url}</code>`;
+
+        // 调用API获取系统日志
+        try {
+            fetch(url)
+                .then(response => {
+                    console.log(`API响应状态: ${response.status} ${response.statusText}`);
+                    logsContainer.innerHTML = `<code>收到响应: ${response.status} ${response.statusText}<br>正在解析数据...</code>`;
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('日志API响应:', data);
+
+                    if (!data) {
+                        throw new Error('API返回空数据');
+                    }
+
+                    if (data.success) {
+                        // 更新可用日志文件列表
+                        if (data.data && data.data.available_log_files && data.data.available_log_files.length > 0) {
+                            console.log(`找到 ${data.data.available_log_files.length} 个日志文件`);
+                            updateLogFilesList(data.data.available_log_files);
+                        } else {
+                            console.warn('API响应中没有可用的日志文件列表');
+                        }
+
+                        if (data.data && data.data.log_entries && data.data.log_entries.length > 0) {
+                            console.log(`找到 ${data.data.log_entries.length} 条日志记录`);
+
+                            // 格式化日志，添加颜色
+                            const formattedLogs = data.data.log_entries.map(log => {
+                                // 为不同级别的日志添加颜色
+                                if (log.includes('[ERROR]') || log.includes('ERROR') || log.includes('CRITICAL')) {
+                                    return `<span class="text-danger">${log}</span>`;
+                                } else if (log.includes('[WARNING]') || log.includes('WARNING')) {
+                                    return `<span class="text-warning">${log}</span>`;
+                                } else if (log.includes('[DEBUG]') || log.includes('DEBUG')) {
+                                    return `<span class="text-info">${log}</span>`;
+                                } else {
+                                    return log;
+                                }
+                            });
+
+                            logsContainer.innerHTML = `<code>${formattedLogs.join('\n')}</code>`;
+                            console.log('日志内容已更新');
+                        } else {
+                            console.warn('API响应中没有日志记录');
+                            logsContainer.innerHTML = '<code>暂无日志记录</code>';
+                        }
+                    } else {
+                        console.error(`API请求失败: ${data.message || '未知错误'}`);
+                        logsContainer.innerHTML = `<code>获取日志失败: ${data.message || '未知错误'}</code>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching logs:', error);
+                    logsContainer.innerHTML = `<code>请求错误: ${error.message}<br><br>请检查:<br>1. 日志目录是否存在且有权限<br>2. 网络连接是否正常<br>3. 服务器是否正常运行</code>`;
+
+                    // 尝试创建一个默认的日志文件列表
+                    console.log('创建默认日志文件列表');
+                    createDefaultLogFilesList();
+                });
+        } catch (error) {
+            console.error('执行fetch请求时出错:', error);
+            logsContainer.innerHTML = `<code>执行请求时出错: ${error.message}</code>`;
+        }
+    }
+
+    // 下载日志文件
+    function downloadLogs() {
+        // 获取当前选择的日志级别和行数
+        let level = 'info';
+        document.querySelectorAll('.btn-group .btn').forEach(btn => {
+            if (btn.classList.contains('active')) {
+                if (btn.id === 'log-level-debug') level = 'debug';
+                else if (btn.id === 'log-level-warning') level = 'warning';
+                else if (btn.id === 'log-level-error') level = 'error';
+                else level = 'info';
+            }
+        });
+
+        const lines = document.getElementById('log-lines').value;
+        const logFile = currentLogFile || '';
+
+        // 创建下载链接
+        const downloadUrl = `/api/logs/download?level=${level}&lines=${lines}&file=${logFile}`;
+
+        // 创建一个临时链接并点击它来下载
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = logFile || 'system_logs.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    // 更新日志文件列表
+    function updateLogFilesList(availableFiles) {
+        // 更新应用日志列表
+        const appLogsList = document.getElementById('app-logs-list');
+        const componentLogsList = document.getElementById('component-logs-list');
+
+        // 保存当前选中的日志文件
+        const currentSelected = currentLogFile;
+
+        // 清除现有的日志文件列表，保留"所有日志"选项
+        while (appLogsList.children.length > 1) {
+            appLogsList.removeChild(appLogsList.lastChild);
+        }
+
+        // 清除组件日志列表
+        componentLogsList.innerHTML = '';
+
+        // 分类日志文件
+        const appLogs = [];
+        const componentLogs = [];
+
+        availableFiles.forEach(file => {
+            if (file.includes('app') || file.includes('web') || file.includes('scheduler') || file.includes('worker')) {
+                appLogs.push(file);
+            } else {
+                componentLogs.push(file);
+            }
+        });
+
+        // 如果没有应用日志文件，添加一个提示
+        if (appLogs.length === 0) {
+            const noLogsItem = document.createElement('div');
+            noLogsItem.className = 'alert alert-info mb-0';
+            noLogsItem.innerHTML = '<i class="bi bi-info-circle"></i> 暂无应用日志文件';
+            appLogsList.appendChild(noLogsItem);
+        }
+
+        // 如果没有组件日志文件，添加一个提示
+        if (componentLogs.length === 0) {
+            const noLogsItem = document.createElement('div');
+            noLogsItem.className = 'alert alert-info mb-0';
+            noLogsItem.innerHTML = '<i class="bi bi-info-circle"></i> 暂无组件日志文件';
+            componentLogsList.appendChild(noLogsItem);
+        }
+
+        // 添加应用日志
+        appLogs.forEach(file => {
+            const item = document.createElement('a');
+            item.href = '#';
+            item.className = 'list-group-item list-group-item-action';
+            if (file === currentSelected) {
+                item.classList.add('active');
+            }
+            item.setAttribute('data-log-file', file);
+
+            // 设置显示名称
+            let displayName = file;
+            if (file === 'app.log') displayName = '主应用日志';
+            else if (file === 'web_app.log') displayName = 'Web应用日志';
+            else if (file === 'scheduler.log') displayName = '调度器日志';
+            else if (file === 'worker.log') displayName = '工作进程日志';
+
+            item.textContent = displayName;
+
+            // 添加点击事件
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                selectLogFile(this);
+            });
+
+            appLogsList.appendChild(item);
+        });
+
+        // 添加组件日志
+        componentLogs.forEach(file => {
+            const item = document.createElement('a');
+            item.href = '#';
+            item.className = 'list-group-item list-group-item-action';
+            if (file === currentSelected) {
+                item.classList.add('active');
+            }
+            item.setAttribute('data-log-file', file);
+
+            // 设置显示名称
+            let displayName = file;
+            if (file === 'api.log') displayName = 'API日志';
+            else if (file === 'twitter.log') displayName = 'Twitter日志';
+            else if (file === 'llm.log') displayName = 'LLM日志';
+            else if (file === 'notification.log') displayName = '通知日志';
+
+            item.textContent = displayName;
+
+            // 添加点击事件
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                selectLogFile(this);
+            });
+
+            componentLogsList.appendChild(item);
+        });
+    }
+
+    // 选择日志文件
+    function selectLogFile(element) {
+        // 移除所有项的active类
+        document.querySelectorAll('[data-log-file]').forEach(i => {
+            i.classList.remove('active');
+        });
+
+        // 添加当前项的active类
+        element.classList.add('active');
+
+        // 设置当前日志文件
+        currentLogFile = element.getAttribute('data-log-file');
+
+        // 刷新日志
+        fetchSystemLogs();
+    }
+
+    // 创建默认的日志文件列表
+    function createDefaultLogFilesList() {
+        console.log('创建默认日志文件列表');
+
+        // 默认的应用日志文件
+        const defaultAppLogs = ['app.log', 'web_app.log', 'scheduler.log', 'worker.log'];
+
+        // 默认的组件日志文件
+        const defaultComponentLogs = ['api.log', 'twitter.log', 'llm.log', 'notification.log'];
+
+        // 更新应用日志列表
+        const appLogsList = document.getElementById('app-logs-list');
+        const componentLogsList = document.getElementById('component-logs-list');
+
+        // 清除现有的日志文件列表，保留"所有日志"选项
+        while (appLogsList.children.length > 1) {
+            appLogsList.removeChild(appLogsList.lastChild);
+        }
+
+        // 清除组件日志列表
+        componentLogsList.innerHTML = '';
+
+        // 添加默认应用日志
+        defaultAppLogs.forEach(file => {
+            const item = document.createElement('a');
+            item.href = '#';
+            item.className = 'list-group-item list-group-item-action';
+            item.setAttribute('data-log-file', file);
+
+            // 设置显示名称
+            let displayName = file;
+            if (file === 'app.log') displayName = '主应用日志';
+            else if (file === 'web_app.log') displayName = 'Web应用日志';
+            else if (file === 'scheduler.log') displayName = '调度器日志';
+            else if (file === 'worker.log') displayName = '工作进程日志';
+
+            item.textContent = displayName;
+
+            // 添加点击事件
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                selectLogFile(this);
+            });
+
+            appLogsList.appendChild(item);
+        });
+
+        // 添加默认组件日志
+        defaultComponentLogs.forEach(file => {
+            const item = document.createElement('a');
+            item.href = '#';
+            item.className = 'list-group-item list-group-item-action';
+            item.setAttribute('data-log-file', file);
+
+            // 设置显示名称
+            let displayName = file;
+            if (file === 'api.log') displayName = 'API日志';
+            else if (file === 'twitter.log') displayName = 'Twitter日志';
+            else if (file === 'llm.log') displayName = 'LLM日志';
+            else if (file === 'notification.log') displayName = '通知日志';
+
+            item.textContent = displayName;
+
+            // 添加点击事件
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                selectLogFile(this);
+            });
+
+            componentLogsList.appendChild(item);
+        });
+    }
+
+    // 事件监听器
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM加载完成，开始初始化事件监听器');
+
+        // 刷新日志按钮事件监听
+        const refreshBtn = document.getElementById('refresh-logs-btn');
+        if (refreshBtn) {
+            console.log('找到刷新按钮，添加事件监听器');
+            refreshBtn.addEventListener('click', function() {
+                console.log('刷新按钮被点击');
+                fetchSystemLogs();
+            });
+        } else {
+            console.error('未找到刷新按钮');
+        }
+
+        // 下载日志按钮事件监听
+        const downloadBtn = document.getElementById('download-logs-btn');
+        if (downloadBtn) {
+            console.log('找到下载按钮，添加事件监听器');
+            downloadBtn.addEventListener('click', function() {
+                console.log('下载按钮被点击');
+                downloadLogs();
+            });
+        } else {
+            console.error('未找到下载按钮');
+        }
+
+        // 日志级别按钮事件监听
+        const levelBtns = document.querySelectorAll('.btn-group .btn');
+        console.log(`找到 ${levelBtns.length} 个日志级别按钮`);
+        levelBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                console.log(`日志级别按钮被点击: ${this.id}`);
+                // 移除所有按钮的active类
+                document.querySelectorAll('.btn-group .btn').forEach(b => {
+                    b.classList.remove('active');
+                });
+                // 添加当前按钮的active类
+                this.classList.add('active');
+                // 刷新日志
+                fetchSystemLogs();
+            });
+        });
+
+        // 日志行数选择事件监听
+        const linesSelect = document.getElementById('log-lines');
+        if (linesSelect) {
+            console.log('找到日志行数选择器，添加事件监听器');
+            linesSelect.addEventListener('change', function() {
+                console.log(`日志行数改变: ${this.value}`);
+                fetchSystemLogs();
+            });
+        } else {
+            console.error('未找到日志行数选择器');
+        }
+
+        // 日志文件选择事件监听
+        const logFileItems = document.querySelectorAll('[data-log-file]');
+        console.log(`找到 ${logFileItems.length} 个日志文件选项`);
+        logFileItems.forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log(`选择日志文件: ${this.getAttribute('data-log-file')}`);
+                selectLogFile(this);
+            });
+        });
+
+        // 初始加载系统日志
+        console.log('开始初始加载系统日志');
+        fetchSystemLogs();
+
+        // 添加全局点击事件监听，用于调试
+        document.addEventListener('click', function(e) {
+            console.log(`点击事件: 目标=${e.target.tagName}, ID=${e.target.id}, 类=${e.target.className}`);
+        });
+    });
+</script>
+{% endblock %}
