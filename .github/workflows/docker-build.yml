@@ -161,8 +161,8 @@ jobs:
           fi
 
           if [ -z "$LLM_API_MODEL" ]; then
-              echo -e "${YELLOW}未设置LLM_API_MODEL，使用默认值: grok-2-latest${NC}"
-              export LLM_API_MODEL="grok-2-latest"
+              echo -e "${YELLOW}未设置LLM_API_MODEL，使用默认值: grok-3-mini-beta${NC}"
+              export LLM_API_MODEL="grok-3-mini-beta"
           fi
 
           # 启动应用
