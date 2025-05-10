@@ -10,7 +10,7 @@ services:
     environment:
       - FLASK_SECRET_KEY=your_random_secret_key_please_change_this
       - DATABASE_PATH=/data/tweetAnalyst.db
-      - LOG_DIR=/data/logs
+      - LOG_DIR=/app/logs
       - FIRST_LOGIN=${FIRST_LOGIN:-auto}
     # 使用entrypoint脚本启动
     command: ["/app/docker-entrypoint.sh"]

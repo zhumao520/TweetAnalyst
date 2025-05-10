@@ -50,9 +50,9 @@ fi
 
 # 备份日志文件
 echo -e "${GREEN}备份日志文件...${NC}"
-if [ -d "/data/logs" ]; then
+if [ -d "/app/logs" ]; then
     mkdir -p $BACKUP_DIR/logs
-    cp -r /data/logs/* $BACKUP_DIR/logs/
+    cp -r /app/logs/* $BACKUP_DIR/logs/
     echo -e "${GREEN}日志文件已备份到 $BACKUP_DIR/logs/${NC}"
 fi
 
@@ -79,8 +79,8 @@ if [ -d "/app/config" ]; then
 fi
 
 # 清空日志文件
-if [ -d "/data/logs" ]; then
-    find /data/logs -type f -name "*.log" -exec sh -c 'echo "" > {}' \;
+if [ -d "/app/logs" ]; then
+    find /app/logs -type f -name "*.log" -exec sh -c 'echo "" > {}' \;
     echo -e "${RED}日志文件已清空${NC}"
 fi
 
@@ -119,7 +119,7 @@ else
     else
         echo -e "${RED}找不到run_web.py文件，无法启动Web应用${NC}"
     fi
-    
+
     if [ -f "/app/run_scheduler.py" ]; then
         sleep 3
         nohup python run_scheduler.py > /dev/null 2>&1 &

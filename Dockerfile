@@ -28,7 +28,9 @@ RUN pip install --no-cache-dir -r /app/requirements.txt && \
     pip cache purge
 
 # 创建数据和日志目录
-RUN mkdir -p /data /data/logs && chmod -R 777 /data
+RUN mkdir -p /data /app/logs && \
+    chmod -R 755 /app/logs && \
+    chmod -R 755 /data
 
 # 复制应用代码
 COPY . .
@@ -39,7 +41,7 @@ RUN chmod +x /app/docker-entrypoint.sh
 # 设置环境变量
 ENV DATABASE_PATH=/data/tweetAnalyst.db \
     FLASK_SECRET_KEY=default_secret_key_please_change_in_env \
-    LOG_DIR=/data/logs \
+    LOG_DIR=/app/logs \
     FIRST_LOGIN=auto \
     FLASK_DEBUG=false \
     LLM_API_BASE=https://api.x.ai/v1 \

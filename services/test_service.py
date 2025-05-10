@@ -220,55 +220,75 @@ def test_proxy_connection(test_url=None):
         dict: 测试结果
     """
     try:
-        # 如果未提供测试URL，使用默认URL
-        if not test_url:
-            test_url = "https://api.ipify.org?format=json"
-
         # 获取代理设置
         proxy = get_config('HTTP_PROXY', '')
 
         # 设置代理
         proxies = {}
         if proxy:
-            if proxy.startswith('socks'):
-                proxies = {
-                    'http': proxy,
-                    'https': proxy
-                }
-            else:
-                proxies = {
-                    'http': proxy,
-                    'https': proxy
-                }
-
-        # 发送请求
-        start_time = time.time()
-        response = requests.get(test_url, proxies=proxies, timeout=10)
-        end_time = time.time()
-
-        # 检查响应
-        if response.status_code != 200:
-            return {
-                "success": False,
-                "message": f"请求失败，状态码: {response.status_code}"
+            proxies = {
+                'http': proxy,
+                'https': proxy
             }
+            logger.info(f"使用代理: {proxy}")
+        else:
+            logger.info("未使用代理")
 
-        # 尝试解析JSON响应
-        try:
-            data = response.json()
-        except:
-            data = {"text": response.text[:100] + ('...' if len(response.text) > 100 else '')}
+        # 如果用户提供了特定的测试URL，只测试该URL
+        if test_url:
+            logger.info(f"使用用户提供的测试URL: {test_url}")
+            return test_single_url(test_url, proxies)
 
-        # 返回成功结果
+        # 否则，同时测试国内和国外网站
+        logger.info("同时测试国内和国外网站")
+
+        # 测试国内网站（百度）
+        baidu_url = "http://www.baidu.com"
+        logger.info(f"测试国内网站: {baidu_url}")
+        baidu_result = test_single_url(baidu_url, proxies, is_json=False)
+
+        # 测试国外网站（Google）
+        foreign_url = "https://www.google.com/generate_204"
+        logger.info(f"测试国外网站: {foreign_url}")
+        # Google的测试URL返回204状态码，不是JSON格式
+        foreign_result = test_single_url(foreign_url, proxies, is_json=False)
+
+        # 分析结果
+        baidu_success = baidu_result.get("success", False)
+        foreign_success = foreign_result.get("success", False)
+
+        # 生成诊断信息
+        if baidu_success and foreign_success:
+            diagnosis = "代理工作正常，可以访问国内和国外网站"
+            success = True
+        elif baidu_success and not foreign_success:
+            diagnosis = "代理可以访问国内网站，但无法访问国外网站。可能是代理服务器本身无法访问国外网站。"
+            success = False
+        elif not baidu_success and foreign_success:
+            diagnosis = "代理可以访问国外网站，但无法访问国内网站。这种情况比较少见，可能是代理配置有特殊限制。"
+            success = False
+        else:
+            diagnosis = "代理完全无法工作。请检查代理服务器是否正常运行，以及代理地址和端口是否正确。"
+            success = False
+
+        # 返回综合结果
         return {
-            "success": True,
-            "message": "成功连接测试URL",
+            "success": success,
+            "message": diagnosis,
             "data": {
-                "url": test_url,
-                "ip": data.get("ip", "未知"),
-                "proxy": proxy or "未使用代理",
-                "response_time": f"{end_time - start_time:.2f}秒",
-                "response": data
+                "baidu_test": {
+                    "url": baidu_url,
+                    "success": baidu_success,
+                    "message": baidu_result.get("message", ""),
+                    "status_code": baidu_result.get("data", {}).get("status_code", 0)
+                },
+                "foreign_test": {
+                    "url": foreign_url,
+                    "success": foreign_success,
+                    "message": foreign_result.get("message", ""),
+                    "status_code": foreign_result.get("data", {}).get("status_code", 0)
+                },
+                "proxy": proxy or "未使用代理"
             }
         }
     except Exception as e:
@@ -276,6 +296,74 @@ def test_proxy_connection(test_url=None):
         return {
             "success": False,
             "message": f"测试代理连接失败: {str(e)}"
+        }
+
+def test_single_url(url, proxies, timeout=10, is_json=True):
+    """
+    测试单个URL的连接
+
+    Args:
+        url: 测试URL
+        proxies: 代理设置
+        timeout: 超时时间（秒）
+        is_json: 是否期望JSON响应
+
+    Returns:
+        dict: 测试结果
+    """
+    try:
+        # 发送请求
+        start_time = time.time()
+        response = requests.get(url, proxies=proxies, timeout=timeout)
+        end_time = time.time()
+
+        # 检查响应
+        # 对于Google的测试URL，204状态码表示成功
+        if url == "https://www.google.com/generate_204" and response.status_code == 204:
+            # 204状态码是正常的，表示连接成功
+            pass
+        elif response.status_code != 200 and response.status_code != 204:
+            return {
+                "success": False,
+                "message": f"请求失败，状态码: {response.status_code}",
+                "data": {
+                    "url": url,
+                    "status_code": response.status_code,
+                    "response_time": f"{end_time - start_time:.2f}秒"
+                }
+            }
+
+        # 尝试解析响应
+        if is_json:
+            try:
+                data = response.json()
+            except:
+                data = {"text": response.text[:100] + ('...' if len(response.text) > 100 else '')}
+        else:
+            # 对于非JSON响应，只保存前100个字符
+            data = {"text": response.text[:100] + ('...' if len(response.text) > 100 else '')}
+
+        # 返回成功结果
+        return {
+            "success": True,
+            "message": "成功连接测试URL",
+            "data": {
+                "url": url,
+                "status_code": response.status_code,
+                "ip": data.get("ip", "未知") if is_json else "不适用",
+                "response_time": f"{end_time - start_time:.2f}秒",
+                "response": data
+            }
+        }
+    except Exception as e:
+        logger.error(f"测试URL {url} 时出错: {str(e)}")
+        return {
+            "success": False,
+            "message": f"测试URL连接失败: {str(e)}",
+            "data": {
+                "url": url,
+                "error": str(e)
+            }
         }
 
 def check_system_status():

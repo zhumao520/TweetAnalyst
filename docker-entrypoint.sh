@@ -11,14 +11,14 @@ echo -e "${GREEN}===== TweetAnalyst应用启动脚本 =====${NC}"
 
 # 创建必要的目录
 echo -e "${GREEN}创建必要的目录...${NC}"
-mkdir -p /data /data/logs
-chmod -R 777 /data
+mkdir -p /data /app/logs
+chmod -R 755 /data /app/logs
 
 # 检查数据库目录权限
 if [ ! -w "/data" ]; then
     echo -e "${RED}警告: /data 目录没有写入权限，可能导致数据库无法创建${NC}"
     echo -e "${YELLOW}尝试修复权限...${NC}"
-    chmod -R 777 /data
+    chmod -R 755 /data
     if [ ! -w "/data" ]; then
         echo -e "${RED}无法修复 /data 目录权限，请检查卷挂载设置${NC}"
         # 在CI/CD环境中，这是一个严重错误，应该立即退出

@@ -1,0 +1,55 @@
+/* 自定义样式 */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+footer {
+    margin-top: auto;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-header {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* 表格样式 */
+.table th {
+    background-color: #f8f9fa;
+}
+
+/* 分析结果中的markdown内容 */
+#modal-analysis h1, 
+#modal-analysis h2, 
+#modal-analysis h3 {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+#modal-analysis ul, 
+#modal-analysis ol {
+    padding-left: 1.5rem;
+}
+
+#modal-analysis p {
+    margin-bottom: 0.75rem;
+}
+
+/* 登录页面样式 */
+.login-page {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1rem;
+    }
+}
