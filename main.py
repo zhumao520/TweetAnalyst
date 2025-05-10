@@ -6,7 +6,7 @@ from datetime import datetime
 from modules.socialmedia.twitter import fetch as fetchTwitter, auto_reply
 from modules.langchain.llm import get_llm_response_with_cache, LLMAPIError, LLMRateLimitError
 from modules.bots.apprise_adapter import send_notification
-from utils.yaml import load_config_with_env
+from utils.yaml_utils import load_config_with_env
 from utils.logger import get_logger
 from dotenv import load_dotenv
 

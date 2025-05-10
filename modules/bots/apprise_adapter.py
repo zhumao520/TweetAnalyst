@@ -1,6 +1,6 @@
 import os
 import apprise
-from utils.yaml import load_config_with_env
+from utils.yaml_utils import load_config_with_env
 
 # 创建全局Apprise对象
 apobj = apprise.Apprise()

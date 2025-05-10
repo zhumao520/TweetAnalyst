@@ -30,12 +30,11 @@ RUN pip install --no-cache-dir -r /app/requirements.txt && \
 # 创建数据和日志目录
 RUN mkdir -p /data /data/logs && chmod -R 777 /data
 
-# 添加启动脚本
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
-
 # 复制应用代码
 COPY . .
+
+# 添加启动脚本
+RUN chmod +x /app/docker-entrypoint.sh
 
 # 设置环境变量
 ENV DATABASE_PATH=/data/tweetAnalyst.db \
