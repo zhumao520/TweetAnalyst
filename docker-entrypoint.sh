@@ -23,47 +23,93 @@ if [[ -n "$HTTPS_PROXY" ]]; then
     echo -e "${GREEN}检测到HTTPS_PROXY环境变量: $HTTPS_PROXY${NC}"
 fi
 
-# 检查SOCKS代理
+# 自动检测和安装依赖
+echo -e "${GREEN}自动检测和安装依赖...${NC}"
+
+# 定义关键依赖映射（模块名:包名）
+declare -A DEPENDENCIES=(
+    ["flask_wtf"]="Flask-WTF"
+    ["flask"]="Flask"
+    ["flask_sqlalchemy"]="Flask-SQLAlchemy"
+    ["werkzeug"]="Werkzeug"
+    ["openai"]="openai"
+    ["tweety"]="tweety-ns"
+    ["apprise"]="apprise"
+    ["langchain_core"]="langchain-core"
+    ["langchain_openai"]="langchain-openai"
+    ["psutil"]="psutil"
+    ["yaml"]="pyyaml"
+    ["dotenv"]="python-dotenv"
+    ["schedule"]="schedule"
+    ["requests"]="requests"
+)
+
+# 检查requirements.txt是否存在
+if [ -f "/app/requirements.txt" ]; then
+    echo -e "${GREEN}检测到requirements.txt文件${NC}"
+else
+    echo -e "${YELLOW}未检测到requirements.txt文件，将使用内置依赖列表${NC}"
+fi
+
+# 检查并安装缺失的依赖
+MISSING_DEPS=0
+for module in "${!DEPENDENCIES[@]}"; do
+    package="${DEPENDENCIES[$module]}"
+
+    # 尝试导入模块
+    if ! python -c "import ${module}" &>/dev/null; then
+        echo -e "${YELLOW}检测到缺失依赖: ${module} (将安装 ${package})${NC}"
+
+        # 尝试安装包
+        if pip install --no-cache-dir "${package}" &>/dev/null; then
+            echo -e "${GREEN}成功安装: ${package}${NC}"
+        else
+            echo -e "${YELLOW}尝试安装兼容版本: ${package}${NC}"
+            # 如果安装失败，尝试安装兼容版本
+            case "${package}" in
+                "Flask")
+                    pip install --no-cache-dir "Flask<2.4.0,>=2.0.0" "Werkzeug<2.4.0,>=2.0.0"
+                    ;;
+                "Flask-WTF")
+                    pip install --no-cache-dir "Flask-WTF<1.2.0,>=1.0.0"
+                    ;;
+                "Flask-SQLAlchemy")
+                    pip install --no-cache-dir "Flask-SQLAlchemy<3.2.0,>=3.0.0"
+                    ;;
+                "openai")
+                    pip install --no-cache-dir "openai>=1.0.0"
+                    ;;
+                "langchain-core")
+                    pip install --no-cache-dir "langchain-core>=0.1.0"
+                    ;;
+                "langchain-openai")
+                    pip install --no-cache-dir "langchain-openai>=0.0.1"
+                    ;;
+                *)
+                    # 对于其他包，尝试不指定版本安装
+                    pip install --no-cache-dir "${package}"
+                    ;;
+            esac
+        fi
+        MISSING_DEPS=1
+    fi
+done
+
+# 特殊处理SOCKS代理支持
 if [[ -n "$HTTP_PROXY" && "$HTTP_PROXY" == socks* ]] || [[ -n "$HTTPS_PROXY" && "$HTTPS_PROXY" == socks* ]]; then
     echo -e "${YELLOW}检测到SOCKS代理，检查必要的支持...${NC}"
     if ! python -c "import socksio" &>/dev/null; then
         echo -e "${YELLOW}安装SOCKS代理支持...${NC}"
-        pip install --no-cache-dir httpx[socks] socksio
+        pip install --no-cache-dir "httpx[socks]" socksio
     else
         echo -e "${GREEN}SOCKS代理支持已安装${NC}"
     fi
 fi
 
-# 快速检查关键依赖
-echo -e "${GREEN}检查关键依赖...${NC}"
-
-# 检查Flask-WTF (解决之前的问题)
-if ! python -c "import flask_wtf" &>/dev/null; then
-    echo -e "${YELLOW}安装缺失的Flask-WTF依赖...${NC}"
-    pip install --no-cache-dir Flask-WTF==1.1.1 Flask==2.3.3 Werkzeug==2.3.7
-else
-    echo -e "${GREEN}Flask-WTF依赖检查通过${NC}"
-fi
-
-# 检查其他关键依赖
-MISSING_DEPS=0
-for pkg in "flask" "flask_sqlalchemy" "openai" "tweety" "apprise" "langchain_openai"; do
-    if ! python -c "import $pkg" &>/dev/null; then
-        MISSING_DEPS=1
-        case $pkg in
-            "flask") pip install --no-cache-dir Flask==2.3.3 ;;
-            "flask_sqlalchemy") pip install --no-cache-dir Flask-SQLAlchemy==3.1.1 ;;
-            "openai") pip install --no-cache-dir openai==1.12.0 ;;
-            "tweety") pip install --no-cache-dir tweety-ns==0.9.0 ;;
-            "apprise") pip install --no-cache-dir apprise==1.7.1 ;;
-            "langchain_openai") pip install --no-cache-dir langchain-openai==0.0.5 langchain-core==0.1.15 ;;
-        esac
-        echo -e "${YELLOW}已安装缺失的依赖: $pkg${NC}"
-    fi
-done
-
 if [ $MISSING_DEPS -eq 0 ]; then
     echo -e "${GREEN}所有依赖检查通过${NC}"
+else
+    echo -e "${GREEN}所有缺失依赖已安装${NC}"
 fi
 
 # 设置默认LLM API
