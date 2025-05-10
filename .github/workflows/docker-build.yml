@@ -253,7 +253,7 @@ jobs:
 
           # 安装所有依赖（合并多个RUN命令减少层数）
           RUN pip install --no-cache-dir -r /app/requirements.txt && \
-              pip install --no-cache-dir openai langchain-openai langchain-core && \
+              pip install --no-cache-dir langchain-openai>=0.0.1 langchain-core>=0.1.0 && \
               pip install --no-cache-dir Flask Flask-WTF Werkzeug Flask-SQLAlchemy && \
               pip install --no-cache-dir tweety-ns apprise "httpx[socks]" && \
               pip cache purge
