@@ -407,6 +407,34 @@ python main.py
 - 分析结果（根据提示词配置的格式）
 - 分析总结
 
+## 项目截图
+
+以下是TweetAnalyst的主要界面截图，展示了系统的主要功能和用户界面：
+
+### 首页 - 系统概览
+![首页 - 系统概览](https://github.com/zhumao520/TweetAnalyst/raw/main/screenshots/屏幕截图%202025-05-12%20221921.png)
+
+### 账号管理页面
+![账号管理页面](https://github.com/zhumao520/TweetAnalyst/raw/main/screenshots/屏幕截图%202025-05-12%20221928.png)
+
+### 分析结果页面
+![分析结果页面](https://github.com/zhumao520/TweetAnalyst/raw/main/screenshots/屏幕截图%202025-05-12%20221938.png)
+
+### 分析结果详情
+![分析结果详情](https://github.com/zhumao520/TweetAnalyst/raw/main/screenshots/屏幕截图%202025-05-12%20221946.png)
+
+### 数据分析页面
+![数据分析页面](https://github.com/zhumao520/TweetAnalyst/raw/main/screenshots/屏幕截图%202025-05-12%20221954.png)
+
+### 统一设置中心
+![统一设置中心](https://github.com/zhumao520/TweetAnalyst/raw/main/screenshots/屏幕截图%202025-05-12%20222003.png)
+
+### 系统测试页面
+![系统测试页面](https://github.com/zhumao520/TweetAnalyst/raw/main/screenshots/屏幕截图%202025-05-12%20222015.png)
+
+### 系统日志页面
+![系统日志页面](https://github.com/zhumao520/TweetAnalyst/raw/main/screenshots/屏幕截图%202025-05-12%20222025.png)
+
 ## 重置数据
 
 如果需要重置系统（例如，在测试后或出现问题时），可以使用以下方法：
