@@ -1,19 +1,47 @@
 version: "3"
+
+# TweetAnalyst - 社交媒体监控与分析助手
+# 本项目由一个写不出一行代码的白痴在Augment Code (https://augmentcode.com) 的强大帮助下完成
+
 services:
   tweetAnalyst:
-    build: .
+    image: ${DOCKER_IMAGE:-zhumao520/tweetanalyst:latest}
+    # 如果需要从本地构建，取消下面这行的注释，并注释掉上面的image行
+    # build: .
+    container_name: tweetAnalyst
     ports:
       - "5000:5000"
     volumes:
       - ./data:/data
       - ./config:/app/config
+      - ./logs:/app/logs
     environment:
+      # 基础配置
       - FLASK_SECRET_KEY=your_random_secret_key_please_change_this
       - DATABASE_PATH=/data/tweetAnalyst.db
       - LOG_DIR=/app/logs
       - FIRST_LOGIN=${FIRST_LOGIN:-auto}
+
+      # LLM API配置（可以在.env文件中设置，或者在这里直接设置）
+      # - LLM_API_KEY=your_api_key_here
+      # - LLM_API_MODEL=grok-3-mini-beta
+      # - LLM_API_BASE=https://api.x.ai/v1
+
+      # 代理配置（如果需要）
+      # - HTTP_PROXY=http://your.proxy:port
+      # - HTTPS_PROXY=http://your.proxy:port
+
+      # 推送配置（可选）
+      # - APPRISE_URLS=tgram://bottoken/ChatID,discord://webhook_id/webhook_token
+
     # 使用entrypoint脚本启动
     command: ["/app/docker-entrypoint.sh"]
     env_file:
       - .env
     restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
