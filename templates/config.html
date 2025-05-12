@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}配置管理 - Secretary{% endblock %}
+{% block title %}配置管理 - TweetAnalyst{% endblock %}
+
+{% block head %}
+<!-- 预加载CodeMirror资源 -->
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/lib/codemirror.min.css" as="style">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/lib/codemirror.min.js" as="script">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/mode/yaml/yaml.min.js" as="script">
+{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/lib/codemirror.min.css">
@@ -9,48 +16,823 @@
     .CodeMirror {
         height: 500px;
         border: 1px solid #ddd;
+        font-family: 'Fira Code', 'Consolas', monospace;
+        font-size: 14px;
+    }
+
+    .editor-toolbar {
+        padding: 10px;
+        background-color: #f8f9fa;
+        border: 1px solid #ddd;
+        border-bottom: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .editor-toolbar .btn-group {
+        margin-right: 10px;
+    }
+
+    .config-container {
+        position: relative;
+    }
+
+    .config-status {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        padding: 5px 10px;
+        border-radius: 4px;
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        font-size: 12px;
+        z-index: 100;
+        display: none;
+    }
+
+    .config-help {
+        max-height: 500px;
+        overflow-y: auto;
+    }
+
+    /* 账号卡片样式 */
+    .account-card {
+        transition: all 0.3s ease;
+        border: 1px solid #dee2e6;
+    }
+
+    .account-card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        transform: translateY(-5px);
+    }
+
+    .account-card .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .account-card .card-body {
+        padding: 1rem;
+    }
+
+    .account-card .card-footer {
+        background-color: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+        padding: 0.75rem 1rem;
+    }
+
+    .add-account-card {
+        height: 100%;
+        border: 2px dashed #dee2e6;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .add-account-card:hover {
+        border-color: #6c757d;
+        background-color: #f8f9fa;
+    }
+
+    /* 提示词编辑器样式 */
+    #account-prompt {
+        font-family: 'Fira Code', 'Consolas', monospace;
+        font-size: 14px;
+        resize: vertical;
+    }
+
+    /* 模板提示样式 */
+    .template-preview {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        max-width: 400px;
+        z-index: 1050;
     }
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                <li class="breadcrumb-item active" aria-current="page">配置管理</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
 <div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">社交媒体配置</h4>
-                <button type="button" class="btn btn-primary" id="save-config">保存配置</button>
+    <div class="col-md-12 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-gear-fill me-2"></i>社交媒体配置
+                </h4>
+                <div>
+                    <button type="button" class="btn btn-light btn-sm me-2" id="show-help">
+                        <i class="bi bi-question-circle"></i> 帮助
+                    </button>
+                    <button type="button" class="btn btn-success" id="save-config">
+                        <i class="bi bi-save"></i> 保存配置
+                    </button>
+                </div>
             </div>
-            <div class="card-body">
-                <form method="post" id="config-form">
+
+            <ul class="nav nav-tabs" id="configTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="form-tab" data-bs-toggle="tab" data-bs-target="#form-view" type="button" role="tab">表单视图</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="yaml-tab" data-bs-toggle="tab" data-bs-target="#yaml-view" type="button" role="tab">YAML编辑器</button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="configTabContent">
+                <!-- 表单视图 -->
+                <div class="tab-pane fade show active p-3" id="form-view" role="tabpanel">
                     <div class="mb-3">
-                        <textarea id="config-editor" name="config">{{ config }}</textarea>
+                        <button type="button" class="btn btn-primary" id="add-account-btn">
+                            <i class="bi bi-plus-circle me-1"></i>添加新账号
+                        </button>
+                    </div>
+
+                    <div id="accounts-container" class="row">
+                        <!-- 账号卡片将通过JavaScript动态生成 -->
+                    </div>
+                </div>
+
+                <!-- YAML编辑器视图 -->
+                <div class="tab-pane fade" id="yaml-view" role="tabpanel">
+                    <div class="editor-toolbar">
+                        <div class="btn-group" role="group" aria-label="编辑器工具栏">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="format-yaml">
+                                <i class="bi bi-text-indent-left"></i> 格式化
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="validate-yaml">
+                                <i class="bi bi-check-circle"></i> 验证
+                            </button>
+                        </div>
+                        <div class="editor-info">
+                            <small class="text-muted">行: <span id="cursor-line">1</span>, 列: <span id="cursor-ch">1</span></small>
+                        </div>
+                    </div>
+
+                    <div class="config-container">
+                        <form method="post" id="config-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <textarea id="config-editor" name="config">{{ config }}</textarea>
+                        </form>
+                        <div class="config-status" id="config-status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 帮助模态框 -->
+<div class="modal fade" id="help-modal" tabindex="-1" aria-labelledby="help-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="help-modal-label">配置文件帮助</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body config-help">
+                <h5>YAML配置格式说明</h5>
+                <p>配置文件使用YAML格式，包含以下主要部分：</p>
+
+                <div class="card mb-3">
+                    <div class="card-header">社交媒体账号配置</div>
+                    <div class="card-body">
+                        <pre><code>social_networks:
+  - type: twitter
+    socialNetworkId: username
+    tag: finance
+    prompt: "自定义提示词..."
+    bypass_ai: false</code></pre>
+
+                        <ul class="mt-3">
+                            <li><strong>type</strong>: 社交媒体类型，目前支持 twitter</li>
+                            <li><strong>socialNetworkId</strong>: 账号ID或用户名</li>
+                            <li><strong>tag</strong>: 标签，用于分类和使用不同的提示词模板</li>
+                            <li><strong>prompt</strong>: 自定义提示词，如果不提供则使用默认提示词</li>
+                            <li><strong>bypass_ai</strong>: 是否绕过AI判断直接推送，默认为false</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h5>键盘快捷键</h5>
+                <ul>
+                    <li><kbd>Ctrl</kbd> + <kbd>S</kbd>: 保存配置</li>
+                    <li><kbd>Ctrl</kbd> + <kbd>F</kbd>: 查找</li>
+                    <li><kbd>Ctrl</kbd> + <kbd>Space</kbd>: 自动完成</li>
+                    <li><kbd>F11</kbd>: 全屏编辑</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 账号编辑模态框 -->
+<div class="modal fade" id="account-modal" tabindex="-1" aria-labelledby="account-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="account-modal-label">编辑账号</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <form id="account-form">
+                    <input type="hidden" id="account-index" value="-1">
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="account-type" class="form-label">平台类型</label>
+                                <select class="form-select" id="account-type" required>
+                                    <option value="twitter">Twitter</option>
+                                    <option value="weibo">微博</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="account-id" class="form-label">账号ID</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">@</span>
+                                    <input type="text" class="form-control" id="account-id" placeholder="用户名" required>
+                                </div>
+                                <div class="form-text">不包含@符号的用户名</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="account-tag" class="form-label">标签</label>
+                                <input type="text" class="form-control" id="account-tag" placeholder="例如: finance">
+                                <div class="form-text">用于分类和使用不同的提示词模板</div>
+                            </div>
+
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="account-auto-reply">
+                                <label class="form-check-label" for="account-auto-reply">启用自动回复</label>
+                            </div>
+
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="account-bypass-ai">
+                                <label class="form-check-label" for="account-bypass-ai">绕过AI判断直接推送</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="account-prompt" class="form-label">提示词模板</label>
+                                <div class="d-flex justify-content-end mb-2">
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="templateDropdown" data-bs-toggle="dropdown">
+                                            插入模板
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li><a class="dropdown-item template-item" href="#" data-template="finance">财经分析模板</a></li>
+                                            <li><a class="dropdown-item template-item" href="#" data-template="tech">科技分析模板</a></li>
+                                            <li><a class="dropdown-item template-item" href="#" data-template="general">通用分析模板</a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <textarea class="form-control" id="account-prompt" rows="12" placeholder="输入提示词模板..."></textarea>
+                                <div class="form-text">提示词中使用 {content} 作为内容占位符</div>
+                            </div>
+                        </div>
                     </div>
                 </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="save-account-btn">保存账号</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="delete-confirm-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-exclamation-triangle me-2"></i>确认删除
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <p>您确定要删除账号 <strong id="delete-account-name">@username</strong> 吗？</p>
+                <p class="text-danger">此操作不可逆，账号配置将被永久删除。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-btn">确认删除</button>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/lib/codemirror.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/mode/yaml/yaml.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/selection/active-line.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/fold/foldcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/fold/foldgutter.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/fold/yaml-fold.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const editor = CodeMirror.fromTextArea(document.getElementById('config-editor'), {
-            mode: 'yaml',
-            theme: 'monokai',
-            lineNumbers: true,
-            indentUnit: 2,
-            tabSize: 2,
-            lineWrapping: true
-        });
-        
-        document.getElementById('save-config').addEventListener('click', function() {
-            editor.save();
-            document.getElementById('config-form').submit();
-        });
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化编辑器
+    const editor = CodeMirror.fromTextArea(document.getElementById('config-editor'), {
+        mode: 'yaml',
+        theme: 'monokai',
+        lineNumbers: true,
+        indentUnit: 2,
+        tabSize: 2,
+        lineWrapping: true,
+        matchBrackets: true,
+        styleActiveLine: true,
+        foldGutter: true,
+        gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+        extraKeys: {
+            "Ctrl-S": function(cm) {
+                saveConfig();
+            },
+            "F11": function(cm) {
+                cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+            },
+            "Esc": function(cm) {
+                if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
+            }
+        }
     });
+
+    // 光标位置显示
+    editor.on("cursorActivity", function() {
+        const cursor = editor.getCursor();
+        document.getElementById('cursor-line').textContent = cursor.line + 1;
+        document.getElementById('cursor-ch').textContent = cursor.ch + 1;
+    });
+
+    // 初始化提示词编辑器
+    let promptEditor = null;
+
+    // 账号数据
+    let accounts = [];
+    let currentAccountIndex = -1;
+    let deleteAccountIndex = -1;
+
+    // 模板数据
+    const templates = {
+        finance: `你现在是一名财经专家，请对以下财经博主的发言进行分析，并给按我指定的格式返回分析结果。
+这是你需要分析的内容：{content}
+这是输出格式的说明： {
+    "is_relevant": "是否与财经相关，且与美股市场或美债市场或科技股或半导体股或中国股票市场或香港股票市场或人民币兑美元汇率或中美关系相关。如果相关就返回1，如果不相关就返回0。只需要返回1或0这两个值之一即可",
+    "analytical_briefing": "分析简报"
+}
+其中analytical_briefing的值是一个字符串，它是针对内容所做的分析简报，仅在is_relevant为1时会返回这个值。
+analytical_briefing的内容是markdown格式的，它需要符合下面的规范
+原始正文，仅当需要分析的内容不是为中文时，这部分内容才会保留，否则这部分的内容为原始的正文
+翻译后的内容，仅当需要分析的内容为英文时，才会有这部分的内容。
+## Brief Analysis
+分析结果。这部分会展示一个列表，列表中分别包含美股市场、美债市场、科技股、半导体股、中国股票市场、香港股票市场、人民币兑美元汇率、中美关系这8个选项。 每个选项的值为分别为📈利多和📉利空。如果分析内容对于该选项没有影响，就不要针对这个选项返回任何内容。
+## Summarize
+这部分需要用非常简明扼要的文字对分析结果进行总结，以及解释为什么在上面针对不同选项会得出不同的结论。`,
+        tech: `你现在是一名科技专家，请对以下科技博主的发言进行分析，并给按我指定的格式返回分析结果。
+这是你需要分析的内容：{content}
+这是输出格式的说明： {
+    "is_relevant": "是否与科技相关，且与人工智能或大语言模型或芯片或半导体或云计算或区块链相关。如果相关就返回1，如果不相关就返回0。只需要返回1或0这两个值之一即可",
+    "analytical_briefing": "分析简报"
+}
+其中analytical_briefing的值是一个字符串，它是针对内容所做的分析简报，仅在is_relevant为1时会返回这个值。
+analytical_briefing的内容是markdown格式的，它需要符合下面的规范
+原始正文，仅当需要分析的内容不是为中文时，这部分内容才会保留，否则这部分的内容为原始的正文
+翻译后的内容，仅当需要分析的内容为英文时，才会有这部分的内容。
+## Brief Analysis
+分析结果。这部分会展示一个列表，列表中分别包含人工智能、大语言模型、芯片、半导体、云计算、区块链这6个选项。 每个选项的值为分别为📈积极和📉消极。如果分析内容对于该选项没有影响，就不要针对这个选项返回任何内容。
+## Summarize
+这部分需要用非常简明扼要的文字对分析结果进行总结，以及解释为什么在上面针对不同选项会得出不同的结论。`,
+        general: `请分析以下社交媒体内容，判断其是否与我们关注的主题相关。
+主题：人工智能、机器学习、深度学习、神经网络、大语言模型等AI相关技术和应用。
+
+内容：{content}
+
+请按照以下JSON格式回复：
+{
+  "is_relevant": true/false,  // 是否相关
+  "confidence": 0-100,  // 置信度，0-100的整数
+  "reason": "判断理由",  // 简要说明判断理由
+  "keywords": ["关键词1", "关键词2"]  // 内容中的相关关键词
+}`
+    };
+
+    // 保存配置
+    function saveConfig() {
+        editor.save();
+
+        // 验证YAML
+        try {
+            jsyaml.load(editor.getValue());
+
+            // 显示保存状态
+            showStatus("正在保存...", "info");
+
+            // 提交表单
+            document.getElementById('config-form').submit();
+        } catch (e) {
+            showStatus("YAML格式错误: " + e.message, "error");
+            return false;
+        }
+    }
+
+    // 格式化YAML
+    function formatYaml() {
+        try {
+            const yaml = jsyaml.load(editor.getValue());
+            const formatted = jsyaml.dump(yaml, {
+                indent: 2,
+                lineWidth: -1,
+                noRefs: true,
+                sortKeys: false
+            });
+
+            editor.setValue(formatted);
+            showStatus("YAML已格式化", "success");
+        } catch (e) {
+            showStatus("格式化失败: " + e.message, "error");
+        }
+    }
+
+    // 验证YAML
+    function validateYaml() {
+        try {
+            jsyaml.load(editor.getValue());
+            showStatus("YAML格式正确", "success");
+            return true;
+        } catch (e) {
+            showStatus("YAML格式错误: " + e.message, "error");
+            return false;
+        }
+    }
+
+    // 显示状态信息
+    function showStatus(message, type) {
+        const statusEl = document.getElementById('config-status');
+        statusEl.textContent = message;
+        statusEl.style.display = 'block';
+
+        // 设置状态类型样式
+        statusEl.className = 'config-status';
+        if (type === 'error') {
+            statusEl.style.backgroundColor = 'rgba(220, 53, 69, 0.9)';
+        } else if (type === 'success') {
+            statusEl.style.backgroundColor = 'rgba(25, 135, 84, 0.9)';
+        } else if (type === 'info') {
+            statusEl.style.backgroundColor = 'rgba(13, 110, 253, 0.9)';
+        }
+
+        // 3秒后自动隐藏
+        setTimeout(function() {
+            statusEl.style.display = 'none';
+        }, 3000);
+    }
+
+    // 解析YAML配置
+    function parseConfig() {
+        try {
+            const config = jsyaml.load(editor.getValue());
+            if (config && config.social_networks && Array.isArray(config.social_networks)) {
+                accounts = config.social_networks;
+                renderAccounts();
+            } else {
+                accounts = [];
+                renderAccounts();
+            }
+        } catch (e) {
+            console.error('解析YAML失败:', e);
+            showStatus("解析YAML失败: " + e.message, "error");
+        }
+    }
+
+    // 生成YAML配置
+    function generateConfig() {
+        const config = {
+            social_networks: accounts
+        };
+
+        try {
+            const yamlStr = jsyaml.dump(config, {
+                indent: 2,
+                lineWidth: -1,
+                noRefs: true,
+                sortKeys: false
+            });
+
+            editor.setValue(yamlStr);
+            showStatus("配置已更新", "success");
+        } catch (e) {
+            console.error('生成YAML失败:', e);
+            showStatus("生成YAML失败: " + e.message, "error");
+        }
+    }
+
+    // 渲染账号卡片
+    function renderAccounts() {
+        const container = document.getElementById('accounts-container');
+        container.innerHTML = '';
+
+        // 添加账号卡片
+        accounts.forEach((account, index) => {
+            const card = document.createElement('div');
+            card.className = 'col-md-4 mb-3';
+            card.innerHTML = `
+                <div class="card h-100 account-card">
+                    <div class="card-header">
+                        <h5 class="mb-0">@${account.socialNetworkId || '未命名'}</h5>
+                        <span class="badge ${account.type === 'twitter' ? 'bg-primary' : 'bg-danger'}">${account.type || 'unknown'}</span>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>标签:</strong> ${account.tag || '无'}</p>
+                        <p><strong>自动回复:</strong>
+                            <span class="badge ${account.enableAutoReply ? 'bg-success' : 'bg-secondary'}">
+                                ${account.enableAutoReply ? '启用' : '禁用'}
+                            </span>
+                        </p>
+                        <p><strong>AI分析:</strong>
+                            <span class="badge ${account.bypass_ai ? 'bg-warning text-dark' : 'bg-info'}">
+                                ${account.bypass_ai ? '绕过' : '启用'}
+                            </span>
+                        </p>
+                        <p><strong>提示词:</strong>
+                            <button class="btn btn-sm btn-outline-secondary view-prompt-btn" data-index="${index}">
+                                查看提示词
+                            </button>
+                        </p>
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn btn-sm btn-primary edit-account-btn" data-index="${index}">
+                            <i class="bi bi-pencil me-1"></i>编辑
+                        </button>
+                        <button class="btn btn-sm btn-danger delete-account-btn" data-index="${index}">
+                            <i class="bi bi-trash me-1"></i>删除
+                        </button>
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+
+        // 添加"添加账号"卡片
+        const addCard = document.createElement('div');
+        addCard.className = 'col-md-4 mb-3';
+        addCard.innerHTML = `
+            <div class="card h-100 add-account-card" id="add-account-card">
+                <div class="card-body d-flex justify-content-center align-items-center">
+                    <div class="text-center">
+                        <i class="bi bi-plus-circle fs-1 mb-2"></i>
+                        <p class="mb-0">添加新账号</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(addCard);
+
+        // 绑定事件
+        document.querySelectorAll('.edit-account-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const index = parseInt(this.getAttribute('data-index'));
+                editAccount(index);
+            });
+        });
+
+        document.querySelectorAll('.delete-account-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const index = parseInt(this.getAttribute('data-index'));
+                confirmDeleteAccount(index);
+            });
+        });
+
+        document.querySelectorAll('.view-prompt-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const index = parseInt(this.getAttribute('data-index'));
+                viewPrompt(index);
+            });
+        });
+
+        document.getElementById('add-account-card').addEventListener('click', function() {
+            addAccount();
+        });
+    }
+
+    // 编辑账号
+    function editAccount(index) {
+        currentAccountIndex = index;
+        const account = accounts[index];
+
+        // 填充表单
+        document.getElementById('account-modal-label').textContent = '编辑账号';
+        document.getElementById('account-index').value = index;
+        document.getElementById('account-type').value = account.type || 'twitter';
+        document.getElementById('account-id').value = account.socialNetworkId || '';
+        document.getElementById('account-tag').value = account.tag || '';
+        document.getElementById('account-auto-reply').checked = account.enableAutoReply || false;
+        document.getElementById('account-bypass-ai').checked = account.bypass_ai || false;
+        document.getElementById('account-prompt').value = account.prompt || '';
+
+        // 显示模态框
+        const accountModal = new bootstrap.Modal(document.getElementById('account-modal'));
+        accountModal.show();
+    }
+
+    // 添加账号
+    function addAccount() {
+        currentAccountIndex = -1;
+
+        // 重置表单
+        document.getElementById('account-modal-label').textContent = '添加新账号';
+        document.getElementById('account-index').value = -1;
+        document.getElementById('account-type').value = 'twitter';
+        document.getElementById('account-id').value = '';
+        document.getElementById('account-tag').value = 'general';
+        document.getElementById('account-auto-reply').checked = false;
+        document.getElementById('account-bypass-ai').checked = false;
+        document.getElementById('account-prompt').value = '';
+
+        // 显示模态框
+        const accountModal = new bootstrap.Modal(document.getElementById('account-modal'));
+        accountModal.show();
+    }
+
+    // 保存账号
+    function saveAccount() {
+        // 获取表单数据
+        const index = parseInt(document.getElementById('account-index').value);
+        const type = document.getElementById('account-type').value;
+        const socialNetworkId = document.getElementById('account-id').value.trim();
+        const tag = document.getElementById('account-tag').value.trim();
+        const enableAutoReply = document.getElementById('account-auto-reply').checked;
+        const bypass_ai = document.getElementById('account-bypass-ai').checked;
+        const prompt = document.getElementById('account-prompt').value;
+
+        // 验证数据
+        if (!socialNetworkId) {
+            alert('请输入账号ID');
+            return;
+        }
+
+        // 创建账号对象
+        const account = {
+            type,
+            socialNetworkId,
+            tag,
+            enableAutoReply,
+            bypass_ai,
+            prompt
+        };
+
+        // 添加或更新账号
+        if (index >= 0) {
+            accounts[index] = account;
+        } else {
+            accounts.push(account);
+        }
+
+        // 更新YAML
+        generateConfig();
+
+        // 重新渲染账号列表
+        renderAccounts();
+
+        // 关闭模态框
+        const accountModal = bootstrap.Modal.getInstance(document.getElementById('account-modal'));
+        accountModal.hide();
+
+        // 显示成功消息
+        showStatus(index >= 0 ? "账号已更新" : "账号已添加", "success");
+    }
+
+    // 确认删除账号
+    function confirmDeleteAccount(index) {
+        deleteAccountIndex = index;
+        const account = accounts[index];
+
+        // 设置确认信息
+        document.getElementById('delete-account-name').textContent = '@' + account.socialNetworkId;
+
+        // 显示确认模态框
+        const deleteModal = new bootstrap.Modal(document.getElementById('delete-confirm-modal'));
+        deleteModal.show();
+    }
+
+    // 删除账号
+    function deleteAccount() {
+        if (deleteAccountIndex >= 0) {
+            // 删除账号
+            accounts.splice(deleteAccountIndex, 1);
+
+            // 更新YAML
+            generateConfig();
+
+            // 重新渲染账号列表
+            renderAccounts();
+
+            // 关闭模态框
+            const deleteModal = bootstrap.Modal.getInstance(document.getElementById('delete-confirm-modal'));
+            deleteModal.hide();
+
+            // 显示成功消息
+            showStatus("账号已删除", "success");
+
+            // 重置索引
+            deleteAccountIndex = -1;
+        }
+    }
+
+    // 查看提示词
+    function viewPrompt(index) {
+        const account = accounts[index];
+
+        // 创建提示词预览
+        const previewEl = document.createElement('div');
+        previewEl.className = 'alert alert-info alert-dismissible fade show template-preview';
+        previewEl.innerHTML = `
+            <h5>@${account.socialNetworkId} 的提示词模板</h5>
+            <pre class="mt-2 mb-0" style="max-height: 300px; overflow-y: auto;">${account.prompt || '无提示词'}</pre>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+        `;
+
+        // 添加到页面
+        document.body.appendChild(previewEl);
+
+        // 3秒后自动关闭
+        setTimeout(function() {
+            previewEl.remove();
+        }, 10000);
+    }
+
+    // 初始化模板选择
+    function initTemplateSelection() {
+        document.querySelectorAll('.template-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                const templateName = this.getAttribute('data-template');
+                if (templates[templateName]) {
+                    document.getElementById('account-prompt').value = templates[templateName];
+                }
+            });
+        });
+    }
+
+    // 事件绑定
+    document.getElementById('save-config').addEventListener('click', saveConfig);
+    document.getElementById('format-yaml').addEventListener('click', formatYaml);
+    document.getElementById('validate-yaml').addEventListener('click', validateYaml);
+    document.getElementById('show-help').addEventListener('click', function() {
+        const helpModal = new bootstrap.Modal(document.getElementById('help-modal'));
+        helpModal.show();
+    });
+
+    document.getElementById('add-account-btn').addEventListener('click', addAccount);
+    document.getElementById('save-account-btn').addEventListener('click', saveAccount);
+    document.getElementById('confirm-delete-btn').addEventListener('click', deleteAccount);
+
+    // 标签页切换事件
+    document.getElementById('form-tab').addEventListener('click', function() {
+        parseConfig();
+    });
+
+    document.getElementById('yaml-tab').addEventListener('click', function() {
+        // 如果从表单视图切换到YAML视图，更新YAML
+        generateConfig();
+    });
+
+    // 添加键盘快捷键
+    document.addEventListener('keydown', function(e) {
+        // Ctrl+S 保存
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            saveConfig();
+        }
+    });
+
+    // 初始化
+    parseConfig();
+    initTemplateSelection();
+});
 </script>
 {% endblock %}

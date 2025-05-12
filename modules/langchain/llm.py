@@ -126,12 +126,33 @@ def get_llm_response(prompt: str) -> str:
         raise ValueError("提示词必须是非空字符串")
 
     # 获取API配置
+    # 尝试从环境变量获取配置
     model = os.getenv("LLM_API_MODEL")
     api_base = os.getenv("LLM_API_BASE")
     api_key = os.getenv("LLM_API_KEY")
 
+    # 尝试从数据库获取配置（如果可能）
+    try:
+        # 导入配置服务
+        from services.config_service import get_config
+
+        # 如果环境变量中没有配置，尝试从数据库获取
+        if not model:
+            model = get_config("LLM_API_MODEL")
+            logger.debug(f"从数据库获取模型配置: {model}")
+
+        if not api_base:
+            api_base = get_config("LLM_API_BASE")
+            logger.debug(f"从数据库获取API基础URL配置: {api_base}")
+
+        if not api_key:
+            api_key = get_config("LLM_API_KEY")
+            logger.debug("从数据库获取API密钥配置")
+    except Exception as e:
+        logger.warning(f"从数据库获取配置时出错: {str(e)}")
+
     if not model or not api_key:
-        raise ValueError("缺少必要的API配置，请检查环境变量")
+        raise ValueError("缺少必要的API配置，请检查环境变量或数据库配置")
 
     logger.debug(f"使用模型 {model} 处理提示词")
 
@@ -157,18 +178,21 @@ def get_llm_response(prompt: str) -> str:
 
         # 根据不同的API提供商添加特定参数
         model_kwargs = {}
+        reasoning_effort = None
 
         # 检查API类型和模型
         if api_base and 'x.ai' in api_base:
             logger.debug(f"检测到X.AI API，添加reasoning_effort参数")
-            model_kwargs["reasoning_effort"] = "high"
+            reasoning_effort = "high"
         elif model and 'grok-3' in model:
             logger.debug(f"检测到grok-3模型，添加reasoning_effort参数")
-            model_kwargs["reasoning_effort"] = "high"
+            reasoning_effort = "high"
 
-        # 如果有特定参数，添加到chat_params
+        # 如果有其他特定参数，添加到chat_params
         if model_kwargs:
             chat_params["model_kwargs"] = model_kwargs
+
+        # reasoning_effort参数将在调用时单独传递
 
         # 创建ChatOpenAI实例
         try:
@@ -176,9 +200,22 @@ def get_llm_response(prompt: str) -> str:
 
             # 创建消息
             system_content = """
-你接下来回答的所有内容都只能是符合我要求的json字符串同。
-字符串中如果有一些特殊的字符需要做好转义，确保最终这个json字符串可以在python中被正确解析。
-在最终的回答中除了json字符串本身，不需要其它额外的信息，也不要在json内容前后额外增加markdown的三个点转义。
+你接下来回答的所有内容都只能是符合我要求的JSON字符串。
+请严格遵循以下规则：
+1. 只返回有效的JSON格式，不要包含任何其他文本或解释
+2. 确保所有键名使用双引号，如 {"key": "value"}
+3. 确保所有字符串值使用双引号，如 {"name": "value"}
+4. 布尔值使用小写的true或false，如 {"is_valid": true}
+5. 数字值不需要引号，如 {"count": 42}
+6. 数组使用方括号，如 {"items": ["a", "b", "c"]}
+7. 特殊字符需要正确转义，如换行符应该是\\n而不是\n
+8. 不要在JSON前后添加任何标记，如```json或```
+9. 确保JSON格式正确，可以被Python的json.loads()函数解析
+
+示例格式：
+{"should_push": true, "confidence": 85, "reason": "这是一个重要更新", "summary": "内容摘要"}
+
+请确保你的回复是一个可以直接被Python解析的有效JSON字符串。
 """
             messages = [
                 SystemMessage(content=system_content),
@@ -187,7 +224,13 @@ def get_llm_response(prompt: str) -> str:
 
             # 获取响应
             logger.debug(f"开始请求LLM API，模型: {model}")
-            response = chat.invoke(messages)
+
+            # 根据是否有reasoning_effort参数决定调用方式
+            if reasoning_effort:
+                logger.debug(f"使用reasoning_effort={reasoning_effort}调用API")
+                response = chat.invoke(messages, reasoning_effort=reasoning_effort)
+            else:
+                response = chat.invoke(messages)
 
             end_time = time.time()
             logger.debug(f"LLM响应时间: {end_time - start_time:.2f}秒")
@@ -207,9 +250,40 @@ def get_llm_response(prompt: str) -> str:
                 logger.error(f"X.AI API返回404错误，可能是API端点已更改或需要特殊访问权限: {error_message}")
                 logger.error(f"尝试访问的URL: {api_base}")
                 logger.error(f"使用的模型: {model}")
-                raise LLMAPIError(f"X.AI API返回404错误，请检查API端点和访问权限。建议尝试使用其他API提供商，如Groq (https://api.groq.com/v1)。错误详情: {error_message}")
+
+                # 提供更详细的诊断信息
+                diagnostic_message = (
+                    f"X.AI API返回404错误，请检查以下可能的问题：\n"
+                    f"1. API端点URL可能已更改，当前使用: {api_base}\n"
+                    f"2. 模型名称可能不正确，当前使用: {model}\n"
+                    f"3. 您的API密钥可能没有访问此模型的权限\n"
+                    f"4. X.AI服务可能暂时不可用\n\n"
+                    f"建议尝试使用其他API提供商，如Groq (https://api.groq.com/v1)或Anthropic (https://api.anthropic.com/v1)。\n"
+                    f"错误详情: {error_message}"
+                )
+                raise LLMAPIError(diagnostic_message)
+            # 检查模型名称错误
+            elif 'model not found' in error_message or 'model_not_found' in error_message:
+                logger.error(f"模型名称错误: {error_message}")
+                logger.error(f"请求的模型: {model}")
+
+                # 提供更详细的诊断信息
+                diagnostic_message = (
+                    f"模型名称错误: {model}\n"
+                    f"请检查模型名称是否正确，不同的API提供商使用不同的模型名称格式。\n"
+                    f"常见的模型名称格式：\n"
+                    f"- X.AI: grok-3-mini-beta, grok-3-max-beta\n"
+                    f"- OpenAI: gpt-4-turbo, gpt-3.5-turbo\n"
+                    f"- Anthropic: claude-3-opus, claude-3-sonnet\n"
+                    f"- Groq: llama3-8b-8192, llama3-70b-8192\n"
+                    f"错误详情: {error_message}"
+                )
+                raise LLMAPIError(diagnostic_message)
             else:
-                # 重新抛出原始异常
+                # 重新抛出原始异常，但添加更多上下文
+                logger.error(f"LLM API调用未知错误: {error_message}")
+                logger.error(f"API基础URL: {api_base}")
+                logger.error(f"模型: {model}")
                 raise
 
     except Exception as e:
@@ -218,19 +292,127 @@ def get_llm_response(prompt: str) -> str:
         # 根据错误消息分类异常
         if "timeout" in error_message or "timed out" in error_message:
             logger.error(f"LLM API请求超时: {error_message}")
-            raise LLMTimeoutError(f"API请求超时: {error_message}")
+            diagnostic_message = (
+                f"API请求超时，可能的原因：\n"
+                f"1. 网络连接不稳定\n"
+                f"2. API服务器响应时间过长\n"
+                f"3. 代理服务器配置问题\n\n"
+                f"建议：\n"
+                f"- 检查网络连接\n"
+                f"- 增加请求超时时间\n"
+                f"- 检查代理服务器配置\n"
+                f"错误详情: {error_message}"
+            )
+            raise LLMTimeoutError(diagnostic_message)
         elif "rate limit" in error_message:
             logger.error(f"LLM API限流: {error_message}")
-            raise LLMRateLimitError(f"API限流: {error_message}")
-        elif "authentication" in error_message or "api key" in error_message:
+            diagnostic_message = (
+                f"API限流，可能的原因：\n"
+                f"1. 超过了API提供商的请求频率限制\n"
+                f"2. 超过了API提供商的并发请求限制\n\n"
+                f"建议：\n"
+                f"- 减少请求频率\n"
+                f"- 实现请求队列和重试机制\n"
+                f"- 考虑升级API计划\n"
+                f"错误详情: {error_message}"
+            )
+            raise LLMRateLimitError(diagnostic_message)
+        elif "authentication" in error_message or "api key" in error_message or "unauthorized" in error_message:
             logger.error(f"LLM API认证错误: {error_message}")
-            raise LLMAuthenticationError(f"API认证错误: {error_message}")
-        elif "5" in error_message[:3]:  # 5xx错误
+            diagnostic_message = (
+                f"API认证错误，可能的原因：\n"
+                f"1. API密钥无效或已过期\n"
+                f"2. API密钥没有访问请求资源的权限\n"
+                f"3. API密钥格式不正确\n\n"
+                f"建议：\n"
+                f"- 检查API密钥是否正确\n"
+                f"- 在API提供商的控制台中重新生成API密钥\n"
+                f"- 确认API密钥有访问请求资源的权限\n"
+                f"错误详情: {error_message}"
+            )
+            raise LLMAuthenticationError(diagnostic_message)
+        elif "5" in error_message[:3] or "server error" in error_message:  # 5xx错误
             logger.error(f"LLM API服务器错误: {error_message}")
-            raise LLMServerError(f"API服务器错误: {error_message}")
+            diagnostic_message = (
+                f"API服务器错误，可能的原因：\n"
+                f"1. API提供商的服务器暂时不可用\n"
+                f"2. API提供商的服务器过载\n"
+                f"3. API提供商正在进行维护\n\n"
+                f"建议：\n"
+                f"- 稍后重试\n"
+                f"- 检查API提供商的状态页面\n"
+                f"- 考虑使用备用API提供商\n"
+                f"错误详情: {error_message}"
+            )
+            raise LLMServerError(diagnostic_message)
+        elif "connectionerror" in error_message or "connection error" in error_message or "apiconnectionerror" in error_message:
+            logger.error(f"LLM API连接错误: {error_message}")
+            logger.error(f"API基础URL: {api_base}")
+            logger.error(f"模型: {model}")
+
+            # 尝试进行网络诊断
+            try:
+                import socket
+                import subprocess
+
+                # 尝试解析域名
+                domain = api_base.split("//")[-1].split("/")[0]
+                logger.error(f"尝试解析域名: {domain}")
+                try:
+                    ip_address = socket.gethostbyname(domain)
+                    logger.error(f"域名解析结果: {ip_address}")
+                except Exception as dns_error:
+                    logger.error(f"域名解析失败: {str(dns_error)}")
+
+                # 尝试ping
+                try:
+                    ping_result = subprocess.run(["ping", "-c", "1", domain], capture_output=True, text=True, timeout=5)
+                    logger.error(f"Ping结果: {'成功' if ping_result.returncode == 0 else '失败'}")
+                except Exception as ping_error:
+                    logger.error(f"Ping测试失败: {str(ping_error)}")
+
+            except Exception as diag_error:
+                logger.error(f"网络诊断失败: {str(diag_error)}")
+
+            diagnostic_message = (
+                f"API连接错误，无法连接到API服务器。\n"
+                f"API基础URL: {api_base}\n"
+                f"模型: {model}\n"
+                f"异常类型: {type(e).__name__}\n"
+                f"错误详情: {error_message}\n\n"
+                f"可能的原因：\n"
+                f"1. 网络连接问题\n"
+                f"2. DNS解析失败\n"
+                f"3. 防火墙或代理限制\n"
+                f"4. API端点可能已更改\n"
+                f"5. SSL/TLS证书问题\n\n"
+                f"建议：\n"
+                f"- 检查网络连接\n"
+                f"- 检查DNS配置\n"
+                f"- 检查防火墙或代理设置\n"
+                f"- 尝试使用其他API提供商\n"
+                f"- 查看日志获取更多诊断信息"
+            )
+            raise LLMAPIError(diagnostic_message)
         else:
             logger.error(f"LLM API调用错误: {error_message}")
-            raise LLMAPIError(f"API调用错误: {error_message}")
+            # 记录更多上下文信息以便调试
+            logger.error(f"API基础URL: {api_base}")
+            logger.error(f"模型: {model}")
+            logger.error(f"异常类型: {type(e).__name__}")
+
+            diagnostic_message = (
+                f"API调用错误，未能识别的错误类型。\n"
+                f"API基础URL: {api_base}\n"
+                f"模型: {model}\n"
+                f"异常类型: {type(e).__name__}\n"
+                f"错误详情: {error_message}\n\n"
+                f"建议：\n"
+                f"- 检查API配置\n"
+                f"- 查看日志获取更多信息\n"
+                f"- 联系API提供商获取支持"
+            )
+            raise LLMAPIError(diagnostic_message)
 
 # 添加缓存支持
 

@@ -81,15 +81,32 @@ def get_system_logs():
             log_file = os.path.join(log_dir, 'app.log')
             logger.info(f"使用默认日志文件: {log_file}")
 
-        # 如果日志文件不存在，尝试查找其他日志文件
+        # 如果日志文件不存在，尝试查找其他日志文件或创建新文件
         if not os.path.exists(log_file):
             logger.warning(f"指定的日志文件不存在: {log_file}")
 
             # 尝试创建一个空的日志文件
             try:
+                # 确保日志目录存在
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+                # 创建新的日志文件
                 with open(log_file, 'w') as f:
                     f.write(f"日志文件创建于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                logger.info(f"已创建新的日志文件: {log_file}")
+
+                # 设置权限为644，确保所有用户都可以读取
+                try:
+                    os.chmod(log_file, 0o644)
+                    logger.info(f"已设置日志文件权限为644: {log_file}")
+                except Exception as perm_error:
+                    logger.warning(f"设置日志文件权限时出错: {str(perm_error)}")
+
+                # 触发日志系统重新初始化
+                from utils.logger import get_logger
+                module_name = os.path.basename(log_file).replace('.log', '')
+                get_logger(module_name)
+
+                logger.info(f"已创建新的日志文件并触发日志系统重新初始化: {log_file}")
 
                 # 返回创建的日志文件内容
                 return jsonify({
@@ -99,13 +116,14 @@ def get_system_logs():
                         "log_entries": [f"日志文件创建于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"],
                         "total_entries": 1,
                         "level": level,
-                        "available_log_files": [os.path.basename(f) for f in available_log_files]
+                        "available_log_files": [os.path.basename(f) for f in available_log_files],
+                        "message": "已创建新的日志文件并触发日志系统重新初始化"
                     }
                 })
             except Exception as e:
                 logger.error(f"创建日志文件时出错: {str(e)}")
 
-            # 如果创建失败，返回一个默认的响应
+            # 如果创建失败，返回一个默认的响应，但包含更多诊断信息
             return jsonify({
                 "success": True,
                 "data": {
@@ -113,7 +131,13 @@ def get_system_logs():
                     "log_entries": ["系统尚未生成日志文件，请先执行一些操作或检查日志目录权限"],
                     "total_entries": 1,
                     "level": level,
-                    "available_log_files": [os.path.basename(f) for f in available_log_files]
+                    "available_log_files": [os.path.basename(f) for f in available_log_files],
+                    "error_info": {
+                        "message": "创建日志文件失败",
+                        "log_dir": os.path.dirname(log_file),
+                        "log_dir_exists": os.path.exists(os.path.dirname(log_file)),
+                        "log_dir_writable": os.access(os.path.dirname(log_file), os.W_OK) if os.path.exists(os.path.dirname(log_file)) else False
+                    }
                 }
             })
 

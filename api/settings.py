@@ -8,6 +8,7 @@ import json
 import logging
 from flask import Blueprint, request, jsonify, session, current_app
 from utils.config import set_config, get_config
+from services.config_service import batch_set_configs
 from models import db, User
 
 # 创建日志记录器
@@ -251,6 +252,131 @@ def update_notification_settings():
     except Exception as e:
         logger.error(f"更新推送设置时出错: {str(e)}")
         return jsonify({"success": False, "message": f"更新设置失败: {str(e)}"}), 500
+
+@settings_api.route('/batch', methods=['POST'])
+def batch_update_settings():
+    """批量更新设置"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登录"}), 401
+
+    try:
+        # 获取请求参数
+        try:
+            data = request.get_json() or {}
+            logger.debug(f"收到JSON数据: {data}")
+        except Exception as e:
+            logger.error(f"解析JSON数据时出错: {str(e)}")
+            if request.content_type == 'application/x-www-form-urlencoded':
+                data = request.form.to_dict()
+                logger.debug(f"收到表单数据: {data}")
+            else:
+                logger.error(f"不支持的Content-Type: {request.content_type}")
+                return jsonify({"success": False, "message": f"不支持的Content-Type: {request.content_type}"}), 415
+
+        configs = data.get('configs', {})
+        update_env = data.get('update_env', True)
+
+        if not configs:
+            return jsonify({"success": False, "message": "未提供配置数据"}), 400
+
+        # 批量更新配置
+        updated_count, skipped_count = batch_set_configs(configs, update_env)
+
+        logger.info(f"批量更新配置完成，更新了 {updated_count} 个配置项，跳过了 {skipped_count} 个配置项")
+
+        return jsonify({
+            "success": True,
+            "message": f"批量更新配置完成，更新了 {updated_count} 个配置项，跳过了 {skipped_count} 个配置项",
+            "updated_count": updated_count,
+            "skipped_count": skipped_count
+        })
+    except Exception as e:
+        logger.error(f"批量更新配置时出错: {str(e)}")
+        return jsonify({"success": False, "message": f"批量更新配置失败: {str(e)}"}), 500
+
+@settings_api.route('/db_clean', methods=['POST'])
+def update_db_clean_settings():
+    """更新数据库自动清理配置"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登录"}), 401
+
+    try:
+        # 获取请求参数
+        try:
+            data = request.get_json() or {}
+            logger.debug(f"收到JSON数据: {data}")
+        except Exception as e:
+            logger.error(f"解析JSON数据时出错: {str(e)}")
+            if request.content_type == 'application/x-www-form-urlencoded':
+                data = request.form.to_dict()
+                logger.debug(f"收到表单数据: {data}")
+            else:
+                logger.error(f"不支持的Content-Type: {request.content_type}")
+                return jsonify({"success": False, "message": f"不支持的Content-Type: {request.content_type}"}), 415
+
+        # 获取配置参数
+        db_auto_clean_enabled = data.get('db_auto_clean_enabled', 'false')
+        db_auto_clean_time = data.get('db_auto_clean_time', '03:00')
+        db_clean_by_count = data.get('db_clean_by_count', 'false')
+        db_max_records = data.get('db_max_records', '100')
+        db_retention_days = data.get('db_retention_days', '30')
+        db_clean_irrelevant_only = data.get('db_clean_irrelevant_only', 'true')
+
+        # 处理布尔值
+        if isinstance(db_auto_clean_enabled, str):
+            db_auto_clean_enabled = db_auto_clean_enabled.lower() == 'on' or db_auto_clean_enabled.lower() == 'true'
+
+        if isinstance(db_clean_by_count, str):
+            db_clean_by_count = db_clean_by_count.lower() == 'on' or db_clean_by_count.lower() == 'true'
+
+        if isinstance(db_clean_irrelevant_only, str):
+            db_clean_irrelevant_only = db_clean_irrelevant_only.lower() == 'on' or db_clean_irrelevant_only.lower() == 'true'
+
+        # 验证参数
+        try:
+            # 验证时间格式
+            if not db_auto_clean_time or len(db_auto_clean_time.split(':')) != 2:
+                return jsonify({"success": False, "message": "自动清理时间格式不正确，应为HH:MM格式"}), 400
+
+            # 验证最大记录数
+            max_records = int(db_max_records)
+            if max_records < 10 or max_records > 10000:
+                return jsonify({"success": False, "message": "每个账号保留的最大记录数必须在10-10000之间"}), 400
+
+            # 验证保留天数
+            retention_days = int(db_retention_days)
+            if retention_days < 1 or retention_days > 365:
+                return jsonify({"success": False, "message": "数据保留天数必须在1-365之间"}), 400
+        except ValueError:
+            return jsonify({"success": False, "message": "参数格式不正确，请检查输入"}), 400
+
+        # 保存设置
+        set_config('DB_AUTO_CLEAN_ENABLED', 'true' if db_auto_clean_enabled else 'false', description='是否启用数据库自动清理')
+        set_config('DB_AUTO_CLEAN_TIME', db_auto_clean_time, description='数据库自动清理时间')
+        set_config('DB_CLEAN_BY_COUNT', 'true' if db_clean_by_count else 'false', description='是否基于数量清理')
+        set_config('DB_MAX_RECORDS_PER_ACCOUNT', db_max_records, description='每个账号保留的最大记录数')
+        set_config('DB_RETENTION_DAYS', db_retention_days, description='数据保留天数')
+        set_config('DB_CLEAN_IRRELEVANT_ONLY', 'true' if db_clean_irrelevant_only else 'false', description='是否只清理不相关数据')
+
+        logger.info(f"数据库自动清理配置已更新，启用状态: {db_auto_clean_enabled}, 清理方式: {'基于数量' if db_clean_by_count else '基于时间'}")
+
+        return jsonify({
+            "success": True,
+            "message": "数据库自动清理配置已更新",
+            "data": {
+                "db_auto_clean_enabled": db_auto_clean_enabled,
+                "db_auto_clean_time": db_auto_clean_time,
+                "db_clean_by_count": db_clean_by_count,
+                "db_max_records": db_max_records,
+                "db_retention_days": db_retention_days,
+                "db_clean_irrelevant_only": db_clean_irrelevant_only
+            }
+        })
+    except Exception as e:
+        logger.error(f"更新数据库自动清理配置时出错: {str(e)}")
+        return jsonify({"success": False, "message": f"更新配置失败: {str(e)}"}), 500
 
 @settings_api.route('/account', methods=['POST'])
 def update_account_settings():

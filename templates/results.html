@@ -1,54 +1,219 @@
 {% extends "base.html" %}
 
-{% block title %}分析结果 - Secretary{% endblock %}
+{% block title %}分析结果 - TweetAnalyst{% endblock %}
 
 {% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                <li class="breadcrumb-item active" aria-current="page">分析结果</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="border-bottom pb-2">
+                <i class="bi bi-clipboard-data me-2 text-primary"></i>分析结果
+            </h2>
+            <div class="d-flex">
+                <div class="dropdown me-2">
+                    <button class="btn btn-outline-primary dropdown-toggle" type="button" id="filterDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-funnel me-1"></i> 筛选
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end p-3" style="width: 300px;">
+                        <form id="filter-form">
+                            <div class="mb-3">
+                                <label for="platform-filter" class="form-label">平台</label>
+                                <select class="form-select form-select-sm" id="platform-filter">
+                                    <option value="">全部平台</option>
+                                    <option value="twitter">Twitter</option>
+                                    <option value="weibo">微博</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="relevance-filter" class="form-label">相关性</label>
+                                <select class="form-select form-select-sm" id="relevance-filter">
+                                    <option value="">全部</option>
+                                    <option value="relevant">相关</option>
+                                    <option value="irrelevant">不相关</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="date-filter" class="form-label">日期范围</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="date" class="form-control" id="date-from">
+                                    <span class="input-group-text">至</span>
+                                    <input type="date" class="form-control" id="date-to">
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="reset-filter-btn">
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i> 重置
+                                </button>
+                                <button type="submit" class="btn btn-sm btn-primary">
+                                    <i class="bi bi-check2 me-1"></i> 应用筛选
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="dropdown me-2">
+                    <button class="btn btn-outline-primary dropdown-toggle" type="button" id="sortDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-sort-down me-1"></i> 排序
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><button class="dropdown-item sort-btn" data-sort="time-desc">最新发布</button></li>
+                        <li><button class="dropdown-item sort-btn" data-sort="time-asc">最早发布</button></li>
+                        <li><button class="dropdown-item sort-btn" data-sort="confidence-desc">置信度从高到低</button></li>
+                        <li><button class="dropdown-item sort-btn" data-sort="confidence-asc">置信度从低到高</button></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><button class="dropdown-item sort-btn" data-sort="platform">按平台</button></li>
+                        <li><button class="dropdown-item sort-btn" data-sort="account">按账号</button></li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-primary" id="refresh-btn">
+                    <i class="bi bi-arrow-clockwise me-1"></i> 刷新
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-md-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">分析结果</h4>
-                <div>
-                    <button type="button" class="btn btn-outline-secondary" id="refresh-btn">
-                        <i class="bi bi-arrow-clockwise"></i> 刷新
-                    </button>
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-ul me-2"></i>分析结果列表
+                </h5>
+                <div class="d-flex align-items-center">
+                    <div class="input-group input-group-sm me-2" style="width: 250px;">
+                        <input type="text" class="form-control" id="search-input" placeholder="搜索内容...">
+                        <button class="btn btn-light" type="button" id="search-btn">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-light active" id="view-table-btn" title="表格视图">
+                            <i class="bi bi-table"></i>
+                        </button>
+                        <button type="button" class="btn btn-light" id="view-card-btn" title="卡片视图">
+                            <i class="bi bi-grid-3x3-gap"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="card-body">
-                <!-- 桌面端表格视图 -->
-                <div class="table-responsive d-none d-md-block">
-                    <table class="table table-striped">
-                        <thead>
+
+            <div class="card-body p-0">
+                <!-- 表格视图 -->
+                <div class="table-responsive" id="table-view">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
                             <tr>
-                                <th>ID</th>
-                                <th>平台</th>
-                                <th>账号</th>
-                                <th>发布时间</th>
-                                <th>内容</th>
-                                <th>相关性</th>
-                                <th>置信度</th>
-                                <th>操作</th>
+                                <th class="border-0">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-hash me-1"></i>ID
+                                        <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="id">
+                                            <i class="bi bi-arrow-down-up"></i>
+                                        </button>
+                                    </div>
+                                </th>
+                                <th class="border-0">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-globe me-1"></i>平台
+                                        <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="platform">
+                                            <i class="bi bi-arrow-down-up"></i>
+                                        </button>
+                                    </div>
+                                </th>
+                                <th class="border-0">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-person me-1"></i>账号
+                                        <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="account">
+                                            <i class="bi bi-arrow-down-up"></i>
+                                        </button>
+                                    </div>
+                                </th>
+                                <th class="border-0">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-calendar-date me-1"></i>发布时间
+                                        <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="time">
+                                            <i class="bi bi-arrow-down-up"></i>
+                                        </button>
+                                    </div>
+                                </th>
+                                <th class="border-0">
+                                    <i class="bi bi-chat-text me-1"></i>内容
+                                </th>
+                                <th class="border-0">
+                                    <i class="bi bi-check-square me-1"></i>相关性
+                                </th>
+                                <th class="border-0">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-graph-up me-1"></i>置信度
+                                        <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="confidence">
+                                            <i class="bi bi-arrow-down-up"></i>
+                                        </button>
+                                    </div>
+                                </th>
+                                <th class="border-0 text-end">
+                                    <i class="bi bi-gear me-1"></i>操作
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for result in results.items %}
-                            <tr>
+                            <tr class="result-row"
+                                data-id="{{ result.id }}"
+                                data-platform="{{ result.social_network }}"
+                                data-account="{{ result.account_id }}"
+                                data-time="{{ result.post_time.timestamp() }}"
+                                data-relevant="{{ 'yes' if result.is_relevant else 'no' }}"
+                                data-confidence="{{ result.confidence or 0 }}"
+                                data-content="{{ result.content }}">
                                 <td>{{ result.id }}</td>
-                                <td>{{ result.social_network }}</td>
-                                <td>{{ result.account_id }}</td>
-                                <td>{{ result.post_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                 <td>
-                                    {% if result.content|length > 50 %}
-                                        {{ result.content[:50] }}...
+                                    {% if result.social_network == 'twitter' %}
+                                        <span class="badge bg-primary"><i class="bi bi-twitter me-1"></i>Twitter</span>
+                                    {% elif result.social_network == 'weibo' %}
+                                        <span class="badge bg-danger"><i class="bi bi-sina-weibo me-1"></i>微博</span>
                                     {% else %}
-                                        {{ result.content }}
+                                        <span class="badge bg-secondary"><i class="bi bi-globe me-1"></i>{{ result.social_network }}</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if result.is_relevant %}
-                                        <span class="badge bg-success">相关</span>
+                                    {% if result.account_id %}
+                                        <a href="{{ url_for('results', account_id=result.account_id) }}" class="badge bg-light text-dark text-decoration-none">
+                                            {{ result.account_id }}
+                                        </a>
                                     {% else %}
-                                        <span class="badge bg-secondary">不相关</span>
+                                        <span class="badge bg-light text-dark">未知账号</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span title="{{ result.post_time.strftime('%Y-%m-%d %H:%M:%S') }}">
+                                        {{ result.post_time.strftime('%Y-%m-%d %H:%M') }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="text-truncate" style="max-width: 250px;" title="{{ result.content }}">
+                                        {% if result.content|length > 50 %}
+                                            {{ result.content[:50] }}...
+                                        {% else %}
+                                            {{ result.content }}
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if result.is_relevant %}
+                                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>相关</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>不相关</span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -68,152 +233,357 @@
                                         <span class="text-muted">未知</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    <button type="button" class="btn btn-sm btn-info view-btn"
-                                            data-id="{{ result.id }}" data-bs-toggle="modal"
-                                            data-bs-target="#resultModal">
-                                        查看
-                                    </button>
+                                <td class="text-end">
+                                    <div class="btn-group">
+                                        <button type="button" class="btn btn-sm btn-outline-primary view-btn"
+                                                data-id="{{ result.id }}" data-bs-toggle="modal"
+                                                data-bs-target="#resultModal" title="查看详情">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-success share-btn"
+                                                data-id="{{ result.id }}" title="分享">
+                                            <i class="bi bi-share"></i>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="8" class="text-center">暂无数据</td>
+                                <td colspan="8" class="text-center py-5">
+                                    <i class="bi bi-inbox fs-1 text-muted mb-3 d-block"></i>
+                                    <h5>暂无分析结果</h5>
+                                    <p class="text-muted">尚未找到符合条件的分析结果</p>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
 
-                <!-- 移动端卡片视图 -->
-                <div class="d-md-none">
-                    {% for result in results.items %}
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 class="card-title mb-0">{{ result.social_network }}: {{ result.account_id }}</h5>
-                                <div class="d-flex align-items-center">
+                <!-- 卡片视图 -->
+                <div class="p-3 d-none" id="card-view">
+                    <div class="row g-3">
+                        {% for result in results.items %}
+                        <div class="col-md-6 col-lg-4 result-card"
+                             data-id="{{ result.id }}"
+                             data-platform="{{ result.social_network }}"
+                             data-account="{{ result.account_id }}"
+                             data-time="{{ result.post_time.timestamp() }}"
+                             data-relevant="{{ 'yes' if result.is_relevant else 'no' }}"
+                             data-confidence="{{ result.confidence or 0 }}"
+                             data-content="{{ result.content }}">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <div>
+                                        {% if result.social_network == 'twitter' %}
+                                            <span class="badge bg-primary"><i class="bi bi-twitter me-1"></i>Twitter</span>
+                                        {% elif result.social_network == 'weibo' %}
+                                            <span class="badge bg-danger"><i class="bi bi-sina-weibo me-1"></i>微博</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary"><i class="bi bi-globe me-1"></i>{{ result.social_network }}</span>
+                                        {% endif %}
+                                        {% if result.account_id %}
+                                            <a href="{{ url_for('results', account_id=result.account_id) }}" class="badge bg-light text-dark text-decoration-none ms-1">
+                                                {{ result.account_id }}
+                                            </a>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark ms-1">未知账号</span>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        {% if result.is_relevant %}
+                                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>相关</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>不相关</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">
+                                        {% if result.content|length > 150 %}
+                                            {{ result.content[:150] }}...
+                                        {% else %}
+                                            {{ result.content }}
+                                        {% endif %}
+                                    </p>
                                     {% if result.confidence is not none %}
-                                        <span class="badge
-                                            {% if result.confidence >= 80 %}bg-success
-                                            {% elif result.confidence >= 50 %}bg-info
-                                            {% elif result.confidence >= 30 %}bg-warning
-                                            {% else %}bg-danger{% endif %} me-2">
-                                            {{ result.confidence }}%
-                                        </span>
-                                    {% endif %}
-                                    {% if result.is_relevant %}
-                                        <span class="badge bg-success">相关</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">不相关</span>
+                                        <div class="progress mb-2" style="height: 10px;" title="{{ result.confidence }}%">
+                                            <div class="progress-bar
+                                                {% if result.confidence >= 80 %}bg-success
+                                                {% elif result.confidence >= 50 %}bg-info
+                                                {% elif result.confidence >= 30 %}bg-warning
+                                                {% else %}bg-danger{% endif %}"
+                                                role="progressbar" style="width: {{ result.confidence }}%;"
+                                                aria-valuenow="{{ result.confidence }}" aria-valuemin="0" aria-valuemax="100">
+                                            </div>
+                                        </div>
+                                        <div class="text-end mb-2">
+                                            <small class="text-muted">置信度: {{ result.confidence }}%</small>
+                                        </div>
                                     {% endif %}
                                 </div>
-                            </div>
-                            <p class="card-text">
-                                {% if result.content|length > 100 %}
-                                    {{ result.content[:100] }}...
-                                {% else %}
-                                    {{ result.content }}
-                                {% endif %}
-                            </p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted">{{ result.post_time.strftime('%Y-%m-%d %H:%M:%S') }}</small>
-                                <button type="button" class="btn btn-sm btn-info view-btn"
-                                        data-id="{{ result.id }}" data-bs-toggle="modal"
-                                        data-bs-target="#resultModal">
-                                    查看详情
-                                </button>
+                                <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">
+                                        <i class="bi bi-clock me-1"></i>{{ result.post_time.strftime('%Y-%m-%d %H:%M') }}
+                                    </small>
+                                    <div class="btn-group">
+                                        <button type="button" class="btn btn-sm btn-outline-primary view-btn"
+                                                data-id="{{ result.id }}" data-bs-toggle="modal"
+                                                data-bs-target="#resultModal" title="查看详情">
+                                            <i class="bi bi-eye"></i> 详情
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-success share-btn"
+                                                data-id="{{ result.id }}" title="分享">
+                                            <i class="bi bi-share"></i>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    {% else %}
-                    <div class="alert alert-info">暂无数据</div>
-                    {% endfor %}
-                </div>
-
-                <!-- 分页 -->
-                <nav aria-label="Page navigation">
-                    <ul class="pagination justify-content-center">
-                        {% if results.has_prev %}
-                        <li class="page-item">
-                            <a class="page-link" href="{{ url_for('results', page=results.prev_num) }}">上一页</a>
-                        </li>
                         {% else %}
-                        <li class="page-item disabled">
-                            <span class="page-link">上一页</span>
-                        </li>
-                        {% endif %}
-
-                        {% for page_num in results.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-                            {% if page_num %}
-                                {% if page_num == results.page %}
-                                <li class="page-item active">
-                                    <span class="page-link">{{ page_num }}</span>
-                                </li>
-                                {% else %}
-                                <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('results', page=page_num) }}">{{ page_num }}</a>
-                                </li>
-                                {% endif %}
-                            {% else %}
-                                <li class="page-item disabled">
-                                    <span class="page-link">...</span>
-                                </li>
-                            {% endif %}
+                        <div class="col-12 text-center py-5">
+                            <i class="bi bi-inbox fs-1 text-muted mb-3"></i>
+                            <h5>暂无分析结果</h5>
+                            <p class="text-muted">尚未找到符合条件的分析结果</p>
+                        </div>
                         {% endfor %}
+                    </div>
+                </div>
+            </div>
 
-                        {% if results.has_next %}
-                        <li class="page-item">
-                            <a class="page-link" href="{{ url_for('results', page=results.next_num) }}">下一页</a>
-                        </li>
-                        {% else %}
-                        <li class="page-item disabled">
-                            <span class="page-link">下一页</span>
-                        </li>
-                        {% endif %}
-                    </ul>
-                </nav>
+            <div class="card-footer bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <small class="text-muted">共 {{ results.total }} 条结果，当前显示第 {{ results.page }} 页</small>
+                    </div>
+
+                    <!-- 分页 -->
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination pagination-sm mb-0">
+                            {% if results.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('results', page=results.prev_num) }}" aria-label="上一页">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">
+                                    <i class="bi bi-chevron-left"></i>
+                                </span>
+                            </li>
+                            {% endif %}
+
+                            {% for page_num in results.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=1) %}
+                                {% if page_num %}
+                                    {% if page_num == results.page %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ page_num }}</span>
+                                    </li>
+                                    {% else %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('results', page=page_num) }}">{{ page_num }}</a>
+                                    </li>
+                                    {% endif %}
+                                {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if results.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('results', page=results.next_num) }}" aria-label="下一页">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">
+                                    <i class="bi bi-chevron-right"></i>
+                                </span>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- 结果详情模态框 -->
-<div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="resultModal" tabindex="-1" aria-labelledby="resultModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-fullscreen-md-down">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">分析结果详情</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="resultModalLabel">
+                    <i class="bi bi-info-circle me-2"></i>分析结果详情
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
             </div>
             <div class="modal-body">
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">原始内容</h6>
-                        <span class="badge bg-primary" id="modal-platform-account"></span>
+                <!-- 加载指示器 -->
+                <div id="modal-loading" class="text-center py-5">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">加载中...</span>
                     </div>
-                    <div class="border rounded p-3 bg-light overflow-auto" id="modal-content" style="max-height: 200px;"></div>
+                    <p class="text-muted">正在加载分析结果...</p>
                 </div>
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">分析结果</h6>
-                        <div>
-                            <span class="badge bg-primary me-2" id="modal-confidence">置信度: 0%</span>
-                            <small class="text-muted" id="modal-time"></small>
+
+                <!-- 内容区域 -->
+                <div id="modal-content-area" class="d-none">
+                    <!-- 基本信息 -->
+                    <div class="card mb-3 shadow-sm">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="bi bi-info-square me-2 text-primary"></i>基本信息
+                            </h6>
+                            <div>
+                                <span class="badge bg-primary me-2" id="modal-platform-account"></span>
+                                <span class="badge" id="modal-relevance-badge"></span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <ul class="list-group list-group-flush">
+                                        <li class="list-group-item d-flex justify-content-between px-0">
+                                            <span class="text-muted">
+                                                <i class="bi bi-hash me-1"></i>ID
+                                            </span>
+                                            <span id="modal-id"></span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between px-0">
+                                            <span class="text-muted">
+                                                <i class="bi bi-globe me-1"></i>平台
+                                            </span>
+                                            <span id="modal-platform"></span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between px-0">
+                                            <span class="text-muted">
+                                                <i class="bi bi-person me-1"></i>账号
+                                            </span>
+                                            <span id="modal-account"></span>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <ul class="list-group list-group-flush">
+                                        <li class="list-group-item d-flex justify-content-between px-0">
+                                            <span class="text-muted">
+                                                <i class="bi bi-calendar-date me-1"></i>发布时间
+                                            </span>
+                                            <span id="modal-time"></span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between px-0">
+                                            <span class="text-muted">
+                                                <i class="bi bi-graph-up me-1"></i>置信度
+                                            </span>
+                                            <span id="modal-confidence-text"></span>
+                                        </li>
+                                        <li class="list-group-item px-0">
+                                            <div class="progress" style="height: 8px;">
+                                                <div class="progress-bar" id="modal-confidence-bar" role="progressbar" style="width: 0%;"
+                                                     aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="border rounded p-3 overflow-auto" id="modal-analysis" style="max-height: 300px;"></div>
+
+                    <!-- 原始内容 -->
+                    <div class="card mb-3 shadow-sm">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">
+                                <i class="bi bi-chat-text me-2 text-primary"></i>原始内容
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="border rounded p-3 bg-light overflow-auto" id="modal-content" style="max-height: 200px;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 分析结果 -->
+                    <div class="card mb-3 shadow-sm">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">
+                                <i class="bi bi-clipboard-data me-2 text-primary"></i>AI分析结果
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="border rounded p-3 overflow-auto" id="modal-analysis" style="max-height: 300px;"></div>
+                        </div>
+                    </div>
+
+                    <!-- AI决策理由 -->
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">
+                                <i class="bi bi-lightbulb me-2 text-primary"></i>AI决策理由
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="border rounded p-3 bg-light" id="modal-reason"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <h6 class="mb-0">AI决策理由</h6>
-                    <div class="border rounded p-3 bg-light" id="modal-reason"></div>
+
+                <!-- 错误信息 -->
+                <div id="modal-error" class="d-none">
+                    <div class="alert alert-danger">
+                        <div class="d-flex">
+                            <div class="flex-shrink-0">
+                                <i class="bi bi-exclamation-triangle-fill fs-2 me-3"></i>
+                            </div>
+                            <div>
+                                <h5 class="alert-heading">加载失败</h5>
+                                <p id="modal-error-message">无法加载分析结果详情。</p>
+                                <hr>
+                                <p class="mb-0">请稍后重试或联系系统管理员。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-4">
+                        <button type="button" class="btn btn-primary" id="modal-retry-btn">
+                            <i class="bi bi-arrow-clockwise me-1"></i>重试
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <a href="#" class="btn btn-primary" id="modal-share-btn" target="_blank">
-                    <i class="bi bi-share"></i> 分享
-                </a>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <div class="btn-group dropup me-auto">
+                    <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-share me-1"></i>分享
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <a class="dropdown-item" href="#" id="modal-share-twitter" target="_blank">
+                                <i class="bi bi-twitter me-2"></i>分享到Twitter
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="#" id="modal-share-weibo" target="_blank">
+                                <i class="bi bi-sina-weibo me-2"></i>分享到微博
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item" id="modal-copy-link">
+                                <i class="bi bi-clipboard me-2"></i>复制链接
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>关闭
+                </button>
+                <button type="button" class="btn btn-primary" id="modal-export-btn">
+                    <i class="bi bi-download me-1"></i>导出
+                </button>
             </div>
         </div>
     </div>
@@ -222,89 +592,993 @@
 
 {% block extra_js %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // 刷新按钮
-        document.getElementById('refresh-btn').addEventListener('click', function() {
-            window.location.reload();
-        });
+    // 全局变量
+    let currentSort = 'time-desc';
+    let activeFilters = {};
+    let currentView = 'table';
+    let currentResultId = null;
 
-        // 查看详情
+    // 页面初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化事件监听器
+        initEventListeners();
+
+        // 初始化视图切换
+        initViewToggle();
+
+        // 初始化排序和筛选
+        initSortAndFilter();
+
+        // 初始化搜索功能
+        initSearch();
+
+        // 初始化响应式布局
+        initResponsiveLayout();
+    });
+
+    // 初始化事件监听器
+    function initEventListeners() {
+        // 刷新按钮
+        const refreshBtn = document.getElementById('refresh-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function() {
+                // 添加旋转动画
+                const icon = this.querySelector('i');
+                if (icon) {
+                    icon.classList.add('rotate-animation');
+                }
+
+                // 刷新页面
+                setTimeout(() => {
+                    window.location.reload();
+                }, 300);
+            });
+        }
+
+        // 查看详情按钮
         document.querySelectorAll('.view-btn').forEach(button => {
             button.addEventListener('click', function() {
                 const id = this.getAttribute('data-id');
-
-                fetch(`/api/results?id=${id}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        const result = data.find(r => r.id == id);
-                        if (result) {
-                            // 设置内容和分析结果
-                            document.getElementById('modal-content').textContent = result.content;
-                            document.getElementById('modal-analysis').innerHTML = result.analysis;
-
-                            // 设置平台和账号信息
-                            document.getElementById('modal-platform-account').textContent =
-                                `${result.social_network}: ${result.account_id}`;
-
-                            // 设置置信度
-                            const confidenceElem = document.getElementById('modal-confidence');
-                            if (result.confidence !== null && result.confidence !== undefined) {
-                                let confidenceClass = 'bg-primary';
-                                if (result.confidence >= 80) confidenceClass = 'bg-success';
-                                else if (result.confidence >= 50) confidenceClass = 'bg-info';
-                                else if (result.confidence >= 30) confidenceClass = 'bg-warning';
-                                else confidenceClass = 'bg-danger';
-
-                                confidenceElem.textContent = `置信度: ${result.confidence}%`;
-                                confidenceElem.className = `badge ${confidenceClass} me-2`;
-                            } else {
-                                confidenceElem.textContent = '置信度: 未知';
-                                confidenceElem.className = 'badge bg-secondary me-2';
-                            }
-
-                            // 设置理由
-                            const reasonElem = document.getElementById('modal-reason');
-                            if (result.reason) {
-                                reasonElem.textContent = result.reason;
-                            } else {
-                                reasonElem.textContent = result.is_relevant ? '符合预设主题' : '不符合预设主题';
-                            }
-
-                            // 设置时间
-                            const postTime = new Date(result.post_time);
-                            document.getElementById('modal-time').textContent =
-                                postTime.toLocaleString('zh-CN');
-
-                            // 设置分享链接
-                            const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent('分享一条分析结果')}&url=${encodeURIComponent(window.location.href)}`;
-                            document.getElementById('modal-share-btn').href = shareUrl;
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching result details:', error);
-                    });
+                currentResultId = id;
+                loadResultDetails(id);
             });
         });
 
-        // 添加响应式处理
-        function handleResponsiveLayout() {
+        // 分享按钮
+        document.querySelectorAll('.share-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const id = this.getAttribute('data-id');
+                shareResult(id);
+            });
+        });
+
+        // 模态框重试按钮
+        const retryBtn = document.getElementById('modal-retry-btn');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', function() {
+                if (currentResultId) {
+                    loadResultDetails(currentResultId);
+                }
+            });
+        }
+
+        // 模态框导出按钮
+        const exportBtn = document.getElementById('modal-export-btn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', function() {
+                if (currentResultId) {
+                    exportResult(currentResultId);
+                }
+            });
+        }
+
+        // 模态框复制链接按钮
+        const copyLinkBtn = document.getElementById('modal-copy-link');
+        if (copyLinkBtn) {
+            copyLinkBtn.addEventListener('click', function() {
+                copyResultLink(currentResultId);
+            });
+        }
+    }
+
+    // 初始化视图切换
+    function initViewToggle() {
+        const tableViewBtn = document.getElementById('view-table-btn');
+        const cardViewBtn = document.getElementById('view-card-btn');
+        const tableView = document.getElementById('table-view');
+        const cardView = document.getElementById('card-view');
+
+        if (tableViewBtn && cardViewBtn && tableView && cardView) {
+            // 表格视图按钮点击事件
+            tableViewBtn.addEventListener('click', function() {
+                tableView.classList.remove('d-none');
+                cardView.classList.add('d-none');
+                tableViewBtn.classList.add('active');
+                cardViewBtn.classList.remove('active');
+                currentView = 'table';
+
+                // 保存用户偏好
+                localStorage.setItem('results-view-preference', 'table');
+            });
+
+            // 卡片视图按钮点击事件
+            cardViewBtn.addEventListener('click', function() {
+                tableView.classList.add('d-none');
+                cardView.classList.remove('d-none');
+                cardViewBtn.classList.add('active');
+                tableViewBtn.classList.remove('active');
+                currentView = 'card';
+
+                // 保存用户偏好
+                localStorage.setItem('results-view-preference', 'card');
+            });
+
+            // 加载用户偏好
+            const viewPreference = localStorage.getItem('results-view-preference');
+            if (viewPreference === 'card') {
+                cardViewBtn.click();
+            }
+        }
+    }
+
+    // 加载结果详情
+    function loadResultDetails(id) {
+        if (!id) return;
+
+        // 显示加载中
+        const loadingElem = document.getElementById('modal-loading');
+        const contentArea = document.getElementById('modal-content-area');
+        const errorArea = document.getElementById('modal-error');
+
+        if (loadingElem && contentArea && errorArea) {
+            loadingElem.classList.remove('d-none');
+            contentArea.classList.add('d-none');
+            errorArea.classList.add('d-none');
+        }
+
+        // 获取结果详情
+        fetch(`/api/analytics/results?id=${id}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP错误: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // 如果响应包含data字段，使用它
+                const results = data.data || data;
+                const result = Array.isArray(results) ? results.find(r => r.id == id) : results;
+
+                if (result) {
+                    updateResultModal(result);
+                } else {
+                    throw new Error('未找到结果数据');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching result details:', error);
+                showModalError(error.message);
+            });
+    }
+
+    // 更新结果模态框
+    function updateResultModal(result) {
+        if (!result) return;
+
+        try {
+            // 隐藏加载中，显示内容区域
+            document.getElementById('modal-loading').classList.add('d-none');
+            document.getElementById('modal-content-area').classList.remove('d-none');
+
+            // 设置基本信息
+            document.getElementById('modal-id').textContent = result.id;
+
+            // 设置平台
+            const platformElem = document.getElementById('modal-platform');
+            if (result.social_network === 'twitter') {
+                platformElem.innerHTML = '<span class="badge bg-primary"><i class="bi bi-twitter me-1"></i>Twitter</span>';
+            } else if (result.social_network === 'weibo') {
+                platformElem.innerHTML = '<span class="badge bg-danger"><i class="bi bi-sina-weibo me-1"></i>微博</span>';
+            } else {
+                platformElem.innerHTML = `<span class="badge bg-secondary"><i class="bi bi-globe me-1"></i>${result.social_network}</span>`;
+            }
+
+            // 设置账号
+            document.getElementById('modal-account').textContent = result.account_id;
+
+            // 设置平台和账号信息
+            document.getElementById('modal-platform-account').textContent = `${result.social_network}: ${result.account_id}`;
+
+            // 设置相关性徽章
+            const relevanceBadge = document.getElementById('modal-relevance-badge');
+            if (result.is_relevant) {
+                relevanceBadge.className = 'badge bg-success';
+                relevanceBadge.innerHTML = '<i class="bi bi-check-circle me-1"></i>相关';
+            } else {
+                relevanceBadge.className = 'badge bg-secondary';
+                relevanceBadge.innerHTML = '<i class="bi bi-x-circle me-1"></i>不相关';
+            }
+
+            // 设置时间
+            const postTime = new Date(result.post_time);
+            document.getElementById('modal-time').textContent = postTime.toLocaleString('zh-CN');
+
+            // 设置置信度
+            const confidenceText = document.getElementById('modal-confidence-text');
+            const confidenceBar = document.getElementById('modal-confidence-bar');
+
+            if (result.confidence !== null && result.confidence !== undefined) {
+                confidenceText.textContent = `${result.confidence}%`;
+
+                let confidenceClass = 'bg-primary';
+                if (result.confidence >= 80) confidenceClass = 'bg-success';
+                else if (result.confidence >= 50) confidenceClass = 'bg-info';
+                else if (result.confidence >= 30) confidenceClass = 'bg-warning';
+                else confidenceClass = 'bg-danger';
+
+                confidenceBar.className = `progress-bar ${confidenceClass}`;
+                confidenceBar.style.width = `${result.confidence}%`;
+                confidenceBar.setAttribute('aria-valuenow', result.confidence);
+            } else {
+                confidenceText.textContent = '未知';
+                confidenceBar.className = 'progress-bar bg-secondary';
+                confidenceBar.style.width = '0%';
+                confidenceBar.setAttribute('aria-valuenow', 0);
+            }
+
+            // 设置内容
+            document.getElementById('modal-content').textContent = result.content || '无内容';
+
+            // 处理分析结果
+            const analysisElem = document.getElementById('modal-analysis');
+            if (result.analysis && result.analysis.trim() !== '') {
+                // 如果分析结果包含Markdown格式，可以使用Markdown解析库
+                // 这里简单处理，保留换行符
+                analysisElem.innerHTML = result.analysis.replace(/\n/g, '<br>');
+            } else {
+                // 如果分析结果为空，显示默认消息
+                analysisElem.innerHTML = '<em class="text-muted">未提供分析结果</em>';
+            }
+
+            // 设置理由
+            const reasonElem = document.getElementById('modal-reason');
+            if (result.reason) {
+                reasonElem.textContent = result.reason;
+            } else {
+                reasonElem.textContent = result.is_relevant ? '符合预设主题' : '不符合预设主题';
+            }
+
+            // 设置分享链接
+            const twitterShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent('分享一条分析结果')}&url=${encodeURIComponent(window.location.href + '?id=' + result.id)}`;
+            document.getElementById('modal-share-twitter').href = twitterShareUrl;
+
+            const weiboShareUrl = `http://service.weibo.com/share/share.php?url=${encodeURIComponent(window.location.href + '?id=' + result.id)}&title=${encodeURIComponent('分享一条分析结果')}`;
+            document.getElementById('modal-share-weibo').href = weiboShareUrl;
+        } catch (error) {
+            console.error('Error updating modal:', error);
+            showModalError('更新模态框时出错');
+        }
+    }
+
+    // 显示模态框错误
+    function showModalError(message) {
+        const loadingElem = document.getElementById('modal-loading');
+        const contentArea = document.getElementById('modal-content-area');
+        const errorArea = document.getElementById('modal-error');
+        const errorMessage = document.getElementById('modal-error-message');
+
+        if (loadingElem && contentArea && errorArea && errorMessage) {
+            loadingElem.classList.add('d-none');
+            contentArea.classList.add('d-none');
+            errorArea.classList.remove('d-none');
+            errorMessage.textContent = message || '无法加载分析结果详情。';
+        }
+    }
+
+    // 分享结果
+    function shareResult(id) {
+        if (!id) return;
+
+        // 创建分享URL
+        const shareUrl = window.location.href.split('?')[0] + '?id=' + id;
+
+        // 创建临时输入框
+        const tempInput = document.createElement('input');
+        tempInput.value = shareUrl;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+
+        // 复制到剪贴板
+        try {
+            document.execCommand('copy');
+            showToast('成功', '已复制分享链接到剪贴板', 'success');
+        } catch (err) {
+            showToast('错误', '复制链接失败', 'danger');
+        }
+
+        // 移除临时输入框
+        document.body.removeChild(tempInput);
+    }
+
+    // 复制结果链接
+    function copyResultLink(id) {
+        if (!id) return;
+
+        // 创建分享URL
+        const shareUrl = window.location.href.split('?')[0] + '?id=' + id;
+
+        // 使用Clipboard API
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(shareUrl)
+                .then(() => {
+                    showToast('成功', '已复制链接到剪贴板', 'success');
+                })
+                .catch(err => {
+                    console.error('复制失败:', err);
+                    showToast('错误', '复制链接失败', 'danger');
+                });
+        } else {
+            // 回退到旧方法
+            shareResult(id);
+        }
+    }
+
+    // 导出结果
+    function exportResult(id) {
+        if (!id) return;
+
+        fetch(`/api/analytics/results?id=${id}`)
+            .then(response => response.json())
+            .then(data => {
+                const results = data.data || data;
+                const result = Array.isArray(results) ? results.find(r => r.id == id) : results;
+
+                if (result) {
+                    // 格式化导出数据
+                    const exportData = {
+                        id: result.id,
+                        platform: result.social_network,
+                        account: result.account_id,
+                        time: new Date(result.post_time).toLocaleString('zh-CN'),
+                        content: result.content,
+                        is_relevant: result.is_relevant,
+                        confidence: result.confidence,
+                        analysis: result.analysis,
+                        reason: result.reason
+                    };
+
+                    // 转换为JSON字符串
+                    const jsonStr = JSON.stringify(exportData, null, 2);
+
+                    // 创建Blob
+                    const blob = new Blob([jsonStr], { type: 'application/json' });
+
+                    // 创建下载链接
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `analysis-result-${id}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+
+                    // 清理
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+
+                    showToast('成功', '已导出分析结果', 'success');
+                } else {
+                    showToast('错误', '未找到结果数据', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error exporting result:', error);
+                showToast('错误', '导出失败: ' + error.message, 'danger');
+            });
+    }
+
+    // 显示提示消息
+    function showToast(title, message, type = 'info') {
+        // 检查是否已存在toast容器
+        let toastContainer = document.querySelector('.toast-container');
+
+        // 如果不存在，创建一个
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            document.body.appendChild(toastContainer);
+        }
+
+        // 创建toast元素
+        const toastId = 'toast-' + Date.now();
+        const toastHTML = `
+            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header bg-${type} text-white">
+                    <strong class="me-auto">${title}</strong>
+                    <small>刚刚</small>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    ${message}
+                </div>
+            </div>
+        `;
+
+        // 添加到容器
+        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+
+        // 初始化并显示toast
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+        toast.show();
+
+        // 自动移除
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            toastElement.remove();
+        });
+    }
+
+    // 添加CSS动画
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .rotate-animation {
+            animation: rotate 1s linear;
+        }
+    `;
+    document.head.appendChild(style);
+
+    // 初始化排序和筛选
+    function initSortAndFilter() {
+        // 排序按钮点击事件
+        document.querySelectorAll('.sort-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const sortType = this.getAttribute('data-sort');
+                if (sortType) {
+                    currentSort = sortType;
+                    sortResults(sortType);
+
+                    // 更新排序按钮状态
+                    document.querySelectorAll('.sort-btn').forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                    this.classList.add('active');
+
+                    // 更新下拉菜单按钮文本
+                    const sortDropdown = document.getElementById('sortDropdown');
+                    if (sortDropdown) {
+                        let sortText = '排序';
+                        if (sortType === 'time-desc') sortText = '最新发布';
+                        else if (sortType === 'time-asc') sortText = '最早发布';
+                        else if (sortType === 'confidence-desc') sortText = '置信度从高到低';
+                        else if (sortType === 'confidence-asc') sortText = '置信度从低到高';
+                        else if (sortType === 'platform') sortText = '按平台';
+                        else if (sortType === 'account') sortText = '按账号';
+
+                        sortDropdown.innerHTML = `<i class="bi bi-sort-down me-1"></i> ${sortText}`;
+                    }
+                }
+            });
+        });
+
+        // 筛选表单提交事件
+        const filterForm = document.getElementById('filter-form');
+        if (filterForm) {
+            filterForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                // 收集筛选条件
+                activeFilters = {
+                    platform: document.getElementById('platform-filter').value,
+                    relevance: document.getElementById('relevance-filter').value,
+                    dateFrom: document.getElementById('date-from').value,
+                    dateTo: document.getElementById('date-to').value
+                };
+
+                // 应用筛选
+                filterResults();
+
+                // 更新筛选按钮状态
+                const filterDropdown = document.getElementById('filterDropdown');
+                if (filterDropdown) {
+                    const hasActiveFilters = Object.values(activeFilters).some(value => value);
+                    if (hasActiveFilters) {
+                        filterDropdown.classList.add('btn-primary');
+                        filterDropdown.classList.remove('btn-outline-primary');
+                    } else {
+                        filterDropdown.classList.remove('btn-primary');
+                        filterDropdown.classList.add('btn-outline-primary');
+                    }
+                }
+
+                // 关闭下拉菜单
+                const dropdownMenu = filterForm.closest('.dropdown-menu');
+                if (dropdownMenu) {
+                    const dropdown = bootstrap.Dropdown.getInstance(document.getElementById('filterDropdown'));
+                    if (dropdown) {
+                        dropdown.hide();
+                    }
+                }
+
+                // 显示提示
+                const activeFilterCount = Object.values(activeFilters).filter(v => v).length;
+                if (activeFilterCount > 0) {
+                    showToast('筛选已应用', `已应用${activeFilterCount}个筛选条件`, 'info');
+                }
+            });
+        }
+
+        // 重置筛选按钮点击事件
+        const resetFilterBtn = document.getElementById('reset-filter-btn');
+        if (resetFilterBtn) {
+            resetFilterBtn.addEventListener('click', function() {
+                // 重置表单
+                const filterForm = document.getElementById('filter-form');
+                if (filterForm) {
+                    filterForm.reset();
+                }
+
+                // 清空筛选条件
+                activeFilters = {};
+
+                // 显示所有结果
+                document.querySelectorAll('.result-row, .result-card').forEach(item => {
+                    item.style.display = '';
+                });
+
+                // 更新筛选按钮状态
+                const filterDropdown = document.getElementById('filterDropdown');
+                if (filterDropdown) {
+                    filterDropdown.classList.remove('btn-primary');
+                    filterDropdown.classList.add('btn-outline-primary');
+                }
+
+                // 显示提示
+                showToast('筛选已重置', '已清除所有筛选条件', 'info');
+            });
+        }
+
+        // 检查URL参数中是否有ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const resultId = urlParams.get('id');
+        if (resultId) {
+            // 查找对应的结果
+            const resultRow = document.querySelector(`.result-row[data-id="${resultId}"]`);
+            const resultCard = document.querySelector(`.result-card[data-id="${resultId}"]`);
+
+            if (resultRow || resultCard) {
+                // 高亮显示
+                if (resultRow) resultRow.classList.add('table-primary');
+                if (resultCard) resultCard.querySelector('.card').classList.add('border-primary');
+
+                // 滚动到结果位置
+                setTimeout(() => {
+                    const element = resultRow || resultCard;
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    // 打开详情模态框
+                    setTimeout(() => {
+                        currentResultId = resultId;
+                        loadResultDetails(resultId);
+                        const resultModal = new bootstrap.Modal(document.getElementById('resultModal'));
+                        resultModal.show();
+                    }, 500);
+                }, 300);
+            }
+        }
+    }
+
+    // 排序结果
+    function sortResults(sortType) {
+        // 获取所有结果行和卡片
+        const tableRows = Array.from(document.querySelectorAll('.result-row'));
+        const cardItems = Array.from(document.querySelectorAll('.result-card'));
+
+        // 定义排序函数
+        const sortFunction = (a, b) => {
+            let valueA, valueB;
+
+            if (sortType === 'time-desc' || sortType === 'time-asc') {
+                valueA = parseFloat(a.getAttribute('data-time'));
+                valueB = parseFloat(b.getAttribute('data-time'));
+                return sortType === 'time-desc' ? valueB - valueA : valueA - valueB;
+            }
+            else if (sortType === 'confidence-desc' || sortType === 'confidence-asc') {
+                valueA = parseFloat(a.getAttribute('data-confidence'));
+                valueB = parseFloat(b.getAttribute('data-confidence'));
+                return sortType === 'confidence-desc' ? valueB - valueA : valueA - valueB;
+            }
+            else if (sortType === 'platform') {
+                valueA = a.getAttribute('data-platform');
+                valueB = b.getAttribute('data-platform');
+                return valueA.localeCompare(valueB);
+            }
+            else if (sortType === 'account') {
+                valueA = a.getAttribute('data-account');
+                valueB = b.getAttribute('data-account');
+                return valueA.localeCompare(valueB);
+            }
+            else if (sortType === 'id') {
+                valueA = parseInt(a.getAttribute('data-id'));
+                valueB = parseInt(b.getAttribute('data-id'));
+                return valueA - valueB;
+            }
+
+            return 0;
+        };
+
+        // 排序表格行
+        if (tableRows.length > 0) {
+            const tbody = tableRows[0].parentNode;
+            tableRows.sort(sortFunction).forEach(row => tbody.appendChild(row));
+        }
+
+        // 排序卡片
+        if (cardItems.length > 0) {
+            const container = cardItems[0].parentNode;
+            cardItems.sort(sortFunction).forEach(card => container.appendChild(card));
+        }
+    }
+
+    // 筛选结果
+    function filterResults() {
+        // 获取所有结果行和卡片
+        const items = document.querySelectorAll('.result-row, .result-card');
+
+        items.forEach(item => {
+            let visible = true;
+
+            // 平台筛选
+            if (activeFilters.platform && item.getAttribute('data-platform') !== activeFilters.platform) {
+                visible = false;
+            }
+
+            // 相关性筛选
+            if (activeFilters.relevance) {
+                const isRelevant = item.getAttribute('data-relevant');
+                if (activeFilters.relevance === 'relevant' && isRelevant !== 'yes') {
+                    visible = false;
+                } else if (activeFilters.relevance === 'irrelevant' && isRelevant !== 'no') {
+                    visible = false;
+                }
+            }
+
+            // 日期范围筛选
+            if (activeFilters.dateFrom || activeFilters.dateTo) {
+                const timestamp = parseFloat(item.getAttribute('data-time')) * 1000;
+                const date = new Date(timestamp);
+
+                if (activeFilters.dateFrom) {
+                    const fromDate = new Date(activeFilters.dateFrom);
+                    fromDate.setHours(0, 0, 0, 0);
+                    if (date < fromDate) {
+                        visible = false;
+                    }
+                }
+
+                if (activeFilters.dateTo) {
+                    const toDate = new Date(activeFilters.dateTo);
+                    toDate.setHours(23, 59, 59, 999);
+                    if (date > toDate) {
+                        visible = false;
+                    }
+                }
+            }
+
+            // 设置可见性
+            item.style.display = visible ? '' : 'none';
+        });
+
+        // 检查是否有可见项
+        const visibleItems = document.querySelectorAll('.result-row:not([style*="display: none"]), .result-card:not([style*="display: none"])');
+
+        // 显示空状态
+        const tableView = document.getElementById('table-view');
+        const cardView = document.getElementById('card-view');
+
+        if (visibleItems.length === 0) {
+            // 表格视图空状态
+            if (tableView) {
+                const tbody = tableView.querySelector('tbody');
+                if (tbody) {
+                    const existingEmptyRow = tbody.querySelector('.empty-results-row');
+                    if (!existingEmptyRow) {
+                        const emptyRow = document.createElement('tr');
+                        emptyRow.className = 'empty-results-row';
+                        emptyRow.innerHTML = `
+                            <td colspan="8" class="text-center py-5">
+                                <i class="bi bi-filter-circle fs-1 text-muted mb-3 d-block"></i>
+                                <h5>没有符合条件的结果</h5>
+                                <p class="text-muted">尝试调整筛选条件或清除筛选</p>
+                                <button type="button" class="btn btn-outline-primary mt-2" id="clear-filters-btn">
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i>清除筛选
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(emptyRow);
+
+                        // 绑定清除筛选按钮事件
+                        const clearFiltersBtn = emptyRow.querySelector('#clear-filters-btn');
+                        if (clearFiltersBtn) {
+                            clearFiltersBtn.addEventListener('click', function() {
+                                const resetFilterBtn = document.getElementById('reset-filter-btn');
+                                if (resetFilterBtn) {
+                                    resetFilterBtn.click();
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+
+            // 卡片视图空状态
+            if (cardView) {
+                const container = cardView.querySelector('.row');
+                if (container) {
+                    const existingEmptyState = container.querySelector('.empty-results-card');
+                    if (!existingEmptyState) {
+                        const emptyState = document.createElement('div');
+                        emptyState.className = 'col-12 text-center py-5 empty-results-card';
+                        emptyState.innerHTML = `
+                            <i class="bi bi-filter-circle fs-1 text-muted mb-3"></i>
+                            <h5>没有符合条件的结果</h5>
+                            <p class="text-muted">尝试调整筛选条件或清除筛选</p>
+                            <button type="button" class="btn btn-outline-primary mt-2" id="clear-filters-card-btn">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>清除筛选
+                            </button>
+                        `;
+                        container.appendChild(emptyState);
+
+                        // 绑定清除筛选按钮事件
+                        const clearFiltersBtn = emptyState.querySelector('#clear-filters-card-btn');
+                        if (clearFiltersBtn) {
+                            clearFiltersBtn.addEventListener('click', function() {
+                                const resetFilterBtn = document.getElementById('reset-filter-btn');
+                                if (resetFilterBtn) {
+                                    resetFilterBtn.click();
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        } else {
+            // 移除空状态
+            document.querySelectorAll('.empty-results-row, .empty-results-card').forEach(elem => {
+                elem.remove();
+            });
+        }
+    }
+
+    // 初始化搜索功能
+    function initSearch() {
+        const searchInput = document.getElementById('search-input');
+        const searchBtn = document.getElementById('search-btn');
+
+        if (searchInput && searchBtn) {
+            // 搜索按钮点击事件
+            searchBtn.addEventListener('click', function() {
+                performSearch(searchInput.value);
+            });
+
+            // 输入框回车事件
+            searchInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    performSearch(this.value);
+                }
+            });
+
+            // 输入框清空事件
+            searchInput.addEventListener('input', function() {
+                if (this.value === '') {
+                    // 清空搜索，显示所有结果
+                    document.querySelectorAll('.result-row, .result-card').forEach(item => {
+                        item.classList.remove('search-highlight');
+                    });
+
+                    // 重新应用筛选
+                    filterResults();
+                }
+            });
+        }
+    }
+
+    // 执行搜索
+    function performSearch(query) {
+        if (!query || query.trim() === '') return;
+
+        query = query.trim().toLowerCase();
+
+        // 获取所有结果行和卡片
+        const items = document.querySelectorAll('.result-row, .result-card');
+        let matchCount = 0;
+
+        items.forEach(item => {
+            // 获取内容
+            const content = item.getAttribute('data-content') || '';
+            const platform = item.getAttribute('data-platform') || '';
+            const account = item.getAttribute('data-account') || '';
+
+            // 检查是否匹配
+            const isMatch = content.toLowerCase().includes(query) ||
+                           platform.toLowerCase().includes(query) ||
+                           account.toLowerCase().includes(query);
+
+            // 设置可见性和高亮
+            if (isMatch) {
+                item.style.display = '';
+                item.classList.add('search-highlight');
+                matchCount++;
+            } else {
+                item.style.display = 'none';
+                item.classList.remove('search-highlight');
+            }
+        });
+
+        // 显示搜索结果提示
+        if (matchCount > 0) {
+            showToast('搜索结果', `找到 ${matchCount} 条匹配结果`, 'info');
+        } else {
+            showToast('搜索结果', '未找到匹配结果', 'warning');
+
+            // 显示空状态
+            const tableView = document.getElementById('table-view');
+            const cardView = document.getElementById('card-view');
+
+            // 表格视图空状态
+            if (tableView) {
+                const tbody = tableView.querySelector('tbody');
+                if (tbody) {
+                    const existingEmptyRow = tbody.querySelector('.empty-search-row');
+                    if (!existingEmptyRow) {
+                        const emptyRow = document.createElement('tr');
+                        emptyRow.className = 'empty-search-row';
+                        emptyRow.innerHTML = `
+                            <td colspan="8" class="text-center py-5">
+                                <i class="bi bi-search fs-1 text-muted mb-3 d-block"></i>
+                                <h5>未找到匹配结果</h5>
+                                <p class="text-muted">尝试使用其他关键词搜索</p>
+                                <button type="button" class="btn btn-outline-primary mt-2" id="clear-search-btn">
+                                    <i class="bi bi-x-circle me-1"></i>清除搜索
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(emptyRow);
+
+                        // 绑定清除搜索按钮事件
+                        const clearSearchBtn = emptyRow.querySelector('#clear-search-btn');
+                        if (clearSearchBtn) {
+                            clearSearchBtn.addEventListener('click', function() {
+                                const searchInput = document.getElementById('search-input');
+                                if (searchInput) {
+                                    searchInput.value = '';
+                                    document.querySelectorAll('.result-row, .result-card').forEach(item => {
+                                        item.classList.remove('search-highlight');
+                                        item.style.display = '';
+                                    });
+
+                                    // 重新应用筛选
+                                    filterResults();
+
+                                    // 移除空状态
+                                    document.querySelectorAll('.empty-search-row, .empty-search-card').forEach(elem => {
+                                        elem.remove();
+                                    });
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+
+            // 卡片视图空状态
+            if (cardView) {
+                const container = cardView.querySelector('.row');
+                if (container) {
+                    const existingEmptyState = container.querySelector('.empty-search-card');
+                    if (!existingEmptyState) {
+                        const emptyState = document.createElement('div');
+                        emptyState.className = 'col-12 text-center py-5 empty-search-card';
+                        emptyState.innerHTML = `
+                            <i class="bi bi-search fs-1 text-muted mb-3"></i>
+                            <h5>未找到匹配结果</h5>
+                            <p class="text-muted">尝试使用其他关键词搜索</p>
+                            <button type="button" class="btn btn-outline-primary mt-2" id="clear-search-card-btn">
+                                <i class="bi bi-x-circle me-1"></i>清除搜索
+                            </button>
+                        `;
+                        container.appendChild(emptyState);
+
+                        // 绑定清除搜索按钮事件
+                        const clearSearchBtn = emptyState.querySelector('#clear-search-card-btn');
+                        if (clearSearchBtn) {
+                            clearSearchBtn.addEventListener('click', function() {
+                                const searchInput = document.getElementById('search-input');
+                                if (searchInput) {
+                                    searchInput.value = '';
+                                    document.querySelectorAll('.result-row, .result-card').forEach(item => {
+                                        item.classList.remove('search-highlight');
+                                        item.style.display = '';
+                                    });
+
+                                    // 重新应用筛选
+                                    filterResults();
+
+                                    // 移除空状态
+                                    document.querySelectorAll('.empty-search-row, .empty-search-card').forEach(elem => {
+                                        elem.remove();
+                                    });
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 初始化响应式布局
+    function initResponsiveLayout() {
+        // 处理响应式分页
+        function handleResponsivePagination() {
             const width = window.innerWidth;
             const paginationLinks = document.querySelectorAll('.pagination .page-link');
 
             if (width < 576) {  // 在小屏幕上简化分页
                 paginationLinks.forEach(link => {
-                    if (link.textContent.length > 2 && !link.classList.contains('active')) {
-                        link.textContent = '...';
+                    // 只保留图标，移除文本
+                    if (!link.querySelector('.bi') && !link.classList.contains('active') && link.textContent !== '...') {
+                        const text = link.textContent;
+                        link.setAttribute('data-original-text', text);
+                        link.innerHTML = `<i class="bi bi-dot"></i>`;
+                        link.setAttribute('title', text);
+                    }
+                });
+            } else {
+                // 恢复原始文本
+                paginationLinks.forEach(link => {
+                    const originalText = link.getAttribute('data-original-text');
+                    if (originalText && !link.classList.contains('active') && link.textContent !== '...') {
+                        link.textContent = originalText;
+                        link.removeAttribute('title');
                     }
                 });
             }
         }
 
         // 初始调用一次
-        handleResponsiveLayout();
+        handleResponsivePagination();
 
         // 窗口大小改变时调用
-        window.addEventListener('resize', handleResponsiveLayout);
-    });
+        window.addEventListener('resize', handleResponsivePagination);
+
+        // 添加搜索高亮样式
+        const searchStyle = document.createElement('style');
+        searchStyle.textContent = `
+            .search-highlight {
+                animation: highlight-pulse 2s ease-in-out;
+            }
+
+            @keyframes highlight-pulse {
+                0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.5); }
+                70% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); }
+            }
+
+            .result-row.search-highlight {
+                background-color: rgba(13, 110, 253, 0.1);
+            }
+
+            .result-card.search-highlight .card {
+                border-color: var(--bs-primary);
+            }
+        `;
+        document.head.appendChild(searchStyle);
+    }
 </script>
 {% endblock %}

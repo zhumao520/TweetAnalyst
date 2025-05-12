@@ -6,12 +6,11 @@ pytz>=2023.3
 schedule>=1.2.0
 
 # LLM支持
-openai>=1.0.0
 langchain-openai>=0.0.1
 langchain-core>=0.1.0
 
 # Twitter支持
-tweety-ns>=0.9.0
+tweety-ns>=2.2
 
 # Web应用
 Flask>=2.0.0,<2.4.0

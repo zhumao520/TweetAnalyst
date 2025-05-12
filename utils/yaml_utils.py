@@ -78,6 +78,7 @@ def sync_accounts_to_yaml():
                 'socialNetworkId': account.account_id,          # 对应数据库字段: account_id
                 'tag': account.tag,                             # 对应数据库字段: tag
                 'enableAutoReply': account.enable_auto_reply,   # 对应数据库字段: enable_auto_reply
+                'bypass_ai': account.bypass_ai,                 # 对应数据库字段: bypass_ai
                 'prompt': account.prompt_template or default_prompt  # 对应数据库字段: prompt_template
             }
 
@@ -137,9 +138,11 @@ def import_accounts_from_yaml():
                     # YAML字段到数据库字段的映射:
                     # - tag -> tag
                     # - enableAutoReply -> enable_auto_reply
+                    # - bypass_ai -> bypass_ai
                     # - prompt -> prompt_template
                     existing.tag = network.get('tag', 'all')
                     existing.enable_auto_reply = network.get('enableAutoReply', False)
+                    existing.bypass_ai = network.get('bypass_ai', False)
                     existing.prompt_template = network.get('prompt')
                     db.session.commit()
                     logger.info(f"更新账号: {account_type}:{account_id}")
@@ -150,12 +153,14 @@ def import_accounts_from_yaml():
                     # - socialNetworkId -> account_id
                     # - tag -> tag
                     # - enableAutoReply -> enable_auto_reply
+                    # - bypass_ai -> bypass_ai
                     # - prompt -> prompt_template
                     new_account = SocialAccount(
                         type=account_type,
                         account_id=account_id,
                         tag=network.get('tag', 'all'),
                         enable_auto_reply=network.get('enableAutoReply', False),
+                        bypass_ai=network.get('bypass_ai', False),
                         prompt_template=network.get('prompt')
                     )
                     db.session.add(new_account)

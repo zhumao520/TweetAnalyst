@@ -14,6 +14,7 @@ from .social_account import SocialAccount
 from .analysis_result import AnalysisResult
 from .system_config import SystemConfig
 from .system_state import SystemState
+from .notification_service import NotificationService
 
 # 版本信息
 __version__ = '1.0.0'

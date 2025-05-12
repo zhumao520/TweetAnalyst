@@ -59,9 +59,21 @@ def get_logger(name):
     """
     logger = logging.getLogger(name)
 
-    # 如果已经配置过，直接返回
+    # 如果已经配置过，检查日志文件是否存在，如果不存在则重新配置
     if logger.handlers:
-        return logger
+        # 检查日志文件是否存在
+        module_log_file = os.path.join(LOG_DIR, f'{name}.log')
+        app_log_file = os.path.join(LOG_DIR, 'app.log')
+
+        # 如果任一日志文件不存在，则移除所有处理器并重新配置
+        if not os.path.exists(module_log_file) or not os.path.exists(app_log_file):
+            print(f"日志文件不存在，重新配置日志处理器: {name}")
+            # 移除所有处理器
+            for handler in logger.handlers[:]:
+                logger.removeHandler(handler)
+        else:
+            # 日志文件存在，直接返回
+            return logger
 
     # 设置日志级别
     logger.setLevel(LOG_LEVELS.get(LOG_LEVEL, logging.INFO))
@@ -103,6 +115,9 @@ def get_logger(name):
             backupCount=LOG_FILE_BACKUP_COUNT
         )
 
+    # 设置文件处理器在文件不存在时自动创建
+    module_file_handler.delay = False
+
     module_file_handler.setFormatter(formatter)
     logger.addHandler(module_file_handler)
 
@@ -139,6 +154,9 @@ def get_logger(name):
             maxBytes=LOG_FILE_MAX_SIZE,
             backupCount=LOG_FILE_BACKUP_COUNT
         )
+
+    # 设置文件处理器在文件不存在时自动创建
+    app_file_handler.delay = False
 
     # 为主应用日志添加模块名前缀
     app_formatter = logging.Formatter(f'%(asctime)s - {name} - %(levelname)s - %(message)s', DATE_FORMAT)

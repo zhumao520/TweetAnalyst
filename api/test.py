@@ -7,14 +7,102 @@ import logging
 import time
 import datetime
 import os
+import glob
+import shutil
+import json
 from flask import Blueprint, request, jsonify, session, current_app
 from utils.test_utils import test_twitter_connection, test_llm_connection, test_proxy_connection, check_system_status
+from models import db, AnalysisResult
 
 # 创建日志记录器
 logger = logging.getLogger('api.test')
 
 # 创建Blueprint
 test_api = Blueprint('test_api', __name__, url_prefix='/test')
+
+@test_api.route('/system/status', methods=['GET'])
+def get_system_status_api():
+    """获取系统状态API"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登录"}), 401
+
+    try:
+        # 获取系统状态
+        logger.info("获取系统状态")
+
+        # 检查数据库连接
+        database_status = "normal"  # 默认为正常状态
+        try:
+            # 使用main模块中的函数检查数据库连接
+            import main
+            db_connected = main.check_database_connection()
+            if not db_connected:
+                database_status = "error"
+                logger.warning("数据库连接检查失败")
+        except Exception as e:
+            database_status = "error"
+            logger.error(f"检查数据库连接时出错: {str(e)}")
+
+        # 检查AI服务状态
+        ai_status = "normal"  # 默认为正常状态
+        try:
+            # 检查LLM API密钥是否存在
+            from services.config_service import get_config
+            llm_api_key = get_config('LLM_API_KEY')
+            if not llm_api_key:
+                ai_status = "error"
+                logger.warning("LLM API密钥未配置")
+            else:
+                # 尝试进行简单的API调用测试
+                try:
+                    # 导入但不执行，避免每次检查都调用API
+                    from modules.langchain.llm import get_llm_response_with_cache
+                except Exception as e:
+                    ai_status = "warning"
+                    logger.warning(f"AI模块加载异常: {str(e)}")
+        except Exception as e:
+            ai_status = "error"
+            logger.error(f"检查AI服务状态时出错: {str(e)}")
+
+        # 检查推送服务状态
+        notification_status = "normal"  # 默认为正常状态
+        try:
+            # 检查推送URL是否配置
+            from services.config_service import get_config
+            apprise_urls = get_config('APPRISE_URLS')
+            if not apprise_urls:
+                notification_status = "warning"
+                logger.warning("推送服务URL未配置")
+            else:
+                # 尝试加载推送模块
+                try:
+                    from modules.bots.apprise_adapter import send_notification
+                except Exception as e:
+                    notification_status = "warning"
+                    logger.warning(f"推送模块加载异常: {str(e)}")
+        except Exception as e:
+            notification_status = "error"
+            logger.error(f"检查推送服务状态时出错: {str(e)}")
+
+        # 返回状态信息
+        return jsonify({
+            "success": True,
+            "database_status": database_status,
+            "ai_status": ai_status,
+            "notification_status": notification_status,
+            "timestamp": datetime.datetime.now().timestamp()
+        })
+    except Exception as e:
+        logger.error(f"获取系统状态时出错: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"获取系统状态失败: {str(e)}",
+            "database_status": "error",
+            "ai_status": "error",
+            "notification_status": "error",
+            "timestamp": datetime.datetime.now().timestamp()
+        }), 500
 
 @test_api.route('/twitter', methods=['POST'])
 def test_twitter():
@@ -135,8 +223,26 @@ def test_notification():
                 return jsonify({"success": False, "message": f"不支持的Content-Type: {request.content_type}"}), 415
         urls = data.get('urls', '')
 
+        # 如果没有提供URLs，从系统配置中获取
         if not urls:
-            return jsonify({"success": False, "message": "未提供推送URL"}), 400
+            # 从环境变量或配置服务获取
+            try:
+                from services.config_service import get_config
+                urls = get_config('APPRISE_URLS', '')
+                logger.info(f"从系统配置获取推送URLs")
+            except Exception as e:
+                logger.error(f"从系统配置获取推送URLs时出错: {str(e)}")
+
+            # 如果仍然没有URLs，尝试从环境变量直接获取
+            if not urls:
+                urls = os.getenv('APPRISE_URLS', '')
+                logger.info(f"从环境变量获取推送URLs")
+
+            # 如果仍然没有URLs，返回错误
+            if not urls:
+                return jsonify({"success": False, "message": "未配置推送URL，请在系统设置中配置"}), 400
+
+            logger.info(f"使用系统配置的推送URLs进行测试")
 
         # 导入Apprise
         try:
@@ -215,7 +321,12 @@ def test_notification():
                     })
                 else:
                     # 收集错误信息
-                    for server in apobj.servers():
+                    # 兼容不同版本的Apprise库
+                    servers = apobj.servers
+                    if callable(servers):
+                        servers = servers()
+
+                    for server in servers:
                         if hasattr(server, 'last_error') and server.last_error:
                             error_info = f"{server.url}: {server.last_error}"
                             logger.error(f"推送服务错误: {error_info}")
@@ -280,6 +391,84 @@ def test_notification():
         logger.error(f"测试推送时出错: {str(e)}")
         return jsonify({"success": False, "message": f"测试推送失败: {str(e)}"}), 500
 
+@test_api.route('/send_notification', methods=['POST'])
+def send_test_notification():
+    """发送测试推送消息"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登录"}), 401
+
+    try:
+        # 获取请求参数
+        try:
+            data = request.get_json() or {}
+            logger.debug(f"收到JSON数据: {data}")
+        except Exception as e:
+            logger.error(f"解析JSON数据时出错: {str(e)}")
+            if request.content_type == 'application/x-www-form-urlencoded':
+                data = request.form.to_dict()
+                logger.debug(f"收到表单数据: {data}")
+            else:
+                logger.error(f"不支持的Content-Type: {request.content_type}")
+                return jsonify({"success": False, "message": f"不支持的Content-Type: {request.content_type}"}), 415
+
+        # 获取消息内容
+        message = data.get('message', '')
+        if not message:
+            return jsonify({"success": False, "message": "消息内容不能为空"}), 400
+
+        # 导入推送模块
+        try:
+            from modules.bots.apprise_adapter import send_notification
+        except ImportError:
+            logger.error("未找到推送模块")
+            return jsonify({"success": False, "message": "未找到推送模块，无法发送推送"}), 500
+
+        # 获取推送配置
+        from services.config_service import get_config
+        apprise_urls = get_config('APPRISE_URLS', '')
+
+        # 如果配置服务中没有，尝试从环境变量获取
+        if not apprise_urls:
+            apprise_urls = os.getenv('APPRISE_URLS', '')
+            logger.info(f"从环境变量获取推送URLs")
+
+        # 如果仍然没有，返回错误
+        if not apprise_urls:
+            logger.warning("未配置推送URL")
+            return jsonify({"success": False, "message": "未配置推送URL，请先在系统设置中配置推送"}), 400
+
+        logger.info(f"使用推送URLs发送测试消息")
+
+        # 添加时间戳到消息
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        title = f"TweetAnalyst测试消息 ({timestamp})"
+
+        # 发送推送
+        logger.info(f"开始发送测试推送消息: {message}")
+        result = send_notification(message=message, title=title)
+
+        if result:
+            logger.info("测试推送消息发送成功")
+            return jsonify({
+                "success": True,
+                "message": "测试推送消息发送成功",
+                "data": {
+                    "timestamp": timestamp,
+                    "title": title,
+                    "message": message
+                }
+            })
+        else:
+            logger.warning("测试推送消息发送失败")
+            return jsonify({
+                "success": False,
+                "message": "测试推送消息发送失败，请检查推送配置和网络连接"
+            })
+    except Exception as e:
+        logger.error(f"发送测试推送消息时出错: {str(e)}")
+        return jsonify({"success": False, "message": f"发送测试推送消息失败: {str(e)}"}), 500
+
 @test_api.route('/system_status', methods=['GET'])
 def get_system_status():
     """获取系统状态"""
@@ -292,3 +481,594 @@ def get_system_status():
     system_status = check_system_status()
 
     return jsonify({"success": True, "data": system_status})
+
+@test_api.route('/preview_export', methods=['POST'])
+def preview_export():
+    """预览导出数据"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登录"}), 401
+
+    try:
+        # 获取请求参数
+        try:
+            data = request.get_json() or {}
+            logger.debug(f"收到JSON数据: {data}")
+        except Exception as e:
+            logger.error(f"解析JSON数据时出错: {str(e)}")
+            if request.content_type == 'application/x-www-form-urlencoded':
+                data = request.form.to_dict()
+                logger.debug(f"收到表单数据: {data}")
+            else:
+                logger.error(f"不支持的Content-Type: {request.content_type}")
+                return jsonify({"success": False, "message": f"不支持的Content-Type: {request.content_type}"}), 415
+
+        # 获取导出类型和范围
+        export_types = data.get('types', [])
+        export_scope = data.get('scope', 'all')
+
+        if not export_types:
+            return jsonify({"success": False, "message": "未指定导出数据类型"}), 400
+
+        # 从数据库获取预览数据
+        preview_data = {}
+
+        # 账号数据预览
+        if 'accounts' in export_types:
+            from models import SocialAccount
+            accounts = SocialAccount.query.limit(5).all()
+            preview_data['accounts'] = [account.to_dict() for account in accounts]
+
+        # 分析结果预览
+        if 'results' in export_types:
+            from models import AnalysisResult
+
+            # 根据导出范围调整查询
+            if export_scope == 'recent':
+                # 最近30天的数据
+                cutoff_date = datetime.datetime.now() - datetime.timedelta(days=30)
+                results = AnalysisResult.query.filter(AnalysisResult.created_at >= cutoff_date).limit(5).all()
+            elif export_scope == 'essential':
+                # 核心配置不包含分析结果
+                results = []
+            else:
+                # 所有数据
+                results = AnalysisResult.query.limit(5).all()
+
+            # 转换为字典
+            preview_data['results'] = []
+            for result in results:
+                result_dict = {
+                    'post_id': result.post_id,
+                    'platform': result.social_network,  # 使用social_network字段作为platform
+                    'account_id': result.account_id,
+                    'content': result.content[:100] + '...' if result.content and len(result.content) > 100 else result.content,
+                    'is_relevant': result.is_relevant,
+                    'confidence': result.confidence,
+                    'reason': result.reason,
+                    'analysis': result.analysis[:100] + '...' if result.analysis and len(result.analysis) > 100 else result.analysis,
+                    'created_at': result.created_at.isoformat() if result.created_at else None
+                }
+                preview_data['results'].append(result_dict)
+
+        # 配置数据预览
+        if 'configs' in export_types:
+            from models import SystemConfig
+
+            # 获取配置数据
+            configs = SystemConfig.query.all()
+
+            # 分类配置
+            config_data = {
+                'llm': [],
+                'twitter': [],
+                'notification': [],
+                'other': []
+            }
+
+            for config in configs:
+                config_dict = {
+                    'key': config.key,
+                    'value': '******' if config.is_secret else config.value,
+                    'description': config.description,
+                    'is_secret': config.is_secret
+                }
+
+                # 根据键名分类
+                if config.key.startswith('LLM_'):
+                    config_data['llm'].append(config_dict)
+                elif config.key.startswith('TWITTER_'):
+                    config_data['twitter'].append(config_dict)
+                elif config.key.startswith('NOTIFICATION_') or config.key.startswith('PUSH_'):
+                    config_data['notification'].append(config_dict)
+                else:
+                    config_data['other'].append(config_dict)
+
+            preview_data['configs'] = config_data
+
+        # 通知配置预览
+        if 'notifications' in export_types:
+            from models import NotificationService
+
+            services = NotificationService.query.limit(5).all()
+            preview_data['notification_services'] = []
+
+            for service in services:
+                service_dict = {
+                    'name': service.name,
+                    'service_type': service.service_type,
+                    'config_url': '******' if service.config_url else '',
+                    'is_active': service.is_active
+                }
+                preview_data['notification_services'].append(service_dict)
+
+        # 添加元数据
+        preview_data['version'] = '1.1'
+        preview_data['export_time'] = datetime.datetime.now().isoformat()
+        preview_data['export_type'] = 'preview'
+
+        return jsonify({
+            "success": True,
+            "message": "成功生成导出数据预览",
+            "data": preview_data
+        })
+
+    except Exception as e:
+        logger.error(f"生成导出数据预览时出错: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"生成导出数据预览失败: {str(e)}"
+        }), 500
+
+@test_api.route('/validate_import_file', methods=['POST'])
+def validate_import_file():
+    """验证导入文件"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登录"}), 401
+
+    try:
+        # 获取请求参数
+        try:
+            data = request.get_json() or {}
+            logger.debug(f"收到JSON数据: {data}")
+        except Exception as e:
+            logger.error(f"解析JSON数据时出错: {str(e)}")
+            if request.content_type == 'application/x-www-form-urlencoded':
+                data = request.form.to_dict()
+                logger.debug(f"收到表单数据: {data}")
+            else:
+                logger.error(f"不支持的Content-Type: {request.content_type}")
+                return jsonify({"success": False, "message": f"不支持的Content-Type: {request.content_type}"}), 415
+
+        # 获取文件数据
+        file_data = data.get('file_data', {})
+
+        if not file_data:
+            return jsonify({"success": False, "message": "未提供文件数据"}), 400
+
+        # 验证文件格式
+        validation_result = {
+            "success": True,
+            "message": "文件验证通过",
+            "data": {
+                "valid": True,
+                "issues": []
+            }
+        }
+
+        # 检查必要字段
+        required_fields = ['version', 'accounts']
+        missing_fields = [field for field in required_fields if field not in file_data]
+
+        if missing_fields:
+            validation_result["success"] = False
+            validation_result["message"] = f"文件格式不正确，缺少必要字段: {', '.join(missing_fields)}"
+            validation_result["data"]["valid"] = False
+            validation_result["data"]["issues"].append({
+                "type": "missing_fields",
+                "message": f"缺少必要字段: {', '.join(missing_fields)}"
+            })
+            return jsonify(validation_result)
+
+        # 验证版本
+        version = file_data.get('version', '1.0')
+        if not isinstance(version, str):
+            validation_result["data"]["issues"].append({
+                "type": "warning",
+                "message": "版本号应为字符串格式"
+            })
+
+        # 验证账号数据
+        accounts = file_data.get('accounts', [])
+        if not isinstance(accounts, list):
+            validation_result["success"] = False
+            validation_result["message"] = "账号数据格式不正确，应为数组"
+            validation_result["data"]["valid"] = False
+            validation_result["data"]["issues"].append({
+                "type": "invalid_format",
+                "message": "账号数据格式不正确，应为数组"
+            })
+        else:
+            invalid_accounts = []
+            for i, account in enumerate(accounts):
+                if not isinstance(account, dict):
+                    invalid_accounts.append(f"索引 {i}: 不是有效的对象")
+                    continue
+
+                if 'type' not in account or 'account_id' not in account:
+                    invalid_accounts.append(f"索引 {i}: 缺少必要字段 type 或 account_id")
+
+            if invalid_accounts:
+                validation_result["data"]["issues"].append({
+                    "type": "warning",
+                    "message": f"发现 {len(invalid_accounts)} 个无效账号数据，这些数据将被跳过",
+                    "details": invalid_accounts
+                })
+
+        # 验证分析结果数据
+        results = file_data.get('results', [])
+        if results and not isinstance(results, list):
+            validation_result["data"]["issues"].append({
+                "type": "warning",
+                "message": "分析结果数据格式不正确，应为数组，此部分将被跳过"
+            })
+        elif results:
+            invalid_results = []
+            for i, result in enumerate(results):
+                if not isinstance(result, dict):
+                    invalid_results.append(f"索引 {i}: 不是有效的对象")
+                    continue
+
+                if 'post_id' not in result or ('platform' not in result and 'social_network' not in result) or 'account_id' not in result:
+                    invalid_results.append(f"索引 {i}: 缺少必要字段 post_id, platform/social_network 或 account_id")
+
+            if invalid_results:
+                validation_result["data"]["issues"].append({
+                    "type": "warning",
+                    "message": f"发现 {len(invalid_results)} 个无效分析结果数据，这些数据将被跳过",
+                    "details": invalid_results[:10]  # 只返回前10个，避免响应过大
+                })
+
+        # 验证配置数据
+        configs = file_data.get('configs', {})
+        if configs and not isinstance(configs, dict):
+            validation_result["data"]["issues"].append({
+                "type": "warning",
+                "message": "配置数据格式不正确，应为对象，此部分将被跳过"
+            })
+
+        # 统计数据
+        validation_result["data"]["stats"] = {
+            "account_count": len(accounts) if isinstance(accounts, list) else 0,
+            "result_count": len(results) if isinstance(results, list) else 0,
+            "config_count": len(configs) if isinstance(configs, dict) else 0
+        }
+
+        # 如果有警告但没有错误，仍然标记为有效
+        if validation_result["data"]["issues"] and validation_result["data"]["valid"]:
+            validation_result["message"] = "文件验证通过，但有一些警告"
+
+        return jsonify(validation_result)
+
+    except Exception as e:
+        logger.error(f"验证导入文件时出错: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"验证文件失败: {str(e)}",
+            "data": {
+                "valid": False,
+                "issues": [{
+                    "type": "error",
+                    "message": str(e)
+                }]
+            }
+        }), 500
+
+@test_api.route('/clean_database', methods=['POST'])
+def clean_database():
+    """清理数据库"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登录"}), 401
+
+    try:
+        # 获取请求参数
+        try:
+            data = request.get_json() or {}
+            logger.debug(f"收到JSON数据: {data}")
+        except Exception as e:
+            logger.error(f"解析JSON数据时出错: {str(e)}")
+            if request.content_type == 'application/x-www-form-urlencoded':
+                data = request.form.to_dict()
+                logger.debug(f"收到表单数据: {data}")
+            else:
+                logger.error(f"不支持的Content-Type: {request.content_type}")
+                return jsonify({"success": False, "message": f"不支持的Content-Type: {request.content_type}"}), 415
+
+        # 获取清理类型
+        clean_type = data.get('type', 'all')
+        days = int(data.get('days', 30))
+        max_records = int(data.get('max_records', 0))
+        account_id = data.get('account_id', '')
+
+        # 记录操作开始
+        if max_records > 0:
+            logger.info(f"开始清理数据库，类型: {clean_type}, 保留最大记录数: {max_records}, 账号ID: {account_id or '所有账号'}")
+        else:
+            logger.info(f"开始清理数据库，类型: {clean_type}, 保留天数: {days}, 账号ID: {account_id or '所有账号'}")
+
+        # 计算截止日期
+        cutoff_date = datetime.datetime.now() - datetime.timedelta(days=days)
+
+        # 根据类型执行不同的清理操作
+        deleted_count = 0
+
+        if clean_type == 'all':
+            # 清理所有数据
+            if max_records > 0:
+                # 基于数量的清理
+                if account_id:
+                    # 针对特定账号
+                    # 1. 获取该账号的所有记录，按时间降序排序
+                    records = AnalysisResult.query.filter_by(account_id=account_id).order_by(AnalysisResult.post_time.desc()).all()
+                    # 2. 如果记录数超过最大值，删除多余的记录
+                    if len(records) > max_records:
+                        # 获取要删除的记录ID
+                        records_to_delete = records[max_records:]
+                        delete_ids = [record.id for record in records_to_delete]
+                        # 删除记录
+                        deleted_count = AnalysisResult.query.filter(AnalysisResult.id.in_(delete_ids)).delete()
+                        db.session.commit()
+                        logger.info(f"已清理账号 {account_id} 的 {deleted_count} 条记录，保留最新的 {max_records} 条")
+                else:
+                    # 针对所有账号
+                    # 获取所有不同的账号ID
+                    account_ids = db.session.query(AnalysisResult.account_id).distinct().all()
+                    account_ids = [account[0] for account in account_ids]
+
+                    # 对每个账号分别处理
+                    for acc_id in account_ids:
+                        # 1. 获取该账号的所有记录，按时间降序排序
+                        records = AnalysisResult.query.filter_by(account_id=acc_id).order_by(AnalysisResult.post_time.desc()).all()
+                        # 2. 如果记录数超过最大值，删除多余的记录
+                        if len(records) > max_records:
+                            # 获取要删除的记录ID
+                            records_to_delete = records[max_records:]
+                            delete_ids = [record.id for record in records_to_delete]
+                            # 删除记录
+                            acc_deleted_count = AnalysisResult.query.filter(AnalysisResult.id.in_(delete_ids)).delete()
+                            deleted_count += acc_deleted_count
+                            logger.info(f"已清理账号 {acc_id} 的 {acc_deleted_count} 条记录，保留最新的 {max_records} 条")
+
+                    db.session.commit()
+                    logger.info(f"已清理所有账号的旧记录，共 {deleted_count} 条，每个账号保留最新的 {max_records} 条")
+            else:
+                # 基于时间的清理
+                if account_id:
+                    # 针对特定账号
+                    deleted_count = AnalysisResult.query.filter(
+                        AnalysisResult.account_id == account_id,
+                        AnalysisResult.created_at < cutoff_date
+                    ).delete()
+                    db.session.commit()
+                    logger.info(f"已清理账号 {account_id} 的 {deleted_count} 条超过 {days} 天的数据")
+                else:
+                    # 针对所有账号
+                    deleted_count = AnalysisResult.query.filter(AnalysisResult.created_at < cutoff_date).delete()
+                    db.session.commit()
+                    logger.info(f"已清理所有 {deleted_count} 条超过 {days} 天的数据")
+
+        elif clean_type == 'irrelevant':
+            # 只清理不相关的数据
+            if max_records > 0:
+                # 基于数量的清理
+                if account_id:
+                    # 针对特定账号
+                    # 1. 获取该账号的所有不相关记录，按时间降序排序
+                    records = AnalysisResult.query.filter_by(account_id=account_id, is_relevant=False).order_by(AnalysisResult.post_time.desc()).all()
+                    # 2. 如果记录数超过最大值，删除多余的记录
+                    if len(records) > max_records:
+                        # 获取要删除的记录ID
+                        records_to_delete = records[max_records:]
+                        delete_ids = [record.id for record in records_to_delete]
+                        # 删除记录
+                        deleted_count = AnalysisResult.query.filter(AnalysisResult.id.in_(delete_ids)).delete()
+                        db.session.commit()
+                        logger.info(f"已清理账号 {account_id} 的 {deleted_count} 条不相关记录，保留最新的 {max_records} 条")
+                else:
+                    # 针对所有账号
+                    # 获取所有不同的账号ID
+                    account_ids = db.session.query(AnalysisResult.account_id).distinct().all()
+                    account_ids = [account[0] for account in account_ids]
+
+                    # 对每个账号分别处理
+                    for acc_id in account_ids:
+                        # 1. 获取该账号的所有不相关记录，按时间降序排序
+                        records = AnalysisResult.query.filter_by(account_id=acc_id, is_relevant=False).order_by(AnalysisResult.post_time.desc()).all()
+                        # 2. 如果记录数超过最大值，删除多余的记录
+                        if len(records) > max_records:
+                            # 获取要删除的记录ID
+                            records_to_delete = records[max_records:]
+                            delete_ids = [record.id for record in records_to_delete]
+                            # 删除记录
+                            acc_deleted_count = AnalysisResult.query.filter(AnalysisResult.id.in_(delete_ids)).delete()
+                            deleted_count += acc_deleted_count
+                            logger.info(f"已清理账号 {acc_id} 的 {acc_deleted_count} 条不相关记录，保留最新的 {max_records} 条")
+
+                    db.session.commit()
+                    logger.info(f"已清理所有账号的旧不相关记录，共 {deleted_count} 条，每个账号保留最新的 {max_records} 条")
+            else:
+                # 基于时间的清理
+                if account_id:
+                    # 针对特定账号
+                    deleted_count = AnalysisResult.query.filter(
+                        AnalysisResult.account_id == account_id,
+                        AnalysisResult.created_at < cutoff_date,
+                        AnalysisResult.is_relevant == False
+                    ).delete()
+                    db.session.commit()
+                    logger.info(f"已清理账号 {account_id} 的 {deleted_count} 条超过 {days} 天的不相关数据")
+                else:
+                    # 针对所有账号
+                    deleted_count = AnalysisResult.query.filter(
+                        AnalysisResult.created_at < cutoff_date,
+                        AnalysisResult.is_relevant == False
+                    ).delete()
+                    db.session.commit()
+                    logger.info(f"已清理 {deleted_count} 条超过 {days} 天的不相关数据")
+
+        elif clean_type == 'all_irrelevant':
+            # 清理所有不相关的数据，不考虑时间
+            if account_id:
+                # 针对特定账号
+                deleted_count = AnalysisResult.query.filter(
+                    AnalysisResult.account_id == account_id,
+                    AnalysisResult.is_relevant == False
+                ).delete()
+                db.session.commit()
+                logger.info(f"已清理账号 {account_id} 的所有 {deleted_count} 条不相关数据")
+            else:
+                # 针对所有账号
+                deleted_count = AnalysisResult.query.filter(AnalysisResult.is_relevant == False).delete()
+                db.session.commit()
+                logger.info(f"已清理所有 {deleted_count} 条不相关数据")
+
+        elif clean_type == 'truncate':
+            # 清空整个表
+            # 使用原生SQL执行TRUNCATE操作，但需要使用text()函数明确声明为文本SQL
+            from sqlalchemy import text
+            db.session.execute(text('DELETE FROM analysis_result'))
+            db.session.commit()
+            logger.warning("已清空整个分析结果表")
+            deleted_count = -1  # 表示清空整个表
+
+        else:
+            return jsonify({"success": False, "message": f"不支持的清理类型: {clean_type}"}), 400
+
+        # 返回结果
+        result_data = {
+            "type": clean_type,
+            "deleted_count": deleted_count if deleted_count != -1 else "全部",
+        }
+
+        # 添加额外的参数
+        if max_records > 0:
+            result_data["max_records"] = max_records
+        else:
+            result_data["days"] = days
+            if clean_type != 'truncate' and clean_type != 'all_irrelevant':
+                result_data["cutoff_date"] = cutoff_date.isoformat()
+
+        if account_id:
+            result_data["account_id"] = account_id
+
+        return jsonify({
+            "success": True,
+            "message": "数据库清理成功",
+            "data": result_data
+        })
+
+    except Exception as e:
+        logger.error(f"清理数据库时出错: {str(e)}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"清理数据库失败: {str(e)}"}), 500
+
+@test_api.route('/clean_logs', methods=['POST'])
+def clean_logs():
+    """清理日志文件"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登录"}), 401
+
+    try:
+        # 获取请求参数
+        try:
+            data = request.get_json() or {}
+            logger.debug(f"收到JSON数据: {data}")
+        except Exception as e:
+            logger.error(f"解析JSON数据时出错: {str(e)}")
+            if request.content_type == 'application/x-www-form-urlencoded':
+                data = request.form.to_dict()
+                logger.debug(f"收到表单数据: {data}")
+            else:
+                logger.error(f"不支持的Content-Type: {request.content_type}")
+                return jsonify({"success": False, "message": f"不支持的Content-Type: {request.content_type}"}), 415
+
+        # 获取清理类型
+        clean_type = data.get('type', 'empty')
+
+        # 获取日志目录
+        logs_dir = os.path.join(os.getcwd(), 'logs')
+        if not os.path.exists(logs_dir):
+            return jsonify({"success": False, "message": "日志目录不存在"}), 404
+
+        # 记录操作开始
+        logger.info(f"开始清理日志文件，类型: {clean_type}")
+
+        # 根据类型执行不同的清理操作
+        cleaned_files = []
+
+        if clean_type == 'empty':
+            # 清空所有日志文件内容，但保留文件
+            log_files = glob.glob(os.path.join(logs_dir, '*.log'))
+            for file_path in log_files:
+                try:
+                    with open(file_path, 'w') as f:
+                        f.write('')
+                    cleaned_files.append(os.path.basename(file_path))
+                except Exception as e:
+                    logger.error(f"清空日志文件 {file_path} 时出错: {str(e)}")
+
+            logger.info(f"已清空 {len(cleaned_files)} 个日志文件")
+
+        elif clean_type == 'delete':
+            # 删除所有日志文件
+            log_files = glob.glob(os.path.join(logs_dir, '*.log'))
+            for file_path in log_files:
+                try:
+                    os.remove(file_path)
+                    cleaned_files.append(os.path.basename(file_path))
+                except Exception as e:
+                    logger.error(f"删除日志文件 {file_path} 时出错: {str(e)}")
+
+            logger.info(f"已删除 {len(cleaned_files)} 个日志文件")
+
+        elif clean_type == 'backup_and_empty':
+            # 备份并清空日志文件
+            backup_dir = os.path.join(logs_dir, f'backup_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}')
+            os.makedirs(backup_dir, exist_ok=True)
+
+            log_files = glob.glob(os.path.join(logs_dir, '*.log'))
+            for file_path in log_files:
+                try:
+                    # 备份文件
+                    shutil.copy2(file_path, os.path.join(backup_dir, os.path.basename(file_path)))
+
+                    # 清空文件
+                    with open(file_path, 'w') as f:
+                        f.write('')
+
+                    cleaned_files.append(os.path.basename(file_path))
+                except Exception as e:
+                    logger.error(f"备份并清空日志文件 {file_path} 时出错: {str(e)}")
+
+            logger.info(f"已备份并清空 {len(cleaned_files)} 个日志文件，备份目录: {backup_dir}")
+
+        else:
+            return jsonify({"success": False, "message": f"不支持的清理类型: {clean_type}"}), 400
+
+        # 返回结果
+        return jsonify({
+            "success": True,
+            "message": "日志清理成功",
+            "data": {
+                "type": clean_type,
+                "cleaned_files": cleaned_files,
+                "count": len(cleaned_files)
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"清理日志文件时出错: {str(e)}")
+        return jsonify({"success": False, "message": f"清理日志文件失败: {str(e)}"}), 500

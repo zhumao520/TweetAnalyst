@@ -242,8 +242,8 @@ def test_page():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    # 获取系统状态
-    from utils.test_utils import check_system_status
+    # 获取系统状态 - 使用服务模块中的函数，避免循环导入
+    from services.test_service import check_system_status
     system_status = check_system_status()
 
     return render_template('test.html', system_status=system_status)
@@ -436,12 +436,21 @@ def results():
 
     query = AnalysisResult.query
 
-    if account_id:
+    # 只有当account_id存在且不是'undefined'时才应用筛选
+    if account_id and account_id.lower() != 'undefined':
+        logger.info(f"按账号ID筛选结果: {account_id}")
         query = query.filter_by(account_id=account_id)
+    elif account_id == 'undefined':
+        logger.warning("收到无效的account_id参数: 'undefined'，忽略此筛选条件")
 
     if is_relevant is not None:
-        is_relevant_bool = is_relevant.lower() == 'true'
-        query = query.filter_by(is_relevant=is_relevant_bool)
+        # 确保is_relevant是有效的布尔值字符串
+        if is_relevant.lower() in ['true', 'false']:
+            is_relevant_bool = is_relevant.lower() == 'true'
+            logger.info(f"按相关性筛选结果: {is_relevant_bool}")
+            query = query.filter_by(is_relevant=is_relevant_bool)
+        else:
+            logger.warning(f"收到无效的is_relevant参数: {is_relevant}，忽略此筛选条件")
 
     results = query.order_by(AnalysisResult.created_at.desc()).paginate(page=page, per_page=per_page)
 
@@ -517,6 +526,7 @@ def add_account():
         account_id = request.form.get('account_id')
         tag = request.form.get('tag', 'all')
         enable_auto_reply = request.form.get('enable_auto_reply') == 'on'
+        bypass_ai = request.form.get('bypass_ai') == 'on'
         prompt_template = request.form.get('prompt_template')
         auto_reply_template = request.form.get('auto_reply_template')
 
@@ -540,6 +550,7 @@ def add_account():
             account_id=account_id,
             tag=tag,
             enable_auto_reply=enable_auto_reply,
+            bypass_ai=bypass_ai,
             prompt_template=prompt_template,
             auto_reply_template=auto_reply_template
         )
@@ -557,23 +568,67 @@ def add_account():
     # 获取默认提示词模板
     default_prompt = get_default_prompt_template('twitter')
 
+    # 获取默认自动回复模板
+    default_reply_prompt = """请根据以下社交媒体内容和分析结果，生成一个友好、专业的回复。
+回复应该简洁、有礼貌，并且与原内容相关。如果内容与AI相关，可以提供一些见解或提问。
+
+原始内容：
+{content}
+
+分析结果：
+{analysis}
+
+回复要求：
+1. 称呼用户为 @{username}
+2. 回复长度控制在280字符以内
+3. 语气友好专业
+4. 不要使用过多表情符号
+5. 如果内容与AI无关，回复应该简短礼貌
+
+请直接给出回复内容，不要包含其他说明。"""
+
     return render_template('account_form.html',
                           account=None,
                           default_prompt=default_prompt,
+                          default_reply_prompt=default_reply_prompt,
                           action='add')
 
-@app.route('/accounts/edit/<int:id>', methods=['GET', 'POST'])
-def edit_account(id):
+@app.route('/accounts/edit/<account_id>', methods=['GET', 'POST'])
+def edit_account(account_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    account = SocialAccount.query.get_or_404(id)
+    # 尝试将account_id转换为整数（兼容旧版本的路由）
+    try:
+        id_as_int = int(account_id)
+        account = SocialAccount.query.get(id_as_int)
+        if account:
+            logger.info(f"通过ID查找账号: {id_as_int}")
+        else:
+            # 如果找不到，尝试通过account_id查找
+            account = SocialAccount.query.filter_by(account_id=account_id).first()
+            if account:
+                logger.info(f"通过account_id查找账号: {account_id}")
+            else:
+                logger.error(f"未找到账号: {account_id}")
+                flash(f'未找到ID为 {account_id} 的账号', 'danger')
+                return redirect(url_for('accounts'))
+    except ValueError:
+        # 如果不是整数，直接通过account_id查找
+        account = SocialAccount.query.filter_by(account_id=account_id).first()
+        if account:
+            logger.info(f"通过account_id查找账号: {account_id}")
+        else:
+            logger.error(f"未找到账号: {account_id}")
+            flash(f'未找到ID为 {account_id} 的账号', 'danger')
+            return redirect(url_for('accounts'))
 
     if request.method == 'POST':
         account.type = request.form.get('type')
         account.account_id = request.form.get('account_id')
         account.tag = request.form.get('tag', 'all')
         account.enable_auto_reply = request.form.get('enable_auto_reply') == 'on'
+        account.bypass_ai = request.form.get('bypass_ai') == 'on'
         account.prompt_template = request.form.get('prompt_template')
         account.auto_reply_template = request.form.get('auto_reply_template')
 
@@ -587,19 +642,52 @@ def edit_account(id):
         return redirect(url_for('accounts'))
 
     # 获取默认提示词模板
-    default_prompt = get_default_prompt_template(account.type)
+    default_prompt = get_default_prompt_template(account.type if account else 'twitter')
+
+    # 获取默认自动回复模板
+    default_reply_prompt = """请根据以下社交媒体内容和分析结果，生成一个友好、专业的回复。
+回复应该简洁、有礼貌，并且与原内容相关。如果内容与AI相关，可以提供一些见解或提问。
+
+原始内容：
+{content}
+
+分析结果：
+{analysis}
+
+回复要求：
+1. 称呼用户为 @{username}
+2. 回复长度控制在280字符以内
+3. 语气友好专业
+4. 不要使用过多表情符号
+5. 如果内容与AI无关，回复应该简短礼貌
+
+请直接给出回复内容，不要包含其他说明。"""
 
     return render_template('account_form.html',
                           account=account,
                           default_prompt=default_prompt,
+                          default_reply_prompt=default_reply_prompt,
                           action='edit')
 
-@app.route('/accounts/delete/<int:id>', methods=['POST'])
-def delete_account(id):
+@app.route('/accounts/delete/<account_id>', methods=['POST'])
+def delete_account(account_id):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    account = SocialAccount.query.get_or_404(id)
+    # 尝试将account_id转换为整数（兼容旧版本的路由）
+    try:
+        id_as_int = int(account_id)
+        account = SocialAccount.query.get(id_as_int)
+        if account:
+            logger.info(f"通过ID删除账号: {id_as_int}")
+        else:
+            # 如果找不到，尝试通过account_id查找
+            account = SocialAccount.query.filter_by(account_id=account_id).first_or_404()
+            logger.info(f"通过account_id删除账号: {account_id}")
+    except ValueError:
+        # 如果不是整数，直接通过account_id查找
+        account = SocialAccount.query.filter_by(account_id=account_id).first_or_404()
+        logger.info(f"通过account_id删除账号: {account_id}")
 
     db.session.delete(account)
     db.session.commit()
@@ -633,6 +721,28 @@ def init_db():
                 # 只创建不存在的表，保留现有数据
                 db.create_all()
                 logger.info("已创建缺失的表（如果有）")
+
+                # 检查并修复 social_account 表中缺少的 bypass_ai 列
+                try:
+                    # 检查 bypass_ai 列是否存在
+                    columns = [column['name'] for column in inspector.get_columns('social_account')]
+
+                    if 'bypass_ai' not in columns:
+                        logger.info("检测到 social_account 表缺少 bypass_ai 列，尝试添加")
+
+                        # 使用 SQLAlchemy 执行 ALTER TABLE 语句
+                        from sqlalchemy import text
+                        with db.engine.connect() as conn:
+                            conn.execute(text('ALTER TABLE social_account ADD COLUMN bypass_ai BOOLEAN DEFAULT FALSE'))
+                            # 创建索引
+                            conn.execute(text('CREATE INDEX idx_bypass_ai ON social_account (bypass_ai)'))
+                            conn.commit()
+
+                        logger.info("成功添加 bypass_ai 列和索引")
+                    else:
+                        logger.info("bypass_ai 列已存在，无需修复")
+                except Exception as e:
+                    logger.error(f"修复 social_account 表时出错: {str(e)}")
             else:
                 # 首次创建所有表
                 logger.info("数据库为空，创建所有表")
@@ -744,6 +854,16 @@ def init_db():
         except Exception as e:
             logger.error(f"创建默认管理员用户时出错: {str(e)}")
 
+        # 运行通知服务表迁移脚本
+        try:
+            from migrations.add_notification_services_table import run_migration
+            if run_migration():
+                logger.info("通知服务表迁移成功")
+            else:
+                logger.warning("通知服务表迁移失败")
+        except Exception as e:
+            logger.error(f"运行通知服务表迁移脚本时出错: {str(e)}")
+
     logger.info("数据库初始化完成")
 
 # 保存分析结果的API端点已移动到api/analytics.py
@@ -754,6 +874,10 @@ def export_data():
     """导出所有数据为JSON文件"""
     if 'user_id' not in session:
         return redirect(url_for('login'))
+
+    # 如果没有参数，重定向到数据传输页面，并显示导出选项卡
+    if not request.args:
+        return redirect(url_for('data_transfer', tab='export'))
 
     try:
         # 导出监控的账号数据（这是最重要的配置）
@@ -838,6 +962,15 @@ def export_data():
         flash(f"导出数据失败: {str(e)}", 'danger')
         return redirect(url_for('index'))
 
+# 数据传输功能（导入和导出）
+@app.route('/data_transfer', methods=['GET'])
+def data_transfer():
+    """数据传输页面（导入和导出）"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    return render_template('data_transfer.html')
+
 # 数据导入功能
 @app.route('/import_data', methods=['GET', 'POST'])
 def import_data():
@@ -845,241 +978,275 @@ def import_data():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    if request.method == 'POST':
-        # 检查是否有文件上传
-        if 'import_file' not in request.files:
-            flash('没有选择文件', 'danger')
-            return redirect(request.url)
+    if request.method == 'GET':
+        # GET请求重定向到数据传输页面，并显示导入选项卡
+        return redirect(url_for('data_transfer'))
 
-        file = request.files['import_file']
+    # POST请求处理导入逻辑
+    # 检查是否有文件上传
+    if 'import_file' not in request.files:
+        flash('没有选择文件', 'danger')
+        return redirect(url_for('data_transfer'))
 
-        # 检查文件名
-        if file.filename == '':
-            flash('没有选择文件', 'danger')
-            return redirect(request.url)
+    file = request.files['import_file']
 
-        # 检查文件类型
-        if not file.filename.endswith('.json'):
-            flash('只支持导入JSON文件', 'danger')
-            return redirect(request.url)
+    # 检查文件名
+    if file.filename == '':
+        flash('没有选择文件', 'danger')
+        return redirect(url_for('data_transfer'))
 
-        try:
-            # 读取并解析JSON数据
-            import_data = json.loads(file.read().decode('utf-8'))
+    # 检查文件类型
+    if not file.filename.endswith('.json'):
+        flash('只支持导入JSON文件', 'danger')
+        return redirect(url_for('data_transfer'))
 
-            # 验证数据格式
-            if 'accounts' not in import_data or 'version' not in import_data:
-                flash('导入文件格式不正确，缺少必要的数据字段', 'danger')
-                return redirect(request.url)
+    try:
+        # 读取并解析JSON数据
+        import_data = json.loads(file.read().decode('utf-8'))
 
-            # 检测导出文件版本
-            version = import_data.get('version', '1.0')
-            is_essential_export = import_data.get('export_type') == 'essential'
+        # 验证数据格式
+        if 'accounts' not in import_data or 'version' not in import_data:
+            flash('导入文件格式不正确，缺少必要的数据字段', 'danger')
+            return redirect(url_for('data_transfer'))
 
-            logger.info(f"导入数据版本: {version}, 类型: {'核心配置' if is_essential_export else '完整数据'}")
+        # 检测导出文件版本
+        version = import_data.get('version', '1.0')
+        is_essential_export = import_data.get('export_type') == 'essential'
 
-            # 导入账号数据
-            if request.form.get('import_accounts') == 'on':
-                imported_accounts = 0
-                for account_data in import_data['accounts']:
-                    # 检查账号是否已存在
-                    existing = SocialAccount.query.filter_by(
+        logger.info(f"导入数据版本: {version}, 类型: {'核心配置' if is_essential_export else '完整数据'}")
+
+        # 导入账号数据
+        if request.form.get('import_accounts') == 'on':
+            imported_accounts = 0
+            for account_data in import_data['accounts']:
+                # 检查账号是否已存在
+                existing = SocialAccount.query.filter_by(
+                    type=account_data['type'],
+                    account_id=account_data['account_id']
+                ).first()
+
+                if not existing:
+                    # 创建新账号
+                    new_account = SocialAccount(
                         type=account_data['type'],
-                        account_id=account_data['account_id']
-                    ).first()
+                        account_id=account_data['account_id'],
+                        tag=account_data.get('tag', 'all'),
+                        enable_auto_reply=account_data.get('enable_auto_reply', False),
+                        bypass_ai=account_data.get('bypass_ai', False),
+                        prompt_template=account_data.get('prompt_template', '')
+                    )
+                    db.session.add(new_account)
+                    imported_accounts += 1
 
-                    if not existing:
-                        # 创建新账号
-                        new_account = SocialAccount(
-                            type=account_data['type'],
-                            account_id=account_data['account_id'],
-                            tag=account_data.get('tag', 'all'),
-                            enable_auto_reply=account_data.get('enable_auto_reply', False),
-                            prompt_template=account_data.get('prompt_template', '')
-                        )
-                        db.session.add(new_account)
-                        imported_accounts += 1
+            if imported_accounts > 0:
+                db.session.commit()
+                # 同步到配置文件
+                sync_accounts_to_yaml()
+                flash(f'成功导入 {imported_accounts} 个账号', 'success')
 
-                if imported_accounts > 0:
-                    db.session.commit()
-                    # 同步到配置文件
-                    sync_accounts_to_yaml()
-                    flash(f'成功导入 {imported_accounts} 个账号', 'success')
+        # 导入分析结果数据
+        if request.form.get('import_results') == 'on':
+            imported_results = 0
+            for result_data in import_data['results']:
+                # 检查结果是否已存在
+                existing = AnalysisResult.query.filter_by(
+                    social_network=result_data['social_network'],
+                    account_id=result_data['account_id'],
+                    post_id=result_data['post_id']
+                ).first()
 
-            # 导入分析结果数据
-            if request.form.get('import_results') == 'on':
-                imported_results = 0
-                for result_data in import_data['results']:
-                    # 检查结果是否已存在
-                    existing = AnalysisResult.query.filter_by(
+                if not existing:
+                    # 创建新结果
+                    new_result = AnalysisResult(
                         social_network=result_data['social_network'],
                         account_id=result_data['account_id'],
-                        post_id=result_data['post_id']
-                    ).first()
+                        post_id=result_data['post_id'],
+                        post_time=datetime.fromisoformat(result_data['post_time']),
+                        content=result_data['content'],
+                        analysis=result_data['analysis'],
+                        is_relevant=result_data['is_relevant']
+                    )
+                    db.session.add(new_result)
+                    imported_results += 1
 
-                    if not existing:
-                        # 创建新结果
-                        new_result = AnalysisResult(
-                            social_network=result_data['social_network'],
-                            account_id=result_data['account_id'],
-                            post_id=result_data['post_id'],
-                            post_time=datetime.fromisoformat(result_data['post_time']),
-                            content=result_data['content'],
-                            analysis=result_data['analysis'],
-                            is_relevant=result_data['is_relevant']
-                        )
-                        db.session.add(new_result)
-                        imported_results += 1
+            if imported_results > 0:
+                db.session.commit()
+                flash(f'成功导入 {imported_results} 条分析结果', 'success')
 
-                if imported_results > 0:
-                    db.session.commit()
-                    flash(f'成功导入 {imported_results} 条分析结果', 'success')
+        # 导入系统配置数据
+        if request.form.get('import_configs') == 'on':
+            imported_configs = 0
 
-            # 导入系统配置数据
-            if request.form.get('import_configs') == 'on':
-                imported_configs = 0
+            # 处理不同版本的配置格式
+            if is_essential_export:
+                # 新版本格式（分类配置）
+                config_categories = import_data['configs']
 
-                # 处理不同版本的配置格式
-                if is_essential_export:
-                    # 新版本格式（分类配置）
-                    config_categories = import_data['configs']
+                # 导入LLM配置
+                for config in config_categories.get('llm', []):
+                    if not config.get('is_set', False) and config.get('value', '') == '******':
+                        # 跳过敏感信息，这些信息在导出时被屏蔽
+                        continue
 
-                    # 导入LLM配置
-                    for config in config_categories.get('llm', []):
-                        if not config.get('is_set', False) and config.get('value', '') == '******':
-                            # 跳过敏感信息，这些信息在导出时被屏蔽
-                            continue
-
-                        set_config(
-                            config['key'],
-                            config['value'],
-                            is_secret=config.get('value') == '******',
-                            description=config.get('description', ''),
-                            update_env=False
-                        )
+                    config_obj, updated = set_config(
+                        config['key'],
+                        config['value'],
+                        is_secret=config.get('value') == '******',
+                        description=config.get('description', ''),
+                        update_env=False
+                    )
+                    if updated:
                         imported_configs += 1
+                        logger.info(f"导入配置 {config['key']} 成功")
+                    else:
+                        logger.debug(f"配置 {config['key']} 已存在且值相同，跳过导入")
 
-                    # 导入Twitter配置
-                    for config in config_categories.get('twitter', []):
-                        if not config.get('is_set', False) and config.get('value', '') == '******':
-                            # 跳过敏感信息，这些信息在导出时被屏蔽
-                            continue
+                # 导入Twitter配置
+                for config in config_categories.get('twitter', []):
+                    if not config.get('is_set', False) and config.get('value', '') == '******':
+                        # 跳过敏感信息，这些信息在导出时被屏蔽
+                        continue
 
-                        set_config(
-                            config['key'],
-                            config['value'],
-                            is_secret=config.get('value') == '******',
-                            description=config.get('description', ''),
-                            update_env=False
-                        )
+                    config_obj, updated = set_config(
+                        config['key'],
+                        config['value'],
+                        is_secret=config.get('value') == '******',
+                        description=config.get('description', ''),
+                        update_env=False
+                    )
+                    if updated:
                         imported_configs += 1
+                        logger.info(f"导入配置 {config['key']} 成功")
+                    else:
+                        logger.debug(f"配置 {config['key']} 已存在且值相同，跳过导入")
 
-                    # 导入通知配置
-                    for config in config_categories.get('notification', []):
-                        if not config.get('is_set', False) and config.get('value', '') == '******':
-                            # 跳过敏感信息，这些信息在导出时被屏蔽
-                            continue
+                # 导入通知配置
+                for config in config_categories.get('notification', []):
+                    if not config.get('is_set', False) and config.get('value', '') == '******':
+                        # 跳过敏感信息，这些信息在导出时被屏蔽
+                        continue
 
-                        set_config(
-                            config['key'],
-                            config['value'],
-                            is_secret=config.get('value') == '******',
-                            description=config.get('description', ''),
-                            update_env=False
-                        )
+                    config_obj, updated = set_config(
+                        config['key'],
+                        config['value'],
+                        is_secret=config.get('value') == '******',
+                        description=config.get('description', ''),
+                        update_env=False
+                    )
+                    if updated:
                         imported_configs += 1
+                        logger.info(f"导入配置 {config['key']} 成功")
+                    else:
+                        logger.debug(f"配置 {config['key']} 已存在且值相同，跳过导入")
 
-                    # 导入其他配置
-                    for config in config_categories.get('other', []):
-                        if not config.get('is_set', False) and config.get('value', '') == '******':
-                            # 跳过敏感信息，这些信息在导出时被屏蔽
-                            continue
+                # 导入其他配置
+                for config in config_categories.get('other', []):
+                    if not config.get('is_set', False) and config.get('value', '') == '******':
+                        # 跳过敏感信息，这些信息在导出时被屏蔽
+                        continue
 
-                        set_config(
-                            config['key'],
-                            config['value'],
-                            is_secret=config.get('value') == '******',
-                            description=config.get('description', ''),
-                            update_env=False
-                        )
+                    config_obj, updated = set_config(
+                        config['key'],
+                        config['value'],
+                        is_secret=config.get('value') == '******',
+                        description=config.get('description', ''),
+                        update_env=False
+                    )
+                    if updated:
                         imported_configs += 1
-                else:
-                    # 旧版本格式（平铺配置）
-                    for config_data in import_data.get('configs', []):
-                        # 设置配置
-                        set_config(
-                            config_data['key'],
-                            config_data['value'],
-                            is_secret=False,
-                            description=config_data.get('description', ''),
-                            update_env=False
-                        )
+                        logger.info(f"导入配置 {config['key']} 成功")
+                    else:
+                        logger.debug(f"配置 {config['key']} 已存在且值相同，跳过导入")
+            else:
+                # 旧版本格式（平铺配置）
+                for config_data in import_data.get('configs', []):
+                    # 设置配置
+                    config_obj, updated = set_config(
+                        config_data['key'],
+                        config_data['value'],
+                        is_secret=False,
+                        description=config_data.get('description', ''),
+                        update_env=False
+                    )
+                    if updated:
                         imported_configs += 1
+                        logger.info(f"导入配置 {config_data['key']} 成功")
+                    else:
+                        logger.debug(f"配置 {config_data['key']} 已存在且值相同，跳过导入")
 
-                if imported_configs > 0:
-                    flash(f'成功导入 {imported_configs} 项系统配置', 'success')
+            if imported_configs > 0:
+                flash(f'成功导入 {imported_configs} 项系统配置', 'success')
 
-            # 导入通知配置（如果存在）
-            if request.form.get('import_notifications') == 'on':
-                notification_imported = False
+        # 导入通知配置（如果存在）
+        if request.form.get('import_notifications') == 'on':
+            notification_imported = False
 
-                # 处理不同版本的通知配置
-                if is_essential_export:
-                    # 新版本格式
-                    if 'notification_services' in import_data:
-                        # 注意：通知URL在导出时已被屏蔽，这里只提示用户
-                        service_types = [service['type'] for service in import_data['notification_services']]
-                        if service_types:
-                            flash(f'检测到通知服务配置: {", ".join(service_types)}。请在系统配置中手动设置完整的通知URL。', 'info')
-                            notification_imported = True
-                else:
-                    # 旧版本格式
-                    if 'notifications' in import_data:
-                        # 旧版本通知配置处理
-                        notification_imported = True
-
-                # 导入自动回复配置（适用于所有版本）
-                auto_reply_imported = False
-
+            # 处理不同版本的通知配置
+            if is_essential_export:
                 # 新版本格式
-                if is_essential_export:
-                    # 从分类配置中查找自动回复设置
-                    config_categories = import_data['configs']
-                    for config in config_categories.get('notification', []):
-                        if config['key'] == 'ENABLE_AUTO_REPLY':
-                            set_config(
-                                'ENABLE_AUTO_REPLY',
-                                config['value'],
-                                description='是否启用自动回复',
-                                update_env=False
-                            )
-                            auto_reply_imported = True
+                if 'notification_services' in import_data:
+                    # 注意：通知URL在导出时已被屏蔽，这里只提示用户
+                    service_types = [service['type'] for service in import_data['notification_services']]
+                    if service_types:
+                        flash(f'检测到通知服务配置: {", ".join(service_types)}。请在系统配置中手动设置完整的通知URL。', 'info')
+                        notification_imported = True
+            else:
                 # 旧版本格式
-                elif 'auto_reply' in import_data:
-                    auto_reply = import_data['auto_reply']
-                    if 'enabled' in auto_reply:
-                        set_config(
+                if 'notifications' in import_data:
+                    # 旧版本通知配置处理
+                    notification_imported = True
+
+            # 导入自动回复配置（适用于所有版本）
+            auto_reply_imported = False
+
+            # 新版本格式
+            if is_essential_export:
+                # 从分类配置中查找自动回复设置
+                config_categories = import_data['configs']
+                for config in config_categories.get('notification', []):
+                    if config['key'] == 'ENABLE_AUTO_REPLY':
+                        config_obj, updated = set_config(
                             'ENABLE_AUTO_REPLY',
-                            'true' if auto_reply['enabled'] else 'false',
+                            config['value'],
                             description='是否启用自动回复',
                             update_env=False
                         )
+                        if updated:
+                            logger.info(f"导入自动回复配置成功")
+                            auto_reply_imported = True
+                        else:
+                            logger.debug(f"自动回复配置已存在且值相同，跳过导入")
+            # 旧版本格式
+            elif 'auto_reply' in import_data:
+                auto_reply = import_data['auto_reply']
+                if 'enabled' in auto_reply:
+                    config_obj, updated = set_config(
+                        'ENABLE_AUTO_REPLY',
+                        'true' if auto_reply['enabled'] else 'false',
+                        description='是否启用自动回复',
+                        update_env=False
+                    )
+                    if updated:
+                        logger.info(f"导入自动回复配置成功")
                         auto_reply_imported = True
+                    else:
+                        logger.debug(f"自动回复配置已存在且值相同，跳过导入")
 
-                if notification_imported or auto_reply_imported:
-                    flash('成功导入通知和自动回复配置', 'success')
+            if notification_imported or auto_reply_imported:
+                flash('成功导入通知和自动回复配置', 'success')
 
-            return redirect(url_for('index'))
-        except Exception as e:
-            logger.error(f"导入数据时出错: {str(e)}")
-            flash(f"导入数据失败: {str(e)}", 'danger')
-            return redirect(request.url)
+        return redirect(url_for('index'))
+    except Exception as e:
+        logger.error(f"导入数据时出错: {str(e)}")
+        flash(f"导入数据失败: {str(e)}", 'danger')
+        return redirect(url_for('data_transfer'))
 
-    # GET 请求，显示导入表单
-    return render_template('import_data.html')
+    # 这行代码不会执行到，但为了完整性保留
+    return redirect(url_for('data_transfer'))
 
 if __name__ == '__main__':
-    init_db()
-    # 加载数据库中的配置到环境变量
-    load_configs_to_env()
+    with app.app_context():
+        init_db()
+        # 加载数据库中的配置到环境变量
+        load_configs_to_env()
     app.run(debug=True, host='0.0.0.0', port=5000)

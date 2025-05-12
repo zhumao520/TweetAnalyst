@@ -15,11 +15,11 @@ logger = logging.getLogger('utils.config')
 def get_config(key, default=None):
     """
     获取系统配置
-    
+
     Args:
         key: 配置键
         default: 默认值
-        
+
     Returns:
         str: 配置值
     """
@@ -28,26 +28,26 @@ def get_config(key, default=None):
 def set_config(key, value, is_secret=False, description=None, update_env=True):
     """
     设置系统配置
-    
+
     Args:
         key: 配置键
         value: 配置值
         is_secret: 是否为敏感信息
         description: 配置描述
         update_env: 是否更新环境变量
-        
+
     Returns:
-        SystemConfig: 配置对象
+        tuple: (SystemConfig, bool) - 配置对象和是否进行了更新
     """
     return set_config_service(key, value, is_secret, description, update_env)
 
 def get_default_prompt_template(account_type):
     """
     获取默认提示词模板
-    
+
     Args:
         account_type: 账号类型
-        
+
     Returns:
         str: 提示词模板
     """

@@ -3,59 +3,122 @@
 {% block title %}系统日志 - TweetAnalyst{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h1 class="mb-4">系统日志</h1>
+<div class="row mb-3">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                <li class="breadcrumb-item active" aria-current="page">系统日志</li>
+            </ol>
+        </nav>
+    </div>
+</div>
 
-    <div class="row">
-        <div class="col-12 mb-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">系统日志</h5>
-                    <div>
-                        <button class="btn btn-sm btn-outline-secondary" id="refresh-logs-btn">
-                            <i class="bi bi-arrow-clockwise"></i> 刷新
-                        </button>
-                        <button class="btn btn-sm btn-outline-primary" id="download-logs-btn">
-                            <i class="bi bi-download"></i> 下载
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" id="debug-logs-btn" onclick="debugLogsFunction()">
-                            <i class="bi bi-bug"></i> 调试
-                        </button>
-                        <button class="btn btn-sm btn-outline-info" id="raw-logs-btn" onclick="getRawLogs()">
-                            <i class="bi bi-file-text"></i> 原始日志
-                        </button>
-                    </div>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="border-bottom pb-2">
+                <i class="bi bi-journal-text me-2 text-primary"></i>系统日志
+            </h2>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="refresh-logs-btn">
+                    <i class="bi bi-arrow-clockwise me-1"></i> 刷新
+                </button>
+                <button class="btn btn-success" id="download-logs-btn">
+                    <i class="bi bi-download me-1"></i> 下载
+                </button>
+                <button class="btn btn-danger" id="debug-logs-btn" onclick="debugLogsFunction()">
+                    <i class="bi bi-bug me-1"></i> 调试
+                </button>
+                <button class="btn btn-info text-white" id="raw-logs-btn" onclick="getRawLogs()">
+                    <i class="bi bi-file-text me-1"></i> 原始日志
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-terminal me-2"></i>系统日志
+                </h5>
+                <div>
+                    <span class="badge bg-light text-dark" id="log-status">
+                        <i class="bi bi-info-circle me-1"></i>实时日志
+                    </span>
                 </div>
+            </div>
                 <div class="card-body">
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> 此处显示系统日志，帮助您排查问题。
+                    <div class="alert alert-primary">
+                        <i class="bi bi-info-circle-fill me-2"></i> 此处显示系统日志，帮助您排查问题和监控系统运行状态。
                     </div>
 
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <div class="btn-group btn-group-sm" role="group" aria-label="日志级别">
-                                <button type="button" class="btn btn-outline-secondary active" id="log-level-info">信息</button>
-                                <button type="button" class="btn btn-outline-secondary" id="log-level-debug">调试</button>
-                                <button type="button" class="btn btn-outline-secondary" id="log-level-warning">警告</button>
-                                <button type="button" class="btn btn-outline-secondary" id="log-level-error">错误</button>
-                            </div>
+                    <div class="card shadow-sm mb-3 border-light">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">
+                                <i class="bi bi-funnel me-2 text-primary"></i>日志过滤选项
+                            </h6>
                         </div>
-                        <div class="col-md-6">
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text">显示行数</span>
-                                <select class="form-select" id="log-lines">
-                                    <option value="50">50</option>
-                                    <option value="100">100</option>
-                                    <option value="200">200</option>
-                                    <option value="500">500</option>
-                                    <option value="1000">1000</option>
-                                </select>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label class="form-label">
+                                        <i class="bi bi-layers me-1 text-primary"></i>日志级别
+                                    </label>
+                                    <div class="btn-group w-100" role="group" aria-label="日志级别">
+                                        <button type="button" class="btn btn-outline-success active" id="log-level-info">
+                                            <i class="bi bi-info-circle me-1"></i>信息
+                                        </button>
+                                        <button type="button" class="btn btn-outline-info" id="log-level-debug">
+                                            <i class="bi bi-code-square me-1"></i>调试
+                                        </button>
+                                        <button type="button" class="btn btn-outline-warning" id="log-level-warning">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>警告
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger" id="log-level-error">
+                                            <i class="bi bi-x-octagon me-1"></i>错误
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="log-lines" class="form-label">
+                                        <i class="bi bi-list-ol me-1 text-primary"></i>显示行数
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-123"></i></span>
+                                        <select class="form-select" id="log-lines">
+                                            <option value="50">50行</option>
+                                            <option value="100">100行</option>
+                                            <option value="200">200行</option>
+                                            <option value="500">500行</option>
+                                            <option value="1000">1000行</option>
+                                        </select>
+                                        <button class="btn btn-outline-primary" type="button" id="apply-filter-btn">
+                                            <i class="bi bi-check2 me-1"></i>应用
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="bg-dark text-light p-3 rounded" style="max-height: 600px; overflow-y: auto;">
-                        <pre id="system-logs" class="mb-0"><code>正在加载系统日志...</code></pre>
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="bi bi-terminal me-2"></i>日志输出
+                            </h6>
+                            <div>
+                                <span class="badge bg-secondary" id="log-count">0 行</span>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="bg-dark text-light p-3 rounded-0" style="max-height: 600px; overflow-y: auto; font-family: 'Courier New', monospace;">
+                                <pre id="system-logs" class="mb-0"><code>正在加载系统日志...</code></pre>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -64,33 +127,70 @@
 
     <div class="row">
         <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">应用日志</h5>
+            <div class="card shadow-sm border-primary">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-app me-2"></i>应用日志
+                    </h5>
+                    <span class="badge bg-light text-primary">
+                        <i class="bi bi-files me-1"></i>核心模块
+                    </span>
                 </div>
-                <div class="card-body">
-                    <div class="list-group" id="app-logs-list">
-                        <a href="#" class="list-group-item list-group-item-action active" data-log-file="">所有日志</a>
-                        <a href="#" class="list-group-item list-group-item-action" data-log-file="app.log">主应用日志</a>
-                        <a href="#" class="list-group-item list-group-item-action" data-log-file="web_app.log">Web应用日志</a>
-                        <a href="#" class="list-group-item list-group-item-action" data-log-file="scheduler.log">调度器日志</a>
-                        <a href="#" class="list-group-item list-group-item-action" data-log-file="worker.log">工作进程日志</a>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" id="app-logs-list">
+                        <a href="#" class="list-group-item list-group-item-action active d-flex justify-content-between align-items-center" data-log-file="">
+                            <span><i class="bi bi-collection me-2 text-primary"></i>所有日志</span>
+                            <span class="badge bg-primary rounded-pill">全部</span>
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-log-file="app.log">
+                            <span><i class="bi bi-app-indicator me-2 text-primary"></i>主应用日志</span>
+                            <span class="badge bg-secondary rounded-pill">APP</span>
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-log-file="web_app.log">
+                            <span><i class="bi bi-globe me-2 text-primary"></i>Web应用日志</span>
+                            <span class="badge bg-secondary rounded-pill">WEB</span>
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-log-file="scheduler.log">
+                            <span><i class="bi bi-calendar-check me-2 text-primary"></i>调度器日志</span>
+                            <span class="badge bg-secondary rounded-pill">SCHED</span>
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-log-file="worker.log">
+                            <span><i class="bi bi-cpu me-2 text-primary"></i>工作进程日志</span>
+                            <span class="badge bg-secondary rounded-pill">WORK</span>
+                        </a>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">组件日志</h5>
+            <div class="card shadow-sm border-success">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-puzzle me-2"></i>组件日志
+                    </h5>
+                    <span class="badge bg-light text-success">
+                        <i class="bi bi-plugin me-1"></i>功能模块
+                    </span>
                 </div>
-                <div class="card-body">
-                    <div class="list-group" id="component-logs-list">
-                        <a href="#" class="list-group-item list-group-item-action" data-log-file="api.log">API日志</a>
-                        <a href="#" class="list-group-item list-group-item-action" data-log-file="twitter.log">Twitter日志</a>
-                        <a href="#" class="list-group-item list-group-item-action" data-log-file="llm.log">LLM日志</a>
-                        <a href="#" class="list-group-item list-group-item-action" data-log-file="notification.log">通知日志</a>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" id="component-logs-list">
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-log-file="api.log">
+                            <span><i class="bi bi-hdd-network me-2 text-success"></i>API日志</span>
+                            <span class="badge bg-secondary rounded-pill">API</span>
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-log-file="twitter.log">
+                            <span><i class="bi bi-twitter me-2 text-success"></i>Twitter日志</span>
+                            <span class="badge bg-secondary rounded-pill">TWT</span>
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-log-file="llm.log">
+                            <span><i class="bi bi-robot me-2 text-success"></i>LLM日志</span>
+                            <span class="badge bg-secondary rounded-pill">LLM</span>
+                        </a>
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" data-log-file="notification.log">
+                            <span><i class="bi bi-bell me-2 text-success"></i>通知日志</span>
+                            <span class="badge bg-secondary rounded-pill">NOTIF</span>
+                        </a>
                     </div>
                 </div>
             </div>

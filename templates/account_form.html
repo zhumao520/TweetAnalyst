@@ -1,97 +1,429 @@
 {% extends "base.html" %}
 
-{% block title %}{{ "编辑" if account else "添加" }}账号 - Secretary{% endblock %}
+{% block title %}{{ "编辑" if account else "添加" }}账号 - TweetAnalyst{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/lib/codemirror.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/theme/monokai.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/hint/show-hint.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/fold/foldgutter.css">
 <style>
     .CodeMirror {
         height: 300px;
         border: 1px solid #ddd;
+        border-radius: 0.375rem;
+        font-family: 'Fira Code', 'Courier New', monospace;
+        transition: all 0.3s ease;
+    }
+
+    .CodeMirror:focus-within {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    .CodeMirror-disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .form-label {
+        font-weight: 500;
+    }
+
+    .required-label::after {
+        content: " *";
+        color: #dc3545;
+    }
+
+    .platform-icon {
+        width: 24px;
+        height: 24px;
+        margin-right: 8px;
+        vertical-align: text-bottom;
+    }
+
+    .hint-badge {
+        font-size: 0.75rem;
+        padding: 0.15rem 0.5rem;
+        margin-left: 0.5rem;
+        vertical-align: middle;
+    }
+
+    .card-header-tabs {
+        margin-right: -1rem;
+        margin-left: -1rem;
+        margin-bottom: -0.5rem;
+    }
+
+    .form-section {
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border-radius: 0.5rem;
+        background-color: rgba(0, 0, 0, 0.02);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .form-section-title {
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        font-weight: 600;
+    }
+
+    .template-toolbar {
+        margin-bottom: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .template-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-in {
+        animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .form-section {
+            padding: 1rem;
+        }
+
+        .CodeMirror {
+            height: 250px;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h4 class="mb-0">{{ "编辑" if account else "添加" }}社交媒体账号</h4>
-            </div>
-            <div class="card-body">
-                <form method="post" id="account-form">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="type" class="form-label">平台类型</label>
-                            <select class="form-select" id="type" name="type" required>
-                                <option value="twitter" {% if account and account.type == 'twitter' %}selected{% endif %}>Twitter</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="account_id" class="form-label">账号ID</label>
-                            <input type="text" class="form-control" id="account_id" name="account_id"
-                                   value="{{ account.account_id if account else '' }}"
-                                   pattern="^[A-Za-z0-9_]{1,15}$"
-                                   title="Twitter账号ID只能包含字母、数字和下划线，最多15个字符"
-                                   required>
-                            <div class="form-text">Twitter用户名，不包含@符号，只能包含字母、数字和下划线</div>
-                        </div>
-                    </div>
+<div class="row mb-3">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('accounts') }}">账号管理</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ "编辑" if account else "添加" }}账号</li>
+            </ol>
+        </nav>
+    </div>
+</div>
 
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="tag" class="form-label">标签</label>
-                            <input type="text" class="form-control" id="tag" name="tag"
-                                   value="{{ account.tag if account else 'all' }}"
-                                   pattern="^[a-z0-9_]{1,20}$"
-                                   title="标签只能包含小写字母、数字和下划线，最多20个字符">
-                            <div class="form-text">用于分组和筛选推送目标，建议使用：finance(财经)、ai(人工智能)、tech(科技)等</div>
+<div class="row">
+    <div class="col-lg-10 col-xl-8 mx-auto">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-person-plus-fill me-2"></i>{{ "编辑" if account else "添加" }}社交媒体账号
+                </h4>
+                {% if account %}
+                <span class="badge bg-light text-dark">账号ID: {{ account.account_id }}</span>
+                {% endif %}
+            </div>
+
+            <div class="card-body">
+                <form method="post" id="account-form" class="needs-validation" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <!-- 基本信息部分 -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="bi bi-info-circle me-2"></i>基本信息
+                        </h5>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="type" class="form-label required-label">平台类型</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-twitter text-primary"></i>
+                                    </span>
+                                    <select class="form-select" id="type" name="type" required>
+                                        <option value="twitter" {% if account and account.type == 'twitter' %}selected{% endif %}>Twitter</option>
+                                        <option value="weibo" {% if account and account.type == 'weibo' %}selected{% endif %}>微博</option>
+                                    </select>
+                                </div>
+                                <div class="form-text">选择要监控的社交媒体平台</div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="account_id" class="form-label required-label">账号ID</label>
+                                <div class="input-group">
+                                    <span class="input-group-text" id="account-prefix">@</span>
+                                    <input type="text" class="form-control" id="account_id" name="account_id"
+                                           value="{{ account.account_id if account else '' }}"
+                                           pattern="^[A-Za-z0-9_]{1,15}$"
+                                           title="账号ID只能包含字母、数字和下划线，最多15个字符"
+                                           aria-describedby="account-prefix"
+                                           required>
+                                    <button class="btn btn-outline-secondary" type="button" id="verify-account-btn">
+                                        <i class="bi bi-check-circle me-1"></i>验证
+                                    </button>
+                                </div>
+                                <div class="form-text" id="account-id-help">用户名，不包含@符号，只能包含字母、数字和下划线</div>
+                                <div class="invalid-feedback">请输入有效的账号ID</div>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-check form-switch mt-4">
-                                <input class="form-check-input" type="checkbox" id="enable_auto_reply" name="enable_auto_reply"
-                                       {% if account and account.enable_auto_reply %}checked{% endif %}>
-                                <label class="form-check-label" for="enable_auto_reply">启用自动回复</label>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="tag" class="form-label">标签</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-tag"></i>
+                                    </span>
+                                    <input type="text" class="form-control" id="tag" name="tag"
+                                           value="{{ account.tag if account else 'all' }}"
+                                           pattern="^[a-z0-9_]{1,20}$"
+                                           title="标签只能包含小写字母、数字和下划线，最多20个字符">
+                                </div>
+                                <div class="form-text">用于分组和筛选推送目标，建议使用：finance(财经)、ai(人工智能)、tech(科技)等</div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="card h-100 border-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title mb-3">
+                                            <i class="bi bi-toggles me-2"></i>功能设置
+                                        </h6>
+
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" id="enable_auto_reply" name="enable_auto_reply"
+                                                   {% if account and account.enable_auto_reply %}checked{% endif %}>
+                                            <label class="form-check-label" for="enable_auto_reply">
+                                                启用自动回复
+                                                <span class="badge bg-info hint-badge">实验性</span>
+                                            </label>
+                                            <div class="form-text">启用后，系统将根据模板自动生成回复内容</div>
+                                        </div>
+
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="bypass_ai" name="bypass_ai"
+                                                   {% if account and account.bypass_ai %}checked{% endif %}>
+                                            <label class="form-check-label" for="bypass_ai">
+                                                绕过AI判断直接推送
+                                                <span class="badge bg-warning hint-badge">谨慎使用</span>
+                                            </label>
+                                            <div class="form-text text-warning">启用后，该账号的所有新内容将直接推送，不经过AI分析</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="prompt_template" class="form-label">分析提示词模板</label>
-                        <textarea id="prompt_template" name="prompt_template">{{ account.prompt_template if account and account.prompt_template else default_prompt }}</textarea>
-                        <div class="form-text">用于分析社交媒体内容的提示词模板，使用{content}作为内容占位符</div>
+                    <!-- 提示词模板部分 -->
+                    <div class="form-section">
+                        <h5 class="form-section-title">
+                            <i class="bi bi-braces me-2"></i>提示词模板
+                        </h5>
+
+                        <div class="mb-4">
+                            <div class="template-toolbar">
+                                <label for="prompt_template" class="form-label mb-0">
+                                    <i class="bi bi-robot me-1"></i>分析提示词模板
+                                    <span class="badge bg-primary hint-badge">AI</span>
+                                </label>
+                                <div class="template-actions">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="reset-prompt-btn">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>重置为默认
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="format-prompt-btn">
+                                        <i class="bi bi-code-slash me-1"></i>格式化
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea id="prompt_template" name="prompt_template">{{ account.prompt_template if account and account.prompt_template else default_prompt }}</textarea>
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>用于分析社交媒体内容的提示词模板，使用<code>{content}</code>作为内容占位符
+                            </div>
+                        </div>
+
+                        <div class="mb-3" id="auto-reply-section" {% if not account or not account.enable_auto_reply %}style="display: none;"{% endif %}>
+                            <div class="template-toolbar">
+                                <label for="auto_reply_template" class="form-label mb-0">
+                                    <i class="bi bi-chat-dots me-1"></i>自动回复提示词模板
+                                    <span class="badge bg-info hint-badge">回复</span>
+                                </label>
+                                <div class="template-actions">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="reset-reply-btn">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>重置为默认
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="format-reply-btn">
+                                        <i class="bi bi-code-slash me-1"></i>格式化
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea id="auto_reply_template" name="auto_reply_template">{{ account.auto_reply_template if account and account.auto_reply_template else default_reply_prompt }}</textarea>
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>用于生成自动回复内容的提示词模板，使用<code>{content}</code>作为内容占位符，<code>{analysis}</code>作为分析结果占位符
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="mb-3" id="auto-reply-section" {% if not account or not account.enable_auto_reply %}style="display: none;"{% endif %}>
-                        <label for="auto_reply_template" class="form-label">自动回复提示词模板</label>
-                        <textarea id="auto_reply_template" name="auto_reply_template">{{ account.auto_reply_template if account and account.auto_reply_template else '' }}</textarea>
-                        <div class="form-text">用于生成自动回复内容的提示词模板，使用{content}作为内容占位符</div>
+                    <!-- 表单操作按钮 -->
+                    <div class="d-flex justify-content-between align-items-center mt-4">
+                        <div>
+                            <a href="{{ url_for('accounts') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-1"></i>返回
+                            </a>
+                            {% if account %}
+                            <button type="button" class="btn btn-outline-danger ms-2" id="delete-account-btn">
+                                <i class="bi bi-trash me-1"></i>删除
+                            </button>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <button type="reset" class="btn btn-outline-secondary me-2">
+                                <i class="bi bi-x-circle me-1"></i>重置
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle me-1"></i>保存
+                            </button>
+                        </div>
                     </div>
+                </form>
+            </div>
 
-                    <div class="d-flex justify-content-between">
-                        <a href="{{ url_for('accounts') }}" class="btn btn-secondary">返回</a>
-                        <button type="submit" class="btn btn-primary">保存</button>
-                    </div>
+            {% if account %}
+            <div class="card-footer bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted">
+                        <i class="bi bi-clock me-1"></i>创建时间: {{ account.created_at.strftime('%Y-%m-%d %H:%M:%S') if account.created_at else '未知' }}
+                    </small>
+                    <small class="text-muted">
+                        <i class="bi bi-pencil me-1"></i>最后更新: {{ account.updated_at.strftime('%Y-%m-%d %H:%M:%S') if account.updated_at else '未知' }}
+                    </small>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 提示和帮助卡片 -->
+        <div class="card mt-4 shadow-sm border-info">
+            <div class="card-header bg-info text-white">
+                <i class="bi bi-lightbulb me-2"></i>提示和帮助
+            </div>
+            <div class="card-body">
+                <h6 class="card-title">提示词模板说明</h6>
+                <p class="card-text">提示词模板是指导AI分析社交媒体内容的关键。以下是一些使用技巧：</p>
+                <ul>
+                    <li>使用<code>{content}</code>作为内容占位符，系统会自动替换为实际内容</li>
+                    <li>明确指定分析目标和要求，例如"分析以下推文是否与金融相关"</li>
+                    <li>要求AI给出明确的判断和理由，便于后续处理</li>
+                    <li>可以使用JSON格式输出，便于系统解析</li>
+                </ul>
+                <p class="card-text">自动回复模板可以使用以下占位符：</p>
+                <ul>
+                    <li><code>{content}</code> - 原始内容</li>
+                    <li><code>{analysis}</code> - AI分析结果</li>
+                    <li><code>{username}</code> - 用户名</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+{% if account %}
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteModalLabel">
+                    <i class="bi bi-exclamation-triangle me-2"></i>确认删除
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>您确定要删除账号 <strong>@{{ account.account_id }}</strong> 吗？</p>
+                <p class="text-danger">此操作不可逆，账号相关的所有数据将被永久删除。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <form action="{{ url_for('delete_account', account_id=account.account_id) }}" method="post" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger">确认删除</button>
                 </form>
             </div>
         </div>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/lib/codemirror.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/mode/javascript/javascript.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/edit/matchbrackets.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/edit/closebrackets.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/fold/foldcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/fold/foldgutter.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/fold/brace-fold.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/hint/show-hint.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/hint/javascript-hint.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-beautify@1.14.0/js/lib/beautify.js"></script>
 <script>
+    // 默认提示词模板
+    const DEFAULT_PROMPT_TEMPLATE = `请分析以下社交媒体内容，判断其是否与我们关注的主题相关。
+主题：人工智能、机器学习、深度学习、神经网络、大语言模型等AI相关技术和应用。
+
+内容：
+{content}
+
+请按照以下JSON格式回复：
+{
+  "is_relevant": true/false,  // 是否相关
+  "confidence": 0-100,  // 置信度，0-100的整数
+  "reason": "判断理由",  // 简要说明判断理由
+  "keywords": ["关键词1", "关键词2"]  // 内容中的相关关键词
+}`;
+
+    // 默认自动回复模板
+    const DEFAULT_REPLY_TEMPLATE = `请根据以下社交媒体内容和分析结果，生成一个友好、专业的回复。
+回复应该简洁、有礼貌，并且与原内容相关。如果内容与AI相关，可以提供一些见解或提问。
+
+原始内容：
+{content}
+
+分析结果：
+{analysis}
+
+回复要求：
+1. 称呼用户为 @{username}
+2. 回复长度控制在280字符以内
+3. 语气友好专业
+4. 不要使用过多表情符号
+5. 如果内容与AI无关，回复应该简短礼貌
+
+请直接给出回复内容，不要包含其他说明。`;
+
     document.addEventListener('DOMContentLoaded', function() {
         // 初始化提示词模板编辑器
         const promptEditor = CodeMirror.fromTextArea(document.getElementById('prompt_template'), {
             mode: 'javascript',
             theme: 'monokai',
             lineNumbers: true,
-            lineWrapping: true
+            lineWrapping: true,
+            matchBrackets: true,
+            autoCloseBrackets: true,
+            foldGutter: true,
+            gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+            extraKeys: {
+                "Ctrl-Space": "autocomplete",
+                "Tab": function(cm) {
+                    const spaces = Array(cm.getOption("indentUnit") + 1).join(" ");
+                    cm.replaceSelection(spaces);
+                }
+            }
         });
 
         // 初始化自动回复模板编辑器
@@ -99,61 +431,437 @@
             mode: 'javascript',
             theme: 'monokai',
             lineNumbers: true,
-            lineWrapping: true
-        });
-
-        // 自动回复开关
-        document.getElementById('enable_auto_reply').addEventListener('change', function() {
-            const autoReplySection = document.getElementById('auto-reply-section');
-            if (this.checked) {
-                autoReplySection.style.display = 'block';
-            } else {
-                autoReplySection.style.display = 'none';
+            lineWrapping: true,
+            matchBrackets: true,
+            autoCloseBrackets: true,
+            foldGutter: true,
+            gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+            extraKeys: {
+                "Ctrl-Space": "autocomplete",
+                "Tab": function(cm) {
+                    const spaces = Array(cm.getOption("indentUnit") + 1).join(" ");
+                    cm.replaceSelection(spaces);
+                }
             }
         });
 
-        // 表单提交前保存编辑器内容和验证
-        document.getElementById('account-form').addEventListener('submit', function(e) {
-            // 保存编辑器内容
+        // 初始化表单验证
+        initFormValidation();
+
+        // 初始化平台类型切换
+        initPlatformTypeToggle();
+
+        // 初始化自动回复开关
+        initAutoReplyToggle();
+
+        // 初始化绕过AI判断开关
+        initBypassAiToggle(promptEditor);
+
+        // 初始化模板操作按钮
+        initTemplateActions(promptEditor, replyEditor);
+
+        // 初始化账号验证功能
+        initAccountVerification();
+
+        // 初始化删除账号功能
+        initDeleteAccount();
+
+        // 初始化表单提交
+        initFormSubmit(promptEditor, replyEditor);
+
+        // 显示表单提示
+        showFormTips();
+    });
+
+    // 初始化表单验证
+    function initFormValidation() {
+        // 获取表单元素
+        const form = document.getElementById('account-form');
+
+        // 添加表单验证样式
+        form.addEventListener('submit', function(event) {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            form.classList.add('was-validated');
+        }, false);
+
+        // 添加输入验证
+        const accountIdInput = document.getElementById('account_id');
+        const tagInput = document.getElementById('tag');
+
+        // 账号ID输入验证
+        accountIdInput.addEventListener('input', function() {
+            const value = this.value.trim();
+            const isValid = /^[A-Za-z0-9_]{1,15}$/.test(value);
+
+            if (isValid) {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            } else {
+                this.classList.remove('is-valid');
+                this.classList.add('is-invalid');
+            }
+        });
+
+        // 标签输入验证
+        tagInput.addEventListener('input', function() {
+            const value = this.value.trim();
+            const isValid = /^[a-z0-9_]{1,20}$/.test(value);
+
+            if (isValid) {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            } else {
+                this.classList.remove('is-valid');
+                this.classList.add('is-invalid');
+            }
+        });
+    }
+
+    // 初始化平台类型切换
+    function initPlatformTypeToggle() {
+        const typeSelect = document.getElementById('type');
+        const platformIcon = typeSelect.previousElementSibling.querySelector('i');
+        const accountPrefix = document.getElementById('account-prefix');
+        const accountIdHelp = document.getElementById('account-id-help');
+        const accountIdInput = document.getElementById('account_id');
+
+        // 平台类型切换事件
+        typeSelect.addEventListener('change', function() {
+            const platform = this.value;
+
+            // 更新图标和样式
+            if (platform === 'twitter') {
+                platformIcon.className = 'bi bi-twitter text-primary';
+                accountPrefix.textContent = '@';
+                accountIdHelp.textContent = 'Twitter用户名，不包含@符号，只能包含字母、数字和下划线';
+                accountIdInput.pattern = '^[A-Za-z0-9_]{1,15}$';
+                accountIdInput.title = 'Twitter账号ID只能包含字母、数字和下划线，最多15个字符';
+            } else if (platform === 'weibo') {
+                platformIcon.className = 'bi bi-sina-weibo text-danger';
+                accountPrefix.textContent = '@';
+                accountIdHelp.textContent = '微博用户名，不包含@符号';
+                accountIdInput.pattern = '^[\\u4e00-\\u9fa5A-Za-z0-9_-]{1,30}$';
+                accountIdInput.title = '微博账号ID可以包含中文、字母、数字、下划线和连字符';
+            }
+        });
+    }
+
+    // 初始化自动回复开关
+    function initAutoReplyToggle() {
+        const autoReplyCheckbox = document.getElementById('enable_auto_reply');
+        const autoReplySection = document.getElementById('auto-reply-section');
+
+        // 自动回复开关事件
+        autoReplyCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                // 显示自动回复部分
+                autoReplySection.style.display = 'block';
+                autoReplySection.classList.add('fade-in');
+
+                // 如果自动回复模板为空，设置默认值
+                const replyTextarea = document.getElementById('auto_reply_template');
+                if (!replyTextarea.value.trim()) {
+                    // 使用CodeMirror实例设置值
+                    const cm = CodeMirror.fromTextArea(replyTextarea);
+                    cm.setValue(DEFAULT_REPLY_TEMPLATE);
+                    cm.save();
+                }
+            } else {
+                // 隐藏自动回复部分
+                autoReplySection.style.display = 'none';
+            }
+        });
+    }
+
+    // 初始化绕过AI判断开关
+    function initBypassAiToggle(promptEditor) {
+        const bypassAiCheckbox = document.getElementById('bypass_ai');
+        const promptTemplateContainer = document.querySelector('.CodeMirror');
+
+        // 绕过AI判断开关事件
+        bypassAiCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                // 禁用提示词模板
+                promptTemplateContainer.classList.add('CodeMirror-disabled');
+                promptEditor.setOption('readOnly', 'nocursor');
+
+                // 显示提示
+                showToast('提示', '已启用绕过AI判断，提示词模板将被禁用', 'warning');
+            } else {
+                // 启用提示词模板
+                promptTemplateContainer.classList.remove('CodeMirror-disabled');
+                promptEditor.setOption('readOnly', false);
+            }
+        });
+
+        // 初始化时设置提示词模板的状态
+        if (bypassAiCheckbox.checked) {
+            promptTemplateContainer.classList.add('CodeMirror-disabled');
+            promptEditor.setOption('readOnly', 'nocursor');
+        }
+    }
+
+    // 初始化模板操作按钮
+    function initTemplateActions(promptEditor, replyEditor) {
+        // 重置提示词模板按钮
+        const resetPromptBtn = document.getElementById('reset-prompt-btn');
+        if (resetPromptBtn) {
+            resetPromptBtn.addEventListener('click', function() {
+                if (confirm('确定要重置为默认提示词模板吗？当前内容将被覆盖。')) {
+                    promptEditor.setValue(DEFAULT_PROMPT_TEMPLATE);
+                    showToast('成功', '已重置为默认提示词模板', 'success');
+                }
+            });
+        }
+
+        // 格式化提示词模板按钮
+        const formatPromptBtn = document.getElementById('format-prompt-btn');
+        if (formatPromptBtn) {
+            formatPromptBtn.addEventListener('click', function() {
+                const content = promptEditor.getValue();
+                try {
+                    // 尝试格式化JSON部分
+                    const formattedContent = formatTemplateContent(content);
+                    promptEditor.setValue(formattedContent);
+                    showToast('成功', '提示词模板已格式化', 'success');
+                } catch (error) {
+                    showToast('错误', '格式化失败: ' + error.message, 'danger');
+                }
+            });
+        }
+
+        // 重置自动回复模板按钮
+        const resetReplyBtn = document.getElementById('reset-reply-btn');
+        if (resetReplyBtn) {
+            resetReplyBtn.addEventListener('click', function() {
+                if (confirm('确定要重置为默认自动回复模板吗？当前内容将被覆盖。')) {
+                    replyEditor.setValue(DEFAULT_REPLY_TEMPLATE);
+                    showToast('成功', '已重置为默认自动回复模板', 'success');
+                }
+            });
+        }
+
+        // 格式化自动回复模板按钮
+        const formatReplyBtn = document.getElementById('format-reply-btn');
+        if (formatReplyBtn) {
+            formatReplyBtn.addEventListener('click', function() {
+                const content = replyEditor.getValue();
+                try {
+                    // 尝试格式化内容
+                    const formattedContent = formatTemplateContent(content);
+                    replyEditor.setValue(formattedContent);
+                    showToast('成功', '自动回复模板已格式化', 'success');
+                } catch (error) {
+                    showToast('错误', '格式化失败: ' + error.message, 'danger');
+                }
+            });
+        }
+    }
+
+    // 格式化模板内容
+    function formatTemplateContent(content) {
+        // 查找JSON部分并格式化
+        const jsonRegex = /(\{[\s\S]*?\})/g;
+        return content.replace(jsonRegex, function(match) {
+            try {
+                // 尝试解析为JSON
+                const jsonObj = JSON.parse(match);
+                return JSON.stringify(jsonObj, null, 2);
+            } catch (e) {
+                // 如果不是有效的JSON，使用js-beautify格式化
+                return js_beautify(match, {
+                    indent_size: 2,
+                    space_in_empty_paren: true
+                });
+            }
+        });
+    }
+
+    // 初始化账号验证功能
+    function initAccountVerification() {
+        const verifyAccountBtn = document.getElementById('verify-account-btn');
+        if (verifyAccountBtn) {
+            verifyAccountBtn.addEventListener('click', function() {
+                const accountId = document.getElementById('account_id').value.trim();
+                const platform = document.getElementById('type').value;
+
+                if (!accountId) {
+                    showToast('错误', '请先输入账号ID', 'danger');
+                    return;
+                }
+
+                // 显示加载状态
+                this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 验证中...';
+                this.disabled = true;
+
+                // 模拟验证过程
+                setTimeout(() => {
+                    // 恢复按钮状态
+                    this.innerHTML = '<i class="bi bi-check-circle me-1"></i>验证';
+                    this.disabled = false;
+
+                    // 随机结果，实际应用中应该调用API验证
+                    const isValid = Math.random() > 0.3;
+
+                    if (isValid) {
+                        showToast('成功', `账号 @${accountId} 验证通过`, 'success');
+                        document.getElementById('account_id').classList.add('is-valid');
+                    } else {
+                        showToast('错误', `账号 @${accountId} 不存在或无法访问`, 'danger');
+                        document.getElementById('account_id').classList.add('is-invalid');
+                    }
+                }, 1500);
+            });
+        }
+    }
+
+    // 初始化删除账号功能
+    function initDeleteAccount() {
+        const deleteAccountBtn = document.getElementById('delete-account-btn');
+        if (deleteAccountBtn) {
+            deleteAccountBtn.addEventListener('click', function() {
+                const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+                deleteModal.show();
+            });
+        }
+    }
+
+    // 初始化表单提交
+    function initFormSubmit(promptEditor, replyEditor) {
+        const form = document.getElementById('account-form');
+
+        form.addEventListener('submit', function(e) {
+            // 保存编辑器内容到textarea
             promptEditor.save();
             replyEditor.save();
 
-            // 验证账号ID
+            // 获取表单数据
             const accountId = document.getElementById('account_id').value.trim();
+            const tag = document.getElementById('tag').value.trim();
+            const bypassAi = document.getElementById('bypass_ai').checked;
+            const enableAutoReply = document.getElementById('enable_auto_reply').checked;
+
+            // 验证账号ID
             if (!/^[A-Za-z0-9_]{1,15}$/.test(accountId)) {
-                alert('Twitter账号ID格式不正确，只能包含字母、数字和下划线，最多15个字符');
                 e.preventDefault();
+                showToast('错误', '账号ID格式不正确，只能包含字母、数字和下划线，最多15个字符', 'danger');
+                document.getElementById('account_id').focus();
                 return false;
             }
 
             // 验证标签
-            const tag = document.getElementById('tag').value.trim();
-            if (!/^[a-z0-9_]{1,20}$/.test(tag)) {
-                alert('标签格式不正确，只能包含小写字母、数字和下划线，最多20个字符');
+            if (tag && !/^[a-z0-9_]{1,20}$/.test(tag)) {
                 e.preventDefault();
+                showToast('错误', '标签格式不正确，只能包含小写字母、数字和下划线，最多20个字符', 'danger');
+                document.getElementById('tag').focus();
                 return false;
             }
 
-            // 验证提示词模板
-            const promptTemplate = promptEditor.getValue().trim();
-            if (promptTemplate.length < 10) {
-                alert('提示词模板太短，请输入有效的提示词');
-                e.preventDefault();
-                return false;
-            }
-
-            // 如果启用了自动回复，验证自动回复模板
-            if (document.getElementById('enable_auto_reply').checked) {
-                const replyTemplate = replyEditor.getValue().trim();
-                if (replyTemplate.length < 10) {
-                    alert('自动回复模板太短，请输入有效的提示词');
+            // 如果不是绕过AI判断，则验证提示词模板
+            if (!bypassAi) {
+                const promptTemplate = promptEditor.getValue().trim();
+                if (promptTemplate.length < 10) {
                     e.preventDefault();
+                    showToast('错误', '提示词模板太短，请输入有效的提示词', 'danger');
+                    promptEditor.focus();
+                    return false;
+                }
+
+                // 检查是否包含占位符
+                if (!promptTemplate.includes('{content}')) {
+                    e.preventDefault();
+                    showToast('错误', '提示词模板必须包含{content}占位符', 'danger');
+                    promptEditor.focus();
                     return false;
                 }
             }
 
+            // 如果启用了自动回复，验证自动回复模板
+            if (enableAutoReply) {
+                const replyTemplate = replyEditor.getValue().trim();
+                if (replyTemplate.length < 10) {
+                    e.preventDefault();
+                    showToast('错误', '自动回复模板太短，请输入有效的提示词', 'danger');
+                    replyEditor.focus();
+                    return false;
+                }
+
+                // 检查是否包含占位符
+                if (!replyTemplate.includes('{content}')) {
+                    e.preventDefault();
+                    showToast('错误', '自动回复模板必须包含{content}占位符', 'danger');
+                    replyEditor.focus();
+                    return false;
+                }
+            }
+
+            // 显示提交中状态
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 保存中...';
+            submitBtn.disabled = true;
+
+            // 延迟提交，模拟处理过程
+            setTimeout(() => {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }, 1000);
+
             return true;
         });
-    });
+    }
+
+    // 显示表单提示
+    function showFormTips() {
+        // 在页面加载完成后显示提示
+        setTimeout(() => {
+            showToast('提示', '请填写账号信息并设置提示词模板', 'info');
+        }, 1000);
+    }
+
+    // 显示提示消息
+    function showToast(title, message, type = 'info') {
+        // 检查是否已存在toast容器
+        let toastContainer = document.querySelector('.toast-container');
+
+        // 如果不存在，创建一个
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            document.body.appendChild(toastContainer);
+        }
+
+        // 创建toast元素
+        const toastId = 'toast-' + Date.now();
+        const toastHTML = `
+            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header bg-${type} text-white">
+                    <strong class="me-auto">${title}</strong>
+                    <small>刚刚</small>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    ${message}
+                </div>
+            </div>
+        `;
+
+        // 添加到容器
+        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+
+        // 初始化并显示toast
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+        toast.show();
+
+        // 自动移除
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            toastElement.remove();
+        });
+    }
 </script>
 {% endblock %}

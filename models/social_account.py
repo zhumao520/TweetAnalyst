@@ -13,6 +13,7 @@ class SocialAccount(db.Model):
     account_id = db.Column(db.String(100), nullable=False, index=True)  # 账号ID
     tag = db.Column(db.String(50), default='all', index=True)  # 标签，用于分组
     enable_auto_reply = db.Column(db.Boolean, default=False, index=True)  # 是否启用自动回复
+    bypass_ai = db.Column(db.Boolean, default=False, index=True)  # 是否绕过AI判断直接推送
     prompt_template = db.Column(db.Text)  # 分析提示词模板
     auto_reply_template = db.Column(db.Text)  # 自动回复提示词模板
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -32,11 +33,12 @@ class SocialAccount(db.Model):
             'account_id': self.account_id,
             'tag': self.tag,
             'enable_auto_reply': self.enable_auto_reply,
+            'bypass_ai': self.bypass_ai,
             'prompt_template': self.prompt_template,
             'auto_reply_template': self.auto_reply_template,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
-    
+
     def __repr__(self):
         return f'<SocialAccount {self.type}:{self.account_id}>'

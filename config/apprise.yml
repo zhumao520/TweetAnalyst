@@ -1,21 +1,15 @@
-version: 1
-
 # Apprise URLs配置
 # 每个URL对应一个通知服务
 # 可以为URL指定标签，用于筛选通知目标
 
-# 示例配置
-urls:
-  # 已删除企业微信机器人配置
+# 注意：以下URL包含变量，需要替换为实际值才能使用
+# 系统已从环境变量加载正确的URL，此文件仅作为示例
 
-  # Telegram机器人示例
-  - url: tgram://$TELEGRAM_BOT_TOKEN/$TELEGRAM_CHAT_ID
-    tag: all
+# Telegram机器人示例（已注释，避免错误）
+# tgram://BOT_TOKEN/CHAT_ID
 
-  # Discord示例
-  - url: discord://$DISCORD_WEBHOOK_ID/$DISCORD_WEBHOOK_TOKEN
-    tag: all
+# Discord示例
+# discord://WEBHOOK_ID/WEBHOOK_TOKEN
 
-  # 邮件示例
-  - url: mailto://$EMAIL_USER:$EMAIL_PASSWORD@$EMAIL_SMTP_SERVER?to=$TO_EMAIL
-    tag: important
+# 邮件示例
+# mailto://EMAIL_USER:EMAIL_PASSWORD@SMTP_SERVER?to=TO_EMAIL

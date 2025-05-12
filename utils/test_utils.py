@@ -376,11 +376,15 @@ def check_system_status():
     Returns:
         dict: 系统状态信息
     """
+    # 获取平台信息
+    import platform
+
     status = {
         "system": {
             "version": "1.0.0",
             "uptime": "Unknown",
-            "memory_usage": "Unknown"
+            "memory_usage": "Unknown",
+            "platform": platform.platform()  # 添加平台信息
         },
         "components": {
             "twitter_api": {
@@ -392,6 +396,10 @@ def check_system_status():
                 "message": "未测试"
             },
             "proxy": {
+                "status": "Unknown",
+                "message": "未测试"
+            },
+            "notification": {
                 "status": "Unknown",
                 "message": "未测试"
             }
@@ -507,5 +515,61 @@ def check_system_status():
         logger.error(f"检查代理状态时出错: {str(e)}")
         status["components"]["proxy"]["status"] = "异常"
         status["components"]["proxy"]["message"] = f"检查状态出错: {str(e)}"
+
+    # 检查推送功能状态
+    try:
+        # 检查推送URL是否配置
+        apprise_urls = os.getenv("APPRISE_URLS", "")
+
+        # 如果环境变量中没有，尝试从配置服务获取
+        if not apprise_urls:
+            try:
+                # 动态导入配置服务，避免循环导入
+                import importlib
+                config_service = importlib.import_module('services.config_service')
+                apprise_urls = config_service.get_config('APPRISE_URLS', '')
+                logger.info("从配置服务获取推送URLs")
+            except Exception as e:
+                logger.error(f"从配置服务获取推送URLs时出错: {str(e)}")
+
+        if apprise_urls:
+            # 尝试加载推送模块
+            try:
+                import apprise
+
+                # 创建Apprise对象
+                apobj = apprise.Apprise()
+
+                # 添加URL
+                valid_urls = 0
+                for url in apprise_urls.split(','):
+                    url = url.strip()
+                    if url:
+                        try:
+                            added = apobj.add(url)
+                            if added:
+                                valid_urls += 1
+                        except Exception as e:
+                            logger.error(f"添加推送URL时出错: {str(e)}")
+
+                if valid_urls > 0:
+                    status["components"]["notification"]["status"] = "正常"
+                    status["components"]["notification"]["message"] = f"已配置 {valid_urls} 个推送渠道"
+                else:
+                    status["components"]["notification"]["status"] = "异常"
+                    status["components"]["notification"]["message"] = "推送URL格式不正确"
+            except ImportError:
+                status["components"]["notification"]["status"] = "异常"
+                status["components"]["notification"]["message"] = "未安装Apprise库"
+            except Exception as e:
+                status["components"]["notification"]["status"] = "异常"
+                status["components"]["notification"]["message"] = f"检查推送模块时出错: {str(e)}"
+        else:
+            status["components"]["notification"]["status"] = "异常"
+            status["components"]["notification"]["message"] = "未配置推送URL"
+    except Exception as e:
+        logger.error(f"检查推送功能状态时出错: {str(e)}")
+        status["components"]["notification"]["status"] = "异常"
+        status["components"]["notification"]["message"] = f"检查状态出错: {str(e)}"
 
     return status

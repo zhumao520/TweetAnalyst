@@ -3,21 +3,25 @@ TweetAnalyst API包
 提供统一的API接口，包括设置、测试、账号管理、数据分析等功能
 """
 
-from flask import Blueprint
+from flask import Blueprint, jsonify, redirect, url_for, request
 
 # 创建主API蓝图
 api_blueprint = Blueprint('api', __name__, url_prefix='/api')
+
+# 导入系统API
+from .system import system_api
 
 # 导入各模块API
 from .settings import settings_api
 from .test import test_api
 from .accounts import accounts_api
 from .analytics import analytics_api
-from .tasks import tasks_api
 from .logs import logs_api
 from .notifications import notifications_api
+from .tasks import tasks_api
 
 # 注册子蓝图
+api_blueprint.register_blueprint(system_api)
 api_blueprint.register_blueprint(settings_api)
 api_blueprint.register_blueprint(test_api)
 api_blueprint.register_blueprint(accounts_api)

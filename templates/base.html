@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,18 +8,24 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dark-theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nav-animations.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/global-animations.css') }}">
     <meta name="theme-color" content="#343a40">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     {% block head %}{% endblock %}
     {% block extra_css %}{% endblock %}
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
-            <a class="navbar-brand" href="{{ url_for('index') }}">TweetAnalyst</a>
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="bi bi-twitter me-2"></i>TweetAnalyst
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -27,23 +33,33 @@
                 {% if session.get('user_id') %}
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('index') }}">首页</a>
+                        <a class="nav-link {% if request.path == url_for('index') %}active{% endif %}" href="{{ url_for('index') }}">
+                            <i class="bi bi-house-door me-1"></i>首页
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('accounts') }}">账号管理</a>
+                        <a class="nav-link {% if request.path == url_for('accounts') %}active{% endif %}" href="{{ url_for('accounts') }}">
+                            <i class="bi bi-person-badge me-1"></i>账号管理
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('results') }}">分析结果</a>
+                        <a class="nav-link {% if request.path == url_for('results') %}active{% endif %}" href="{{ url_for('results') }}">
+                            <i class="bi bi-bar-chart me-1"></i>分析结果
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('analytics_page') }}">数据分析</a>
+                        <a class="nav-link {% if request.path == url_for('analytics_page') %}active{% endif %}" href="{{ url_for('analytics_page') }}">
+                            <i class="bi bi-graph-up me-1"></i>数据分析
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('config') }}">配置管理</a>
+                        <a class="nav-link {% if request.path == url_for('config') %}active{% endif %}" href="{{ url_for('config') }}">
+                            <i class="bi bi-sliders me-1"></i>配置管理
+                        </a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="settingsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            系统设置
+                        <a class="nav-link dropdown-toggle {% if 'settings' in request.path or 'test' in request.path or 'logs' in request.path %}active{% endif %}" href="#" id="settingsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-gear me-1"></i>系统设置
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="settingsDropdown">
                             <li><a class="dropdown-item" href="{{ url_for('unified_settings') }}"><i class="bi bi-gear-fill"></i> 统一设置中心</a></li>
@@ -61,7 +77,7 @@
                         <a class="nav-link dropdown-toggle position-relative" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-bell"></i>
                             <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="notification-badge">
-                                0
+                                <span class="notification-count">0</span>
                                 <span class="visually-hidden">未读通知</span>
                             </span>
                         </a>
@@ -72,7 +88,20 @@
                         </ul>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('logout') }}">退出</a>
+                        <div class="nav-link d-flex align-items-center">
+                            <label class="theme-switch mb-0 me-2" title="切换主题">
+                                <input type="checkbox" id="theme-toggle">
+                                <span class="theme-switch-slider">
+                                    <i class="bi bi-sun-fill theme-icon theme-icon-light"></i>
+                                    <i class="bi bi-moon-fill theme-icon theme-icon-dark"></i>
+                                </span>
+                            </label>
+                        </div>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="bi bi-box-arrow-right me-1"></i>退出
+                        </a>
                     </li>
                 </ul>
                 {% endif %}
@@ -110,200 +139,20 @@
         </div>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/components.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <!-- 核心JavaScript库 -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+    <script src="{{ url_for('static', filename='js/components.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/fetch-helper.js') }}" defer></script>
+
+    <!-- 自定义功能模块 -->
+    <script src="{{ url_for('static', filename='js/csrf-protection.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/theme-switcher.js') }}" defer></script>
+    {% if session.get('user_id') %}
+    <script src="{{ url_for('static', filename='js/notifications.js') }}" defer></script>
+    {% endif %}
 
     {% block scripts %}{% endblock %}
-
-    <!-- CSRF保护 -->
-    <script>
-        // 为所有AJAX请求添加CSRF令牌
-        (function() {
-            // 获取CSRF令牌
-            const csrfToken = "{{ csrf_token() }}";
-
-            // 保存原始fetch函数
-            const originalFetch = window.fetch;
-
-            // 重写fetch函数，添加CSRF令牌
-            window.fetch = function(url, options = {}) {
-                // 如果是POST、PUT、DELETE或PATCH请求，添加CSRF令牌
-                if (options.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method.toUpperCase())) {
-                    // 创建新的options对象
-                    options = Object.assign({}, options);
-
-                    // 确保headers存在
-                    options.headers = options.headers || {};
-
-                    // 如果headers是Headers对象，转换为普通对象
-                    if (options.headers instanceof Headers) {
-                        const headersObj = {};
-                        for (const [key, value] of options.headers.entries()) {
-                            headersObj[key] = value;
-                        }
-                        options.headers = headersObj;
-                    }
-
-                    // 添加CSRF令牌到headers
-                    options.headers['X-CSRFToken'] = csrfToken;
-                }
-
-                // 调用原始fetch函数
-                return originalFetch(url, options);
-            };
-
-            console.log('已添加CSRF保护到所有AJAX请求');
-        })();
-    </script>
-
-    {% if session.get('user_id') %}
-    <script>
-        // 通知功能
-        document.addEventListener('DOMContentLoaded', function() {
-            const notificationBadge = document.getElementById('notification-badge');
-            const notificationsContainer = document.getElementById('notifications-container');
-
-            // 从本地存储获取已读通知
-            let readNotifications = JSON.parse(localStorage.getItem('readNotifications') || '[]');
-
-            // 加载通知
-            function loadNotifications() {
-                fetch('/api/notifications')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            updateNotifications(data.data);
-                        } else {
-                            console.error('Failed to load notifications:', data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error loading notifications:', error);
-                    });
-            }
-
-            // 更新通知UI
-            function updateNotifications(notifications) {
-                // 清空容器
-                notificationsContainer.innerHTML = '';
-
-                // 添加标题
-                const header = document.createElement('li');
-                header.innerHTML = '<h6 class="dropdown-header">通知</h6>';
-                notificationsContainer.appendChild(header);
-
-                // 添加分隔线
-                const divider = document.createElement('li');
-                divider.innerHTML = '<hr class="dropdown-divider">';
-                notificationsContainer.appendChild(divider);
-
-                // 如果没有通知
-                if (notifications.length === 0) {
-                    const emptyItem = document.createElement('li');
-                    emptyItem.innerHTML = '<a class="dropdown-item text-center" href="#">暂无通知</a>';
-                    notificationsContainer.appendChild(emptyItem);
-                    notificationBadge.classList.add('d-none');
-                    return;
-                }
-
-                // 计算未读通知数量
-                let unreadCount = 0;
-
-                // 添加通知项
-                notifications.forEach(notification => {
-                    // 检查是否已读
-                    const isRead = readNotifications.includes(notification.id);
-                    if (!isRead) {
-                        unreadCount++;
-                    }
-
-                    // 创建通知项
-                    const item = document.createElement('li');
-                    const notificationTime = new Date(notification.time);
-                    const timeString = notificationTime.toLocaleString('zh-CN', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    });
-
-                    item.innerHTML = `
-                        <a class="dropdown-item ${isRead ? 'text-muted' : 'fw-bold'}" href="${notification.url}">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">${notification.title}</h6>
-                                <small>${timeString}</small>
-                            </div>
-                            <p class="mb-1 small">${notification.content}</p>
-                        </a>
-                    `;
-
-                    // 点击事件：标记为已读
-                    item.querySelector('a').addEventListener('click', function() {
-                        markAsRead(notification.id);
-                    });
-
-                    notificationsContainer.appendChild(item);
-                });
-
-                // 添加"全部标记为已读"按钮
-                if (unreadCount > 0) {
-                    const markAllItem = document.createElement('li');
-                    markAllItem.innerHTML = '<hr class="dropdown-divider">';
-                    notificationsContainer.appendChild(markAllItem);
-
-                    const markAllButton = document.createElement('li');
-                    markAllButton.innerHTML = '<a class="dropdown-item text-center" href="#">全部标记为已读</a>';
-                    markAllButton.querySelector('a').addEventListener('click', function(e) {
-                        e.preventDefault();
-                        markAllAsRead(notifications);
-                    });
-                    notificationsContainer.appendChild(markAllButton);
-                }
-
-                // 更新未读数量徽章
-                if (unreadCount > 0) {
-                    notificationBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-                    notificationBadge.classList.remove('d-none');
-                } else {
-                    notificationBadge.classList.add('d-none');
-                }
-            }
-
-            // 标记单个通知为已读
-            function markAsRead(id) {
-                if (!readNotifications.includes(id)) {
-                    readNotifications.push(id);
-                    localStorage.setItem('readNotifications', JSON.stringify(readNotifications));
-                }
-            }
-
-            // 标记所有通知为已读
-            function markAllAsRead(notifications) {
-                notifications.forEach(notification => {
-                    if (!readNotifications.includes(notification.id)) {
-                        readNotifications.push(notification.id);
-                    }
-                });
-                localStorage.setItem('readNotifications', JSON.stringify(readNotifications));
-
-                // 更新UI
-                document.querySelectorAll('#notifications-container .dropdown-item').forEach(item => {
-                    item.classList.remove('fw-bold');
-                    item.classList.add('text-muted');
-                });
-
-                notificationBadge.classList.add('d-none');
-            }
-
-            // 初始加载通知
-            loadNotifications();
-
-            // 每分钟刷新一次通知
-            setInterval(loadNotifications, 60000);
-        });
-    </script>
-    {% endif %}
 
     <script>
         // 初始化通知组件
