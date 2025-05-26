@@ -96,17 +96,18 @@ jobs:
           schedule>=1.2.0
 
           # LLM支持
-          openai>=1.0.0
           langchain-openai>=0.0.1
           langchain-core>=0.1.0
 
           # Twitter支持
-          tweety-ns>=0.9.0
+          tweety-ns>=2.2
+          twikit>=2.1.0
 
           # Web应用
           Flask>=2.0.0,<2.4.0
           Flask-SQLAlchemy>=3.0.0
           Flask-WTF>=1.0.0,<1.2.0
+          Flask-Login>=0.6.0
           Werkzeug>=2.0.0,<2.4.0
 
           # 系统监控
@@ -231,9 +232,11 @@ jobs:
           cat > /tmp/build/Dockerfile << 'EOL'
           FROM python:3.11-slim
 
-          LABEL maintainer="TweetAnalyst Team"
+          LABEL maintainer="TweetAnalyst Team & Augment Code"
           LABEL description="TweetAnalyst - 社交媒体内容分析助手"
-          LABEL version="1.0"
+          LABEL version="2.0"
+          LABEL website="https://augmentcode.com"
+          LABEL credits="本项目由一个写不出一行代码的白痴在Augment Code的强大帮助下完成"
 
           WORKDIR /app
 
@@ -254,8 +257,8 @@ jobs:
           # 安装所有依赖（合并多个RUN命令减少层数）
           RUN pip install --no-cache-dir -r /app/requirements.txt && \
               pip install --no-cache-dir langchain-openai>=0.0.1 langchain-core>=0.1.0 && \
-              pip install --no-cache-dir Flask Flask-WTF Werkzeug Flask-SQLAlchemy && \
-              pip install --no-cache-dir tweety-ns apprise "httpx[socks]" && \
+              pip install --no-cache-dir Flask Flask-WTF Werkzeug Flask-SQLAlchemy Flask-Login>=0.6.0 && \
+              pip install --no-cache-dir tweety-ns>=2.2 twikit>=2.1.0 apprise "httpx[socks]" && \
               pip cache purge
 
           # 创建数据和日志目录
@@ -263,11 +266,12 @@ jobs:
               chmod -R 755 /app/logs && \
               chmod -R 755 /data
 
-          # 复制应用代码
-          COPY . .
-
-          # 添加启动脚本权限
+          # 先复制启动脚本并设置权限
+          COPY docker-entrypoint.sh /app/docker-entrypoint.sh
           RUN chmod +x /app/docker-entrypoint.sh
+
+          # 复制其余应用代码
+          COPY . .
 
           # 设置环境变量
           ENV DATABASE_PATH=/data/tweetAnalyst.db \
@@ -305,15 +309,23 @@ jobs:
           fi
 
           # 确保docker-entrypoint.sh脚本存在并有执行权限
-          if [ -f "/tmp/build/docker-entrypoint.sh" ]; then
-            echo "临时目录中 docker-entrypoint.sh 存在"
-            chmod +x /tmp/build/docker-entrypoint.sh
-          else
-            echo "临时目录中 docker-entrypoint.sh 不存在！"
-            # 复制刚刚创建的 docker-entrypoint.sh 文件
+          if [ -f "docker-entrypoint.sh" ]; then
+            echo "源目录中 docker-entrypoint.sh 存在"
             cp docker-entrypoint.sh /tmp/build/
             chmod +x /tmp/build/docker-entrypoint.sh
-            echo "已复制 docker-entrypoint.sh 到临时目录"
+            echo "已复制 docker-entrypoint.sh 到临时目录并设置执行权限"
+          else
+            echo "❌ 源目录中 docker-entrypoint.sh 不存在！"
+            exit 1
+          fi
+
+          # 验证文件是否正确复制
+          if [ -f "/tmp/build/docker-entrypoint.sh" ]; then
+            echo "✅ 临时目录中 docker-entrypoint.sh 存在"
+            ls -la /tmp/build/docker-entrypoint.sh
+          else
+            echo "❌ 临时目录中 docker-entrypoint.sh 复制失败！"
+            exit 1
           fi
 
       # 构建并推送
