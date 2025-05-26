@@ -1,0 +1,1370 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - TweetAnalyst{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-speedometer2 me-2"></i>系统概览
+                </h4>
+                <div>
+                    <button id="run-timeline-btn" class="btn btn-light me-2">
+                        <i class="bi bi-clock-history me-1"></i> 执行时间线任务
+                    </button>
+                    <button id="run-all-accounts-btn" class="btn btn-light">
+                        <i class="bi bi-play-fill me-1"></i> 执行账号监控
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card mb-3 border-primary h-100">
+                            <div class="card-body text-center">
+                                <div class="d-flex align-items-center justify-content-center mb-3">
+                                    <i class="bi bi-people-fill text-primary fs-1 me-2"></i>
+                                    <h5 class="card-title mb-0">监控账号</h5>
+                                </div>
+                                <p class="card-text display-4 fw-bold text-primary" id="account-count">-</p>
+                                <p class="text-muted small">当前监控的社交媒体账号数量</p>
+                            </div>
+                            <div class="card-footer bg-transparent border-top-0">
+                                <a href="{{ url_for('accounts') }}" class="btn btn-sm btn-outline-primary w-100">
+                                    <i class="bi bi-gear-fill me-1"></i> 管理账号
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card mb-3 border-success h-100">
+                            <div class="card-body text-center">
+                                <div class="d-flex align-items-center justify-content-center mb-3">
+                                    <i class="bi bi-bar-chart-fill text-success fs-1 me-2"></i>
+                                    <h5 class="card-title mb-0">今日分析</h5>
+                                </div>
+                                <p class="card-text display-4 fw-bold text-success" id="today-count">-</p>
+                                <p class="text-muted small">今日已分析的社交媒体内容数量</p>
+                            </div>
+                            <div class="card-footer bg-transparent border-top-0">
+                                <a href="{{ url_for('analytics_page') }}" class="btn btn-sm btn-outline-success w-100">
+                                    <i class="bi bi-graph-up me-1"></i> 查看分析
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card mb-3 border-info h-100">
+                            <div class="card-body text-center">
+                                <div class="d-flex align-items-center justify-content-center mb-3">
+                                    <i class="bi bi-check-circle-fill text-info fs-1 me-2"></i>
+                                    <h5 class="card-title mb-0">相关内容</h5>
+                                </div>
+                                <p class="card-text display-4 fw-bold text-info" id="relevant-count">-</p>
+                                <p class="text-muted small">已推送的相关内容数量</p>
+                            </div>
+                            <div class="card-footer bg-transparent border-top-0">
+                                <a href="{{ url_for('results') }}" class="btn btn-sm btn-outline-info w-100">
+                                    <i class="bi bi-filter-square-fill me-1"></i> 查看内容列表
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-list-ul me-2"></i>最近分析结果
+                </h4>
+                <div>
+                    <button id="refresh-results-btn" class="btn btn-sm btn-light me-2">
+                        <i class="bi bi-arrow-clockwise me-1"></i> 刷新
+                    </button>
+                    <a href="{{ url_for('results') }}" class="btn btn-sm btn-light">
+                        <i class="bi bi-search me-1"></i> 查看全部
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="border-0">
+                                    <i class="bi bi-globe me-1"></i>平台
+                                </th>
+                                <th class="border-0">
+                                    <i class="bi bi-person me-1"></i>账号
+                                </th>
+                                <th class="border-0">
+                                    <i class="bi bi-clock me-1"></i>时间
+                                </th>
+                                <th class="border-0">
+                                    <i class="bi bi-chat-text me-1"></i>内容
+                                </th>
+                                <th class="border-0">
+                                    <i class="bi bi-check-square me-1"></i>相关性
+                                </th>
+                                <th class="border-0 text-end">
+                                    <i class="bi bi-three-dots-vertical"></i>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-results">
+                            <tr>
+                                <td colspan="6" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <p class="mt-2 text-muted">正在加载最近分析结果...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="no-results" class="text-center py-5 d-none">
+                    <i class="bi bi-inbox fs-1 text-muted"></i>
+                    <p class="mt-3 text-muted">暂无分析结果</p>
+                    <button id="run-first-task-btn" class="btn btn-primary mt-2">
+                        <i class="bi bi-play-fill me-1"></i> 运行第一次监控任务
+                    </button>
+                </div>
+            </div>
+            <div class="card-footer bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle me-1"></i> 显示最近10条分析结果
+                    </small>
+                    <a href="{{ url_for('results') }}" class="btn btn-primary">
+                        <i class="bi bi-list-columns me-1"></i> 查看全部内容
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 系统状态卡片 -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="bi bi-activity me-2 text-danger"></i>系统状态
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-hdd-stack me-2 text-primary"></i>数据库状态
+                        </span>
+                        <span class="badge bg-success rounded-pill" id="db-status">
+                            <i class="bi bi-check-circle me-1"></i>正常
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-robot me-2 text-primary"></i>AI服务状态
+                        </span>
+                        <span class="badge bg-success rounded-pill" id="ai-status">
+                            <i class="bi bi-check-circle me-1"></i>正常
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-bell me-2 text-primary"></i>推送服务状态
+                        </span>
+                        <span class="badge bg-success rounded-pill" id="notification-status">
+                            <i class="bi bi-check-circle me-1"></i>正常
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-shield-check me-2 text-primary"></i>代理服务状态
+                        </span>
+                        <span class="badge bg-success rounded-pill" id="proxy-status">
+                            <i class="bi bi-check-circle me-1"></i>正常
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-twitter me-2 text-primary"></i>Twitter抓取组件
+                        </span>
+                        <span class="badge bg-success rounded-pill" id="twitter-status">
+                            <i class="bi bi-check-circle me-1"></i>正常
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-clock-history me-2 text-primary"></i>上次监控时间
+                        </span>
+                        <span id="last-run-time">-</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="bi bi-lightning-charge me-2 text-warning"></i>快速操作
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <a href="{{ url_for('accounts') }}" class="btn btn-outline-primary w-100 h-100 d-flex flex-column align-items-center justify-content-center p-3">
+                            <i class="bi bi-people-fill fs-3 mb-2"></i>
+                            <span>管理账号</span>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a href="{{ url_for('results') }}" class="btn btn-outline-success w-100 h-100 d-flex flex-column align-items-center justify-content-center p-3">
+                            <i class="bi bi-list-columns fs-3 mb-2"></i>
+                            <span>查看结果</span>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a href="{{ url_for('config') }}" class="btn btn-outline-info w-100 h-100 d-flex flex-column align-items-center justify-content-center p-3">
+                            <i class="bi bi-gear-fill fs-3 mb-2"></i>
+                            <span>系统配置</span>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a href="{{ url_for('logs_page') }}" class="btn btn-outline-secondary w-100 h-100 d-flex flex-column align-items-center justify-content-center p-3">
+                            <i class="bi bi-journal-text fs-3 mb-2"></i>
+                            <span>系统日志</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- 任务状态模态框 -->
+<div class="modal fade" id="taskStatusModal" tabindex="-1" aria-labelledby="taskStatusModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="taskStatusModalLabel">
+                    <i class="bi bi-activity me-2"></i>任务状态
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div id="task-status-content">
+                    <!-- 任务状态头部 -->
+                    <div class="alert alert-primary d-flex align-items-center mb-3" id="task-status-alert">
+                        <div class="spinner-border spinner-border-sm text-primary me-3" role="status" id="task-spinner">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <div>
+                            <h6 class="alert-heading mb-1">任务进行中</h6>
+                            <p class="mb-0" id="task-message">正在准备任务...</p>
+                        </div>
+                    </div>
+
+                    <!-- 任务进度条 -->
+                    <div class="progress mb-3" id="task-progress-container" style="height: 10px; display: none;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="task-progress" role="progressbar" style="width: 0%"></div>
+                    </div>
+
+                    <!-- 任务详情 -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm mb-3">
+                                <div class="card-header bg-light">
+                                    <h6 class="card-title mb-0">
+                                        <i class="bi bi-info-circle me-2 text-primary"></i>任务信息
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="list-group list-group-flush">
+                                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                            <span>
+                                                <i class="bi bi-check2-circle me-2 text-primary"></i>状态
+                                            </span>
+                                            <span class="badge bg-info" id="task-status-text">准备中</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                            <span>
+                                                <i class="bi bi-clock me-2 text-primary"></i>开始时间
+                                            </span>
+                                            <span id="task-start-time">-</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                            <span>
+                                                <i class="bi bi-hourglass-split me-2 text-primary"></i>运行时间
+                                            </span>
+                                            <span id="task-duration">0秒</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm mb-3">
+                                <div class="card-header bg-light">
+                                    <h6 class="card-title mb-0">
+                                        <i class="bi bi-bar-chart me-2 text-primary"></i>处理统计
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row text-center">
+                                        <div class="col-6">
+                                            <div class="p-3">
+                                                <h3 class="text-primary mb-0" id="task-posts-count">0</h3>
+                                                <p class="text-muted small mb-0">处理的帖子</p>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="p-3">
+                                                <h3 class="text-success mb-0" id="task-relevant-count">0</h3>
+                                                <p class="text-muted small mb-0">相关内容</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 任务日志 -->
+                    <div class="card border-0 shadow-sm" id="task-log-container">
+                        <div class="card-header bg-light">
+                            <h6 class="card-title mb-0">
+                                <i class="bi bi-journal-text me-2 text-primary"></i>任务日志
+                            </h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="list-group list-group-flush" id="task-log">
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">任务初始化</h6>
+                                        <small class="text-muted" id="task-init-time">刚刚</small>
+                                    </div>
+                                    <p class="mb-1">系统正在准备执行监控任务...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>关闭
+                </button>
+                <a href="{{ url_for('results') }}" class="btn btn-primary" id="view-results-btn" style="display: none;">
+                    <i class="bi bi-search me-1"></i>查看结果
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 全局变量
+    let taskStatusModal;
+    let taskStatusInterval;
+    let taskStartTime;
+    let lastUpdateTime;
+
+    // 初始化页面
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化模态框
+        taskStatusModal = new bootstrap.Modal(document.getElementById('taskStatusModal'));
+
+        // 初始化当前时间
+        lastUpdateTime = new Date();
+        document.getElementById('task-init-time').textContent = formatTime(lastUpdateTime);
+
+        // 绑定按钮事件
+        initButtonEvents();
+
+        // 加载数据
+        loadDashboardData();
+
+        // 检查系统状态
+        checkSystemStatus();
+    });
+
+    // 初始化按钮事件
+    function initButtonEvents() {
+        // 运行所有账号监控任务
+        document.getElementById('run-all-accounts-btn').addEventListener('click', function() {
+            runTask();
+        });
+
+        // 运行时间线任务
+        document.getElementById('run-timeline-btn').addEventListener('click', function() {
+            runTimelineTask();
+        });
+
+        // 刷新结果按钮
+        const refreshBtn = document.getElementById('refresh-results-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function() {
+                loadRecentResults(true);
+
+                // 添加旋转动画
+                const icon = this.querySelector('i');
+                icon.classList.add('rotate-animation');
+                setTimeout(() => {
+                    icon.classList.remove('rotate-animation');
+                }, 1000);
+            });
+        }
+
+        // 运行第一次监控任务按钮
+        const firstTaskBtn = document.getElementById('run-first-task-btn');
+        if (firstTaskBtn) {
+            firstTaskBtn.addEventListener('click', function() {
+                runTask();
+            });
+        }
+    }
+
+    // 运行时间线任务
+    function runTimelineTask() {
+        // 首先检查时间线任务是否已在运行
+        fetch('/api/tasks/status/timeline')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.status && data.status.is_running) {
+                // 如果时间线任务已在运行，直接显示当前任务状态
+                showRunningTaskStatus(data.status, 'timeline');
+            } else {
+                // 如果没有时间线任务在运行，启动新任务
+                startNewTimelineTask();
+            }
+        })
+        .catch(error => {
+            console.error('Error checking timeline task status:', error);
+            // 如果检查状态失败，尝试启动新任务
+            startNewTimelineTask();
+        });
+    }
+
+    // 启动新的时间线任务
+    function startNewTimelineTask() {
+        // 重置模态框状态
+        resetTaskModal();
+
+        // 更新模态框标题
+        document.getElementById('taskStatusModalLabel').innerHTML = '<i class="bi bi-clock-history me-2"></i>时间线任务状态';
+
+        // 显示模态框
+        taskStatusModal.show();
+
+        // 记录开始时间
+        taskStartTime = new Date();
+
+        // 更新状态警报
+        updateTaskAlert('准备中', 'info');
+        updateTaskMessage('正在准备时间线抓取任务...');
+        updateTaskStatusBadge('准备中', 'info');
+
+        // 显示加载动画
+        showTaskSpinner();
+
+        // 发送请求
+        fetch('/api/tasks/run_timeline', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({}),
+        })
+        .then(response => {
+            // 检查响应是否成功
+            if (!response.ok) {
+                throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+            }
+            // 检查Content-Type是否为application/json
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error(`预期JSON响应，但收到: ${contentType}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // 记录开始时间
+                taskStartTime = new Date();
+
+                // 更新状态警报
+                updateTaskAlert('进行中', 'primary');
+
+                // 更新状态
+                updateTaskStatus(data.status);
+
+                // 添加日志条目
+                addTaskLogEntry('任务启动', '时间线抓取任务已成功启动');
+
+                // 启动定时查询状态
+                taskStatusInterval = setInterval(checkTaskStatus, 1000);
+
+                // 显示进度条
+                const progressContainer = document.getElementById('task-progress-container');
+                if (progressContainer) {
+                    progressContainer.style.display = 'block';
+                }
+            } else {
+                // 如果失败原因是任务已在运行，则获取当前任务状态并显示
+                if (data.message && data.message.includes('任务已在运行中') && data.status) {
+                    showRunningTaskStatus(data.status, 'timeline');
+                } else {
+                    // 显示错误
+                    updateTaskAlert('失败', 'danger');
+                    updateTaskMessage(`启动任务失败: ${data.message}`);
+                    updateTaskStatusBadge('失败', 'danger');
+                    hideTaskSpinner();
+
+                    // 添加日志条目
+                    addTaskLogEntry('启动失败', `任务启动失败: ${data.message}`, 'danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            updateTaskAlert('错误', 'danger');
+            updateTaskMessage(`请求错误: ${error.message}`);
+            updateTaskStatusBadge('错误', 'danger');
+            hideTaskSpinner();
+
+            // 添加日志条目
+            addTaskLogEntry('系统错误', `请求错误: ${error.message}`, 'danger');
+        });
+    }
+
+    // 加载仪表盘数据
+    function loadDashboardData() {
+        // 加载最近分析结果
+        loadRecentResults();
+
+        // 加载上次运行时间
+        fetch('/api/tasks/last_run')
+            .then(response => {
+                // 检查响应是否成功
+                if (!response.ok) {
+                    throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+                }
+                // 检查Content-Type是否为application/json
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error(`预期JSON响应，但收到: ${contentType}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    if (data.last_run) {
+                        // 确保时间戳是数字，并且转换为毫秒
+                        const timestamp = typeof data.last_run === 'number' ? data.last_run * 1000 : new Date(data.last_run).getTime();
+                        const lastRunTime = new Date(timestamp);
+
+                        // 检查日期是否有效
+                        if (!isNaN(lastRunTime.getTime())) {
+                            document.getElementById('last-run-time').textContent = lastRunTime.toLocaleString();
+                        } else {
+                            document.getElementById('last-run-time').textContent = '时间格式错误';
+                            console.error('Invalid date format:', data.last_run);
+                        }
+                    } else {
+                        document.getElementById('last-run-time').textContent = '尚未运行';
+                    }
+                } else {
+                    document.getElementById('last-run-time').textContent = '获取失败';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching last run time:', error);
+                document.getElementById('last-run-time').textContent = '获取失败';
+            });
+    }
+
+    // 加载最近分析结果
+    function loadRecentResults(showLoading = false) {
+        const recentResults = document.getElementById('recent-results');
+        const noResults = document.getElementById('no-results');
+
+        // 显示加载中
+        if (showLoading) {
+            recentResults.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2 text-muted">正在刷新数据...</p>
+                    </td>
+                </tr>
+            `;
+        }
+
+        // 获取最近分析结果
+        fetch('/api/analytics/results')
+            .then(response => {
+                // 检查响应是否成功
+                if (!response.ok) {
+                    throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+                }
+                // 检查Content-Type是否为application/json
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error(`预期JSON响应，但收到: ${contentType}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // 如果响应包含data字段，使用它
+                const results = (data.data || data).slice(0, 10);
+
+                // 更新统计数据
+                updateStatistics(results);
+
+                // 更新结果表格
+                updateResultsTable(results);
+            })
+            .catch(error => {
+                console.error('Error fetching results:', error);
+                recentResults.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-danger">
+                            <i class="bi bi-exclamation-triangle-fill fs-4 mb-2"></i>
+                            <p>加载失败: ${error.message}</p>
+                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="loadRecentResults(true)">
+                                <i class="bi bi-arrow-clockwise me-1"></i>重试
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+    }
+
+    // 更新统计数据
+    function updateStatistics(results) {
+        // 获取真实的账号数量
+        fetch('/api/accounts/list')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('account-count').textContent = data.accounts.length;
+                } else {
+                    document.getElementById('account-count').textContent = '获取失败';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching account count:', error);
+                document.getElementById('account-count').textContent = '获取失败';
+            });
+
+        // 获取今日分析数量
+        const today = new Date().toISOString().split('T')[0];
+        fetch(`/api/analytics/results?date=${today}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('today-count').textContent = data.total || 0;
+                } else {
+                    document.getElementById('today-count').textContent = '获取失败';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching today count:', error);
+                document.getElementById('today-count').textContent = '获取失败';
+            });
+
+        // 获取相关内容数量
+        fetch('/api/analytics/results?is_relevant=true')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('relevant-count').textContent = data.total || 0;
+                } else {
+                    document.getElementById('relevant-count').textContent = '获取失败';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching relevant count:', error);
+                document.getElementById('relevant-count').textContent = '获取失败';
+            });
+    }
+
+    // 更新结果表格
+    function updateResultsTable(results) {
+        const recentResults = document.getElementById('recent-results');
+        const noResults = document.getElementById('no-results');
+
+        // 清空表格
+        recentResults.innerHTML = '';
+
+        // 如果没有结果，显示空状态
+        if (!results || results.length === 0) {
+            recentResults.style.display = 'none';
+            noResults.classList.remove('d-none');
+            return;
+        }
+
+        // 有结果，隐藏空状态
+        recentResults.style.display = 'table-row-group';
+        noResults.classList.add('d-none');
+
+        // 填充表格
+        results.forEach(result => {
+            const row = document.createElement('tr');
+
+            // 平台
+            const platformCell = document.createElement('td');
+            let platformIcon = 'globe';
+            if (result.social_network === 'twitter') platformIcon = 'twitter';
+            platformCell.innerHTML = `<i class="bi bi-${platformIcon} me-1"></i>${result.social_network}`;
+
+            // 账号
+            const accountCell = document.createElement('td');
+
+            // 获取账号信息
+            fetch(`/api/accounts/${result.account_id}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.data && data.data.avatar_url) {
+                        accountCell.innerHTML = `
+                            <div class="d-flex align-items-center">
+                                <img src="${data.data.avatar_url}" alt="${result.account_id}" class="rounded-circle me-2"
+                                     style="width: 24px; height: 24px; object-fit: cover;">
+                                <span class="badge bg-light text-dark">${result.account_id}</span>
+                            </div>
+                        `;
+                    } else {
+                        // 如果没有头像，显示默认图标
+                        let iconClass = 'person-circle text-secondary';
+                        if (result.social_network === 'twitter') iconClass = 'twitter text-primary';
+                        else if (result.social_network === 'weibo') iconClass = 'sina-weibo text-danger';
+
+                        accountCell.innerHTML = `
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-${iconClass} me-2"></i>
+                                <span class="badge bg-light text-dark">${result.account_id}</span>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    // 出错时显示默认图标
+                    let iconClass = 'person-circle text-secondary';
+                    if (result.social_network === 'twitter') iconClass = 'twitter text-primary';
+                    else if (result.social_network === 'weibo') iconClass = 'sina-weibo text-danger';
+
+                    accountCell.innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-${iconClass} me-2"></i>
+                            <span class="badge bg-light text-dark">${result.account_id}</span>
+                        </div>
+                    `;
+                });
+
+            // 时间
+            const timeCell = document.createElement('td');
+            const date = new Date(result.post_time || result.created_at);
+            timeCell.innerHTML = `<small>${date.toLocaleString()}</small>`;
+
+            // 内容
+            const contentCell = document.createElement('td');
+            const content = result.content || '';
+            contentCell.innerHTML = `
+                <div class="text-truncate" style="max-width: 250px;" title="${escapeHtml(content)}">
+                    ${escapeHtml(content.substring(0, 50))}${content.length > 50 ? '...' : ''}
+                </div>
+            `;
+
+            // 相关性
+            const relevantCell = document.createElement('td');
+            if (result.is_relevant) {
+                relevantCell.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>相关</span>';
+            } else {
+                relevantCell.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>不相关</span>';
+            }
+
+            // 操作
+            const actionCell = document.createElement('td');
+            actionCell.className = 'text-end';
+            actionCell.innerHTML = `
+                <a href="/results?id=${result.id}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-eye"></i>
+                </a>
+            `;
+
+            // 添加到行
+            row.appendChild(platformCell);
+            row.appendChild(accountCell);
+            row.appendChild(timeCell);
+            row.appendChild(contentCell);
+            row.appendChild(relevantCell);
+            row.appendChild(actionCell);
+
+            // 添加到表格
+            recentResults.appendChild(row);
+        });
+    }
+
+    // 检查系统状态
+    function checkSystemStatus() {
+        // 检查数据库状态
+        fetch('/api/system/status')
+            .then(response => {
+                // 检查响应是否成功
+                if (!response.ok) {
+                    // 如果响应不成功，抛出错误
+                    throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+                }
+                // 检查Content-Type是否为application/json
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error(`预期JSON响应，但收到: ${contentType}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    updateStatusBadge('db-status', data.database_status);
+                    updateStatusBadge('ai-status', data.ai_status);
+                    updateStatusBadge('notification-status', data.notification_status);
+                    updateStatusBadge('proxy-status', data.proxy_status);
+                    updateStatusBadge('twitter-status', data.twitter_status);
+                }
+            })
+            .catch(error => {
+                console.error('Error checking system status:', error);
+                updateStatusBadge('db-status', 'error');
+                updateStatusBadge('ai-status', 'error');
+                updateStatusBadge('notification-status', 'error');
+                updateStatusBadge('proxy-status', 'error');
+                updateStatusBadge('twitter-status', 'error');
+            });
+    }
+
+    // 更新状态徽章
+    function updateStatusBadge(elementId, status) {
+        const badge = document.getElementById(elementId);
+        if (!badge) return;
+
+        let className = 'bg-success';
+        let icon = 'check-circle';
+        let text = '正常';
+
+        if (status === 'warning') {
+            className = 'bg-warning';
+            icon = 'exclamation-triangle';
+            text = '警告';
+        } else if (status === 'error') {
+            className = 'bg-danger';
+            icon = 'x-circle';
+            text = '异常';
+        } else if (status === 'normal') {
+            className = 'bg-success';
+            icon = 'check-circle';
+            text = '正常';
+        }
+
+        badge.className = `badge ${className} rounded-pill`;
+        badge.innerHTML = `<i class="bi bi-${icon} me-1"></i>${text}`;
+    }
+
+    // 格式化时间
+    function formatTime(date) {
+        if (!date) return '未知';
+
+        const now = new Date();
+        const diff = Math.floor((now - date) / 1000);
+
+        if (diff < 60) return '刚刚';
+        if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
+
+        return date.toLocaleString();
+    }
+
+    // HTML转义
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    // 运行任务函数
+    function runTask(accountId = null) {
+        // 首先检查账号任务是否已在运行
+        fetch('/api/tasks/status/account')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.status && data.status.is_running) {
+                // 如果账号任务已在运行，直接显示当前任务状态
+                showRunningTaskStatus(data.status, 'account');
+            } else {
+                // 如果没有账号任务在运行，启动新任务
+                startNewTask(accountId);
+            }
+        })
+        .catch(error => {
+            console.error('Error checking account task status:', error);
+            // 如果检查状态失败，尝试启动新任务
+            startNewTask(accountId);
+        });
+    }
+
+    // 显示正在运行的任务状态
+    function showRunningTaskStatus(status, taskType = 'account') {
+        // 重置模态框状态
+        resetTaskModal();
+
+        // 根据任务类型设置标题
+        if (taskType === 'timeline') {
+            document.getElementById('taskStatusModalLabel').innerHTML = '<i class="bi bi-clock-history me-2"></i>时间线任务状态';
+        } else {
+            document.getElementById('taskStatusModalLabel').innerHTML = '<i class="bi bi-people me-2"></i>账号监控任务状态';
+        }
+
+        // 显示模态框
+        taskStatusModal.show();
+
+        // 记录开始时间
+        if (status.start_time) {
+            taskStartTime = new Date(status.start_time * 1000);
+        } else {
+            taskStartTime = new Date();
+        }
+
+        // 更新状态警报
+        updateTaskAlert('进行中', 'primary');
+
+        // 更新状态
+        updateTaskStatus(status);
+
+        // 添加日志条目
+        addTaskLogEntry('任务状态', '任务已在运行中', 'info');
+
+        // 启动定时查询状态
+        taskStatusInterval = setInterval(checkTaskStatus, 1000);
+
+        // 显示进度条
+        const progressContainer = document.getElementById('task-progress-container');
+        if (progressContainer) {
+            progressContainer.style.display = 'block';
+        }
+    }
+
+    // 启动新任务
+    function startNewTask(accountId = null) {
+        // 重置模态框状态
+        resetTaskModal();
+
+        // 更新模态框标题
+        document.getElementById('taskStatusModalLabel').innerHTML = '<i class="bi bi-people me-2"></i>账号监控任务状态';
+
+        // 显示模态框
+        taskStatusModal.show();
+
+        // 准备请求数据
+        const requestData = {};
+        if (accountId) {
+            requestData.account_id = accountId;
+            updateTaskMessage(`正在抓取账号: ${accountId}`);
+            addTaskLogEntry('开始任务', `开始抓取账号: ${accountId}`);
+        } else {
+            updateTaskMessage('正在抓取所有账号');
+            addTaskLogEntry('开始任务', '开始抓取所有监控账号');
+        }
+
+        // 发送请求启动任务
+        fetch('/api/tasks/run', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData),
+        })
+        .then(response => {
+            // 检查响应是否成功
+            if (!response.ok) {
+                throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+            }
+            // 检查Content-Type是否为application/json
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error(`预期JSON响应，但收到: ${contentType}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // 记录开始时间
+                taskStartTime = new Date();
+
+                // 更新状态警报
+                updateTaskAlert('进行中', 'primary');
+
+                // 更新状态
+                updateTaskStatus(data.status);
+
+                // 添加日志条目
+                addTaskLogEntry('任务启动', '监控任务已成功启动');
+
+                // 启动定时查询状态
+                taskStatusInterval = setInterval(checkTaskStatus, 1000);
+
+                // 显示进度条
+                const progressContainer = document.getElementById('task-progress-container');
+                if (progressContainer) {
+                    progressContainer.style.display = 'block';
+                }
+            } else {
+                // 如果失败原因是任务已在运行，则获取当前任务状态并显示
+                if (data.message && data.message.includes('任务已在运行中') && data.status) {
+                    showRunningTaskStatus(data.status, 'account');
+                } else {
+                    // 显示错误
+                    updateTaskAlert('失败', 'danger');
+                    updateTaskMessage(`启动任务失败: ${data.message}`);
+                    updateTaskStatusBadge('失败', 'danger');
+                    hideTaskSpinner();
+
+                    // 添加日志条目
+                    addTaskLogEntry('启动失败', `任务启动失败: ${data.message}`, 'danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            updateTaskAlert('错误', 'danger');
+            updateTaskMessage(`请求错误: ${error.message}`);
+            updateTaskStatusBadge('错误', 'danger');
+            hideTaskSpinner();
+
+            // 添加日志条目
+            addTaskLogEntry('系统错误', `请求错误: ${error.message}`, 'danger');
+        });
+    }
+
+    // 查询任务状态
+    function checkTaskStatus() {
+        // 根据当前模态框标题判断任务类型
+        const modalTitle = document.getElementById('taskStatusModalLabel').textContent;
+        let statusUrl = '/api/tasks/status';
+
+        if (modalTitle.includes('时间线任务')) {
+            statusUrl = '/api/tasks/status/timeline';
+        } else if (modalTitle.includes('账号监控任务')) {
+            statusUrl = '/api/tasks/status/account';
+        }
+
+        fetch(statusUrl)
+        .then(response => {
+            // 检查响应是否成功
+            if (!response.ok) {
+                throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+            }
+            // 检查Content-Type是否为application/json
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error(`预期JSON响应，但收到: ${contentType}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                updateTaskStatus(data.status);
+
+                // 如果任务已完成，停止查询
+                if (!data.status.is_running) {
+                    taskCompleted(data.status);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            clearInterval(taskStatusInterval);
+            hideTaskSpinner();
+            updateTaskMessage(`获取状态失败: ${error.message}`);
+            updateTaskAlert('错误', 'danger');
+
+            // 添加日志条目
+            addTaskLogEntry('状态查询失败', `获取任务状态失败: ${error.message}`, 'danger');
+        });
+    }
+
+    // 任务完成处理
+    function taskCompleted(status) {
+        clearInterval(taskStatusInterval);
+        hideTaskSpinner();
+
+        // 显示查看结果按钮
+        document.getElementById('view-results-btn').style.display = 'block';
+
+        // 更新状态警报
+        if (status.status === 'completed') {
+            updateTaskAlert('完成', 'success');
+            addTaskLogEntry('任务完成', `任务已成功完成，处理了 ${status.total_posts} 条内容，发现 ${status.relevant_posts} 条相关内容`, 'success');
+        } else {
+            updateTaskAlert('失败', 'danger');
+            addTaskLogEntry('任务失败', `任务执行失败: ${status.message}`, 'danger');
+        }
+
+        // 更新进度条
+        const progressBar = document.getElementById('task-progress');
+        if (progressBar) {
+            progressBar.style.width = '100%';
+            if (status.status === 'completed') {
+                progressBar.className = 'progress-bar bg-success';
+            } else {
+                progressBar.className = 'progress-bar bg-danger';
+            }
+        }
+
+        // 刷新数据
+        setTimeout(function() {
+            loadDashboardData();
+        }, 1000);
+    }
+
+    // 更新任务状态显示
+    function updateTaskStatus(status) {
+        if (!status) return;
+
+        // 更新消息
+        updateTaskMessage(status.message);
+
+        // 更新状态徽章
+        updateTaskStatusBadge(status.status);
+
+        // 更新计数 - 确保显示数字而不是null或undefined
+        document.getElementById('task-posts-count').textContent = status.total_posts !== undefined ? status.total_posts : 0;
+        document.getElementById('task-relevant-count').textContent = status.relevant_posts !== undefined ? status.relevant_posts : 0;
+
+        // 如果有账号处理信息，显示进度
+        if (status.accounts_processed !== undefined && status.total_accounts !== undefined && status.total_accounts > 0) {
+            const progress = Math.floor((status.accounts_processed / status.total_accounts) * 100);
+            const progressBar = document.getElementById('task-progress');
+            if (progressBar) {
+                progressBar.style.width = `${progress}%`;
+            }
+
+            // 显示进度条
+            const progressContainer = document.getElementById('task-progress-container');
+            if (progressContainer) {
+                progressContainer.style.display = 'block';
+            }
+        }
+
+        // 更新时间信息
+        if (status.start_time) {
+            const startTime = new Date(status.start_time * 1000);
+            document.getElementById('task-start-time').textContent = startTime.toLocaleString();
+
+            // 计算运行时间
+            const now = status.is_running ? new Date() : new Date(status.end_time * 1000);
+            const durationSec = Math.floor((now - startTime) / 1000);
+            document.getElementById('task-duration').textContent = formatDuration(durationSec);
+        }
+
+        // 如果有新消息，添加到日志
+        if (status.message && status.message !== document.getElementById('task-message').textContent) {
+            addTaskLogEntry('状态更新', status.message);
+        }
+    }
+
+    // 更新任务消息
+    function updateTaskMessage(message) {
+        const messageEl = document.getElementById('task-message');
+        if (messageEl && message) {
+            messageEl.textContent = message;
+        }
+    }
+
+    // 更新任务状态徽章
+    function updateTaskStatusBadge(status, forceClass = null) {
+        const statusText = document.getElementById('task-status-text');
+        if (!statusText) return;
+
+        statusText.textContent = status;
+
+        // 设置徽章样式
+        let badgeClass = 'bg-info';
+
+        if (forceClass) {
+            badgeClass = `bg-${forceClass}`;
+        } else if (status === 'running') {
+            badgeClass = 'bg-primary';
+        } else if (status === 'completed') {
+            badgeClass = 'bg-success';
+        } else if (status === 'failed') {
+            badgeClass = 'bg-danger';
+        }
+
+        statusText.className = `badge ${badgeClass}`;
+    }
+
+    // 更新任务警报
+    function updateTaskAlert(title, type) {
+        const alertEl = document.getElementById('task-status-alert');
+        const titleEl = alertEl.querySelector('.alert-heading');
+
+        if (alertEl && titleEl) {
+            alertEl.className = `alert alert-${type} d-flex align-items-center mb-3`;
+            titleEl.textContent = `任务${title}`;
+        }
+    }
+
+    // 显示任务加载动画
+    function showTaskSpinner() {
+        const spinner = document.getElementById('task-spinner');
+        if (spinner) {
+            spinner.style.display = 'inline-block';
+        }
+    }
+
+    // 隐藏任务加载动画
+    function hideTaskSpinner() {
+        const spinner = document.getElementById('task-spinner');
+        if (spinner) {
+            spinner.style.display = 'none';
+        }
+    }
+
+    // 添加任务日志条目
+    function addTaskLogEntry(title, message, type = 'info') {
+        const logContainer = document.getElementById('task-log');
+        if (!logContainer) return;
+
+        // 创建日志条目
+        const entry = document.createElement('div');
+        entry.className = 'list-group-item';
+
+        // 设置条目样式
+        if (type === 'danger') {
+            entry.classList.add('list-group-item-danger');
+        } else if (type === 'success') {
+            entry.classList.add('list-group-item-success');
+        } else if (type === 'warning') {
+            entry.classList.add('list-group-item-warning');
+        }
+
+        // 设置条目内容
+        const now = new Date();
+        entry.innerHTML = `
+            <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">${title}</h6>
+                <small class="text-muted">${now.toLocaleTimeString()}</small>
+            </div>
+            <p class="mb-1">${message}</p>
+        `;
+
+        // 添加到日志容器的顶部
+        logContainer.insertBefore(entry, logContainer.firstChild);
+    }
+
+    // 格式化持续时间
+    function formatDuration(seconds) {
+        if (seconds < 60) {
+            return `${seconds}秒`;
+        } else if (seconds < 3600) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes}分${remainingSeconds}秒`;
+        } else {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours}小时${minutes}分`;
+        }
+    }
+
+    // 重置模态框状态
+    function resetTaskModal() {
+        // 清除之前的定时器
+        if (taskStatusInterval) {
+            clearInterval(taskStatusInterval);
+        }
+
+        // 重置显示
+        document.getElementById('task-spinner').style.display = 'inline-block';
+        document.getElementById('task-message').textContent = '正在准备任务...';
+        updateTaskStatusBadge('准备中', 'info');
+        document.getElementById('task-posts-count').textContent = '0';
+        document.getElementById('task-relevant-count').textContent = '0';
+        document.getElementById('task-start-time').textContent = '-';
+        document.getElementById('task-duration').textContent = '0秒';
+        document.getElementById('view-results-btn').style.display = 'none';
+
+        // 重置进度条
+        const progressBar = document.getElementById('task-progress');
+        const progressContainer = document.getElementById('task-progress-container');
+        if (progressBar && progressContainer) {
+            progressBar.style.width = '0%';
+            progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated';
+            progressContainer.style.display = 'none';
+        }
+
+        // 重置警报
+        updateTaskAlert('进行中', 'primary');
+
+        // 重置日志
+        const logContainer = document.getElementById('task-log');
+        if (logContainer) {
+            logContainer.innerHTML = `
+                <div class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">任务初始化</h6>
+                        <small class="text-muted">${new Date().toLocaleTimeString()}</small>
+                    </div>
+                    <p class="mb-1">系统正在准备执行监控任务...</p>
+                </div>
+            `;
+        }
+    }
+
+    // 添加CSS动画
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .rotate-animation {
+            animation: rotate 1s linear;
+        }
+    `;
+    document.head.appendChild(style);
+</script>
+{% endblock %}

@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="TweetAnalyst - 社交媒体监控与分析助手系统初始化">
+    <meta name="theme-color" content="#0d6efd">
+    <title>系统初始化 - TweetAnalyst</title>
+
+    <!-- 预加载关键资源 -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" as="style">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" as="style">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" as="script">
+
+    <!-- 样式表 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --primary-dark: #0a58ca;
+            --secondary-color: #6c757d;
+            --light-bg: #f8f9fa;
+            --card-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15);
+        }
+
+        body {
+            background-color: var(--light-bg);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .setup-container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #fff;
+            border-radius: 0.75rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .logo h1 {
+            font-size: 2.5rem;
+            color: var(--primary-color);
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .logo-icon {
+            font-size: 3rem;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-label i {
+            margin-right: 0.5rem;
+        }
+
+        .form-text {
+            margin-top: 0.25rem;
+            color: var(--secondary-color);
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .section-title i {
+            margin-right: 0.5rem;
+            color: var(--primary-color);
+        }
+
+        footer {
+            margin-top: auto;
+            padding: 1.5rem 0;
+            background-color: var(--light-bg);
+            text-align: center;
+            color: var(--secondary-color);
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .alert {
+            margin-bottom: 1.5rem;
+            border-radius: 0.5rem;
+        }
+
+        .password-container {
+            position: relative;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--secondary-color);
+            cursor: pointer;
+        }
+
+        .setup-steps {
+            counter-reset: step;
+            margin-bottom: 2rem;
+        }
+
+        .setup-step {
+            position: relative;
+            padding-left: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .setup-step::before {
+            counter-increment: step;
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 1.75rem;
+            height: 1.75rem;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .input-group-text {
+            background-color: var(--light-bg);
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            border-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 动画效果 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .setup-container {
+            animation: fadeIn 0.5s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="setup-container">
+            <div class="logo">
+                <div class="logo-icon">
+                    <i class="bi bi-twitter"></i>
+                </div>
+                <h1>TweetAnalyst</h1>
+                <p class="text-muted">社交媒体监控与分析助手</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show">
+                            <div class="d-flex">
+                                <div class="flex-shrink-0">
+                                    {% if category == 'success' %}
+                                        <i class="bi bi-check-circle-fill fs-4 me-2"></i>
+                                    {% elif category == 'warning' %}
+                                        <i class="bi bi-exclamation-triangle-fill fs-4 me-2"></i>
+                                    {% elif category == 'danger' %}
+                                        <i class="bi bi-x-circle-fill fs-4 me-2"></i>
+                                    {% else %}
+                                        <i class="bi bi-info-circle-fill fs-4 me-2"></i>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    {{ message }}
+                                </div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            {% if error %}
+                <div class="alert alert-danger alert-dismissible fade show">
+                    <div class="d-flex">
+                        <div class="flex-shrink-0">
+                            <i class="bi bi-x-octagon-fill fs-4 me-2"></i>
+                        </div>
+                        <div>
+                            <h5>初始化错误</h5>
+                            <p>{{ error }}</p>
+                            <hr>
+                            <p class="mb-0">请检查数据库路径和权限，确保应用程序有权限写入数据目录。</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+                </div>
+            {% endif %}
+
+            <div class="setup-steps">
+                <div class="setup-step">
+                    <h5>欢迎使用 TweetAnalyst</h5>
+                    <p>这是一个强大的社交媒体监控与分析工具，可以帮助您跟踪和分析社交媒体内容。</p>
+                </div>
+                <div class="setup-step">
+                    <h5>系统初始化</h5>
+                    <p>请完成以下设置以初始化系统。这些设置将用于配置您的管理员账号和AI分析功能。</p>
+                </div>
+                <div class="setup-step">
+                    <h5>开始使用</h5>
+                    <p>初始化完成后，您可以登录系统并配置更多选项，如Twitter账号、推送设置和代理等。</p>
+                </div>
+            </div>
+
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="bi bi-gear-fill me-2"></i>系统初始化
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="setup-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="mb-4">
+                            <h5 class="section-title">
+                                <i class="bi bi-person-fill-gear"></i>管理员账号
+                            </h5>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="admin_username" class="form-label">
+                                        <i class="bi bi-person"></i>用户名
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="bi bi-person-fill"></i>
+                                        </span>
+                                        <input type="text" class="form-control" id="admin_username" name="admin_username"
+                                               value="admin" required autocomplete="username"
+                                               aria-describedby="username-help">
+                                    </div>
+                                    <div id="username-help" class="form-text">
+                                        用于登录系统的管理员用户名
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="admin_password" class="form-label">
+                                        <i class="bi bi-key"></i>密码
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="bi bi-shield-lock-fill"></i>
+                                        </span>
+                                        <input type="password" class="form-control" id="admin_password" name="admin_password"
+                                               required minlength="6" autocomplete="new-password"
+                                               aria-describedby="password-help">
+                                        <button class="btn btn-outline-secondary password-toggle" type="button"
+                                                id="toggle-password" aria-label="显示/隐藏密码">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div id="password-help" class="form-text">
+                                        密码长度不能少于6个字符，建议使用字母、数字和特殊字符的组合
+                                    </div>
+                                    <div class="mt-2 d-none" id="password-strength">
+                                        <div class="progress" style="height: 5px;">
+                                            <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                        </div>
+                                        <small class="text-muted">密码强度: <span id="strength-text">弱</span></small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <h5 class="section-title">
+                                <i class="bi bi-robot"></i>LLM配置
+                            </h5>
+                            <div class="mb-3">
+                                <label for="llm_api_key" class="form-label">
+                                    <i class="bi bi-key-fill"></i>API密钥
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-key"></i>
+                                    </span>
+                                    <input type="password" class="form-control" id="llm_api_key" name="llm_api_key"
+                                           required aria-describedby="api-key-help">
+                                    <button class="btn btn-outline-secondary password-toggle" type="button"
+                                            id="toggle-api-key" aria-label="显示/隐藏API密钥">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                                <div id="api-key-help" class="form-text">
+                                    xAI API密钥或其他兼容的LLM API密钥，用于AI内容分析
+                                </div>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="llm_api_model" class="form-label">
+                                        <i class="bi bi-cpu"></i>API模型
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="bi bi-braces"></i>
+                                        </span>
+                                        <input type="text" class="form-control" id="llm_api_model" name="llm_api_model"
+                                               value="grok-2-latest" aria-describedby="model-help">
+                                    </div>
+                                    <div id="model-help" class="form-text">
+                                        要使用的LLM模型名称
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="llm_api_base" class="form-label">
+                                        <i class="bi bi-globe"></i>API基础URL
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="bi bi-link-45deg"></i>
+                                        </span>
+                                        <input type="text" class="form-control" id="llm_api_base" name="llm_api_base"
+                                               value="https://api.x.ai/v1" aria-describedby="api-base-help">
+                                    </div>
+                                    <div id="api-base-help" class="form-text">
+                                        LLM API的基础URL地址
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
+                                <i class="bi bi-check-circle me-2"></i>完成初始化
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="alert alert-info">
+                <div class="d-flex">
+                    <div class="flex-shrink-0">
+                        <i class="bi bi-info-circle-fill fs-4 me-2"></i>
+                    </div>
+                    <div>
+                        <h5 class="alert-heading">提示</h5>
+                        <p class="mb-0">初始化完成后，您可以在系统设置中配置更多选项，如Twitter账号、推送设置、代理等。系统将自动创建必要的数据库表和目录结构。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p class="mb-1">
+                <i class="bi bi-twitter me-2"></i>TweetAnalyst v0.10.0
+            </p>
+            <p class="mb-0 small">社交媒体监控与分析助手</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 密码显示/隐藏功能
+            function setupPasswordToggle(inputId, toggleId) {
+                const passwordInput = document.getElementById(inputId);
+                const toggleButton = document.getElementById(toggleId);
+
+                if (passwordInput && toggleButton) {
+                    toggleButton.addEventListener('click', function() {
+                        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                        passwordInput.setAttribute('type', type);
+
+                        // 切换图标
+                        const icon = this.querySelector('i');
+                        if (type === 'password') {
+                            icon.classList.remove('bi-eye-slash');
+                            icon.classList.add('bi-eye');
+                        } else {
+                            icon.classList.remove('bi-eye');
+                            icon.classList.add('bi-eye-slash');
+                        }
+                    });
+                }
+            }
+
+            // 设置密码强度检测
+            function setupPasswordStrength() {
+                const passwordInput = document.getElementById('admin_password');
+                const strengthBar = document.querySelector('#password-strength .progress-bar');
+                const strengthText = document.getElementById('strength-text');
+                const strengthContainer = document.getElementById('password-strength');
+
+                if (passwordInput && strengthBar && strengthText) {
+                    passwordInput.addEventListener('input', function() {
+                        const password = this.value;
+                        let strength = 0;
+                        let color = 'bg-danger';
+                        let text = '弱';
+
+                        if (password.length >= 6) strength += 20;
+                        if (password.length >= 10) strength += 10;
+                        if (/[A-Z]/.test(password)) strength += 20;
+                        if (/[a-z]/.test(password)) strength += 10;
+                        if (/[0-9]/.test(password)) strength += 20;
+                        if (/[^A-Za-z0-9]/.test(password)) strength += 20;
+
+                        if (strength >= 80) {
+                            color = 'bg-success';
+                            text = '强';
+                        } else if (strength >= 50) {
+                            color = 'bg-warning';
+                            text = '中';
+                        }
+
+                        strengthContainer.classList.remove('d-none');
+                        strengthBar.style.width = strength + '%';
+                        strengthBar.className = 'progress-bar ' + color;
+                        strengthText.textContent = text;
+                    });
+                }
+            }
+
+            // 表单验证
+            function setupFormValidation() {
+                const form = document.getElementById('setup-form');
+                const submitBtn = document.getElementById('submit-btn');
+
+                if (form) {
+                    form.addEventListener('submit', function(e) {
+                        if (!form.checkValidity()) {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            // 显示验证消息
+                            const invalidInputs = form.querySelectorAll(':invalid');
+                            if (invalidInputs.length > 0) {
+                                invalidInputs[0].focus();
+                            }
+                        } else {
+                            // 禁用提交按钮，防止重复提交
+                            if (submitBtn) {
+                                submitBtn.disabled = true;
+                                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>正在初始化...';
+                            }
+                        }
+
+                        form.classList.add('was-validated');
+                    });
+                }
+            }
+
+            // 初始化所有功能
+            setupPasswordToggle('admin_password', 'toggle-password');
+            setupPasswordToggle('llm_api_key', 'toggle-api-key');
+            setupPasswordStrength();
+            setupFormValidation();
+        });
+    </script>
+</body>
+</html>

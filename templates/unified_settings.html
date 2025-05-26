@@ -1,0 +1,1809 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置 - TweetAnalyst{% endblock %}
+
+{% block extra_css %}
+<style>
+/* 修复模态框定位问题 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1050;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    outline: 0;
+}
+
+.modal-dialog {
+    position: relative;
+    width: auto;
+    margin: 0.5rem;
+    pointer-events: none;
+}
+
+@media (min-width: 576px) {
+    .modal-dialog {
+        max-width: 500px;
+        margin: 1.75rem auto;
+    }
+}
+
+.modal-content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    pointer-events: auto;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 0.3rem;
+    outline: 0;
+}
+
+/* 禁用模态框动画 */
+.modal.fade {
+    transition: none !important;
+}
+
+.modal.fade .modal-dialog {
+    transition: none !important;
+    transform: none !important;
+}
+
+/* 确保模态框背景覆盖整个页面 */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1040;
+    width: 100vw;
+    height: 100vh;
+    background-color: #000;
+}
+
+.modal-backdrop.fade {
+    opacity: 0;
+}
+
+.modal-backdrop.show {
+    opacity: 0.5;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                <li class="breadcrumb-item active" aria-current="page">系统设置</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="border-bottom pb-2">
+                <i class="bi bi-gear-fill me-2 text-primary"></i>系统设置
+            </h2>
+            <button type="button" id="save-all-settings-btn" class="btn btn-primary">
+                <i class="bi bi-save"></i> 保存所有设置
+            </button>
+        </div>
+    </div>
+</div>
+
+    <!-- 设置导航选项卡 -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-list-check me-2"></i>设置类别
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <ul class="nav nav-pills nav-fill p-2" id="settingsTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab" aria-controls="general" aria-selected="true">
+                        <i class="bi bi-gear-fill me-1"></i> 基本设置
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="twitter-tab" data-bs-toggle="tab" data-bs-target="#twitter" type="button" role="tab" aria-controls="twitter" aria-selected="false">
+                        <i class="bi bi-twitter me-1"></i> Twitter设置
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" href="{{ url_for('ai_settings.ai_settings_page') }}">
+                        <i class="bi bi-robot me-1"></i> AI设置
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="proxy-tab" data-bs-toggle="tab" data-bs-target="#proxy" type="button" role="tab" aria-controls="proxy" aria-selected="false">
+                        <i class="bi bi-hdd-network me-1"></i> 代理设置
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="account-tab" data-bs-toggle="tab" data-bs-target="#account" type="button" role="tab" aria-controls="account" aria-selected="false">
+                        <i class="bi bi-person me-1"></i> 账号设置
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 选项卡内容 -->
+    <div class="tab-content" id="settingsTabContent">
+        <!-- 基本设置 -->
+        <div class="tab-pane fade show active" id="general" role="tabpanel" aria-labelledby="general-tab">
+            <div class="card shadow-sm border-primary mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-clock-history me-2"></i>定时任务配置
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="scheduler-form">
+                        <!-- 账号抓取任务配置 -->
+                        <div class="border rounded p-3 mb-4 bg-light">
+                            <h6 class="text-primary mb-3">
+                                <i class="bi bi-person-lines-fill me-2"></i>账号抓取任务
+                            </h6>
+                            <div class="mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="auto-fetch-enabled" name="auto_fetch_enabled" {% if config.get('AUTO_FETCH_ENABLED', 'false').lower() == 'true' %}checked{% endif %} data-config-key="AUTO_FETCH_ENABLED">
+                                    <label class="form-check-label" for="auto-fetch-enabled">启用账号抓取定时任务</label>
+                                </div>
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1 text-primary"></i>启用后，系统将按照设定的时间间隔自动抓取已配置账号的最新内容
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="scheduler-interval" class="form-label">执行间隔（分钟）</label>
+                                <input type="number" class="form-control" id="scheduler-interval" name="scheduler_interval" value="{{ config.get('SCHEDULER_INTERVAL_MINUTES', '30') }}" min="1" max="1440" data-config-key="SCHEDULER_INTERVAL_MINUTES">
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1 text-primary"></i>账号抓取任务执行间隔，单位为分钟，默认为30分钟
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 时间线抓取任务配置 -->
+                        <div class="border rounded p-3 mb-4 bg-light">
+                            <h6 class="text-success mb-3">
+                                <i class="bi bi-clock-history me-2"></i>时间线抓取任务
+                            </h6>
+                            <div class="mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="timeline-fetch-enabled" name="timeline_fetch_enabled" {% if config.get('TIMELINE_FETCH_ENABLED', 'false').lower() == 'true' %}checked{% endif %} data-config-key="TIMELINE_FETCH_ENABLED">
+                                    <label class="form-check-label" for="timeline-fetch-enabled">启用时间线抓取定时任务</label>
+                                </div>
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1 text-success"></i>启用后，系统将按照设定的时间间隔自动抓取Twitter时间线（关注账号的最新推文）
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="timeline-interval" class="form-label">执行间隔（分钟）</label>
+                                <input type="number" class="form-control" id="timeline-interval" name="timeline_interval" value="{{ config.get('TIMELINE_INTERVAL_MINUTES', '15') }}" min="1" max="1440" data-config-key="TIMELINE_INTERVAL_MINUTES">
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1 text-success"></i>时间线抓取任务执行间隔，单位为分钟，默认为15分钟（建议比账号抓取更频繁）
+                                </div>
+                            </div>
+                            <div class="alert alert-info">
+                                <i class="bi bi-lightbulb me-2"></i>
+                                <strong>时间线任务说明：</strong><br>
+                                • 抓取您在Twitter上关注的账号的最新推文<br>
+                                • 可以发现更多相关内容和热点话题<br>
+                                • 需要确保Twitter账号已正确配置并能正常登录
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <button type="button" id="save-scheduler-btn" class="btn btn-primary">
+                                <i class="bi bi-save me-1"></i>保存定时任务配置
+                            </button>
+                            <div>
+                                <a href="{{ url_for('index') }}" class="btn btn-success me-2">
+                                    <i class="bi bi-play-fill me-1"></i>手动启动账号抓取
+                                </a>
+                                <button type="button" class="btn btn-info" id="manual-timeline-btn">
+                                    <i class="bi bi-clock-history me-1"></i>手动启动时间线抓取
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <div id="scheduler-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-warning mb-4">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-database-gear me-2"></i>数据库自动清理配置
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="db-clean-form">
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="db-auto-clean-enabled" name="db_auto_clean_enabled" {% if config.get('DB_AUTO_CLEAN_ENABLED', 'false').lower() == 'true' %}checked{% endif %} data-config-key="DB_AUTO_CLEAN_ENABLED">
+                                <label class="form-check-label" for="db-auto-clean-enabled">启用数据库自动清理</label>
+                            </div>
+                            <div class="form-text">
+                                启用后，系统将按照设定的时间和策略自动清理数据库中的旧数据
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="db-auto-clean-time" class="form-label">自动清理时间</label>
+                            <input type="time" class="form-control" id="db-auto-clean-time" name="db_auto_clean_time" value="{{ config.get('DB_AUTO_CLEAN_TIME', '03:00') }}" data-config-key="DB_AUTO_CLEAN_TIME">
+                            <div class="form-text">
+                                每天执行自动清理的时间，建议设置在系统负载较低的时段
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="db-clean-by-count" name="db_clean_by_count" {% if config.get('DB_CLEAN_BY_COUNT', 'false').lower() == 'true' %}checked{% endif %} data-config-key="DB_CLEAN_BY_COUNT">
+                                <label class="form-check-label" for="db-clean-by-count">基于数量清理</label>
+                            </div>
+                            <div class="form-text">
+                                启用后，系统将保留每个账号最新的N条记录，删除多余的旧记录；否则基于时间清理
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="db-max-records" class="form-label">每个账号保留的最大记录数</label>
+                            <input type="number" class="form-control" id="db-max-records" name="db_max_records" value="{{ config.get('DB_MAX_RECORDS_PER_ACCOUNT', '100') }}" min="10" max="10000" data-config-key="DB_MAX_RECORDS_PER_ACCOUNT">
+                            <div class="form-text">
+                                基于数量清理时，每个账号保留的最新记录数量
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="db-retention-days" class="form-label">数据保留天数</label>
+                            <input type="number" class="form-control" id="db-retention-days" name="db_retention_days" value="{{ config.get('DB_RETENTION_DAYS', '30') }}" min="1" max="365" data-config-key="DB_RETENTION_DAYS">
+                            <div class="form-text">
+                                基于时间清理时，保留最近多少天的数据，超过这个时间的数据将被清理
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="db-clean-irrelevant-only" name="db_clean_irrelevant_only" {% if config.get('DB_CLEAN_IRRELEVANT_ONLY', 'true').lower() == 'true' %}checked{% endif %} data-config-key="DB_CLEAN_IRRELEVANT_ONLY">
+                                <label class="form-check-label" for="db-clean-irrelevant-only">只清理不相关数据</label>
+                            </div>
+                            <div class="form-text">
+                                启用后，系统只会清理标记为"不相关"的数据，保留所有"相关"数据
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <button type="button" id="save-db-clean-btn" class="btn btn-primary">
+                                <i class="bi bi-save me-1"></i>保存数据库清理配置
+                            </button>
+                            <button type="button" id="run-db-clean-btn" class="btn btn-warning">
+                                <i class="bi bi-lightning-charge me-1"></i>立即执行清理
+                            </button>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <div id="db-clean-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+
+                    <script>
+                        // 立即执行清理按钮事件处理
+                        document.getElementById('run-db-clean-btn').addEventListener('click', function() {
+                            // 获取当前配置
+                            const cleanByCount = document.getElementById('db-clean-by-count').checked;
+                            const maxRecords = document.getElementById('db-max-records').value;
+                            const retentionDays = document.getElementById('db-retention-days').value;
+                            const cleanIrrelevantOnly = document.getElementById('db-clean-irrelevant-only').checked;
+
+                            // 构建确认消息
+                            let confirmMessage = '';
+                            if (cleanByCount) {
+                                confirmMessage = `确定要立即执行数据库清理吗？\n\n将保留每个账号最新的 ${maxRecords} 条${cleanIrrelevantOnly ? '不相关' : ''}记录，删除多余的旧记录。\n\n此操作不可恢复！`;
+                            } else {
+                                confirmMessage = `确定要立即执行数据库清理吗？\n\n将清理超过 ${retentionDays} 天的${cleanIrrelevantOnly ? '不相关' : ''}数据。\n\n此操作不可恢复！`;
+                            }
+
+                            if (confirm(confirmMessage)) {
+                                // 显示加载状态
+                                const resultDiv = document.getElementById('db-clean-result');
+                                resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+                                resultDiv.classList.add('alert-info');
+                                resultDiv.innerHTML = `<h5><i class="bi bi-hourglass-split text-info"></i> 正在执行数据库清理...</h5><p>请稍候，这可能需要一些时间。</p><div class="progress mt-2"><div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div></div>`;
+
+                                // 构建请求参数
+                                const params = {
+                                    type: cleanIrrelevantOnly ? 'irrelevant' : 'all',
+                                    days: parseInt(retentionDays),
+                                    max_records: cleanByCount ? parseInt(maxRecords) : 0
+                                };
+
+                                // 发送请求
+                                fetch('/api/test/clean_database', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify(params),
+                                })
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        resultDiv.classList.remove('alert-info', 'alert-danger');
+                                        resultDiv.classList.add('alert-success');
+                                        resultDiv.innerHTML = `<h5><i class="bi bi-check-circle-fill text-success"></i> 数据库清理成功</h5><p>${data.message}</p><p>已清理 ${data.data.deleted_count} 条记录。</p>`;
+                                    } else {
+                                        resultDiv.classList.remove('alert-info', 'alert-success');
+                                        resultDiv.classList.add('alert-danger');
+                                        resultDiv.innerHTML = `<h5><i class="bi bi-x-circle-fill text-danger"></i> 数据库清理失败</h5><p>${data.message}</p>`;
+                                    }
+                                })
+                                .catch(error => {
+                                    resultDiv.classList.remove('alert-info', 'alert-success');
+                                    resultDiv.classList.add('alert-danger');
+                                    resultDiv.innerHTML = `<h5><i class="bi bi-exclamation-triangle-fill text-warning"></i> 请求错误</h5><p>${error.message}</p>`;
+                                    console.error('Error:', error);
+                                });
+                            }
+                        });
+                    </script>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-success mb-4">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-chat-dots me-2"></i>自动回复设置
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="auto-reply-form">
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enable-auto-reply" name="enable_auto_reply" {% if enable_auto_reply %}checked{% endif %} data-config-key="ENABLE_AUTO_REPLY">
+                                <label class="form-check-label" for="enable-auto-reply">启用自动回复</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="auto-reply-prompt" class="form-label">自动回复提示词</label>
+                            <textarea class="form-control" id="auto-reply-prompt" name="auto_reply_prompt" rows="5" placeholder="自动回复的LLM提示词" data-config-key="AUTO_REPLY_PROMPT">{{ auto_reply_prompt }}</textarea>
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1 text-primary"></i>用于生成回复内容的提示词模板，使用{content}作为内容占位符。<br>
+                                <small class="text-muted"><i class="bi bi-exclamation-triangle me-1"></i>此设置为全局设置，也可以在账号管理中为每个账号单独设置。</small>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <button type="button" id="save-auto-reply-btn" class="btn btn-primary">
+                                <i class="bi bi-save me-1"></i>保存自动回复设置
+                            </button>
+                            <button type="button" class="btn btn-success" id="test-auto-reply-btn">
+                                <i class="bi bi-play-fill me-1"></i>测试自动回复
+                            </button>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <div id="auto-reply-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                        <div id="auto-reply-test-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-info mb-4">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-arrow-down-up me-2"></i>数据传输
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card h-100 shadow-sm border-primary">
+                                <div class="card-header bg-primary text-white text-center">
+                                    <h5 class="mb-0">导入数据</h5>
+                                </div>
+                                <div class="card-body text-center">
+                                    <i class="bi bi-download fs-1 text-primary mb-3"></i>
+                                    <p class="card-text">从JSON文件导入账号配置、分析结果和系统设置</p>
+                                    <a href="{{ url_for('data_transfer') }}" class="btn btn-primary">
+                                        <i class="bi bi-download me-1"></i> 导入数据
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100 shadow-sm border-success">
+                                <div class="card-header bg-success text-white text-center">
+                                    <h5 class="mb-0">导出数据</h5>
+                                </div>
+                                <div class="card-body text-center">
+                                    <i class="bi bi-upload fs-1 text-success mb-3"></i>
+                                    <p class="card-text">将账号配置、分析结果和系统设置导出为JSON文件</p>
+                                    <a href="{{ url_for('data_transfer', tab='export') }}" class="btn btn-success">
+                                        <i class="bi bi-upload me-1"></i> 导出数据
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-info mt-3">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        通过导入/导出功能，您可以备份系统数据或将配置迁移到其他实例。
+                        <hr>
+                        <small><i class="bi bi-shield-lock me-1"></i>敏感信息（如API密钥和密码）不会包含在导出文件中。</small>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+
+        <!-- Twitter设置 -->
+        <div class="tab-pane fade" id="twitter" role="tabpanel" aria-labelledby="twitter-tab">
+            <div class="card shadow-sm border-primary mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-twitter me-2"></i>Twitter配置
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="twitter-form">
+                        <!-- Twitter库选择 -->
+                        <div class="mb-4 border rounded p-3 bg-light">
+                            <h6 class="text-primary mb-3">
+                                <i class="bi bi-gear-wide-connected me-2"></i>Twitter库选择
+                            </h6>
+                            <div class="mb-3">
+                                <label for="twitter-library" class="form-label">
+                                    <i class="bi bi-code-square me-1 text-primary"></i>使用的Twitter库
+                                </label>
+                                <select class="form-select" id="twitter-library" name="twitter_library" data-config-key="TWITTER_LIBRARY">
+                                    <option value="auto" {% if config.get('TWITTER_LIBRARY', 'auto') == 'auto' %}selected{% endif %}>自动选择（推荐）</option>
+                                    <option value="tweety" {% if config.get('TWITTER_LIBRARY', 'auto') == 'tweety' %}selected{% endif %}>Tweety库</option>
+                                    <option value="twikit" {% if config.get('TWITTER_LIBRARY', 'auto') == 'twikit' %}selected{% endif %}>Twikit库</option>
+                                </select>
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1 text-primary"></i>
+                                    <strong>自动选择：</strong>系统会智能选择最合适的库，优先使用Tweety，失败时自动切换到Twikit<br>
+                                    <strong>Tweety库：</strong>传统的Twitter抓取库，稳定性较好<br>
+                                    <strong>Twikit库：</strong>新的Twitter抓取库，支持更多功能，需要邮箱配置
+                                </div>
+                                <!-- 当前使用的库状态显示 -->
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="bi bi-gear me-1"></i>当前使用的库：
+                                        <span id="current-twitter-library" class="badge bg-secondary">检查中...</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="twitter-username" class="form-label">
+                                <i class="bi bi-person-badge me-1 text-primary"></i>用户名
+                            </label>
+                            <input type="text" class="form-control" id="twitter-username" name="twitter_username" value="{{ config.get('TWITTER_USERNAME', '') }}" data-config-key="TWITTER_USERNAME">
+                        </div>
+                        <div class="mb-3">
+                            <label for="twitter-email" class="form-label">
+                                <i class="bi bi-envelope me-1 text-primary"></i>邮箱地址
+                            </label>
+                            <input type="email" class="form-control" id="twitter-email" name="twitter_email" value="{{ config.get('TWITTER_EMAIL', '') }}" data-config-key="TWITTER_EMAIL" placeholder="your@email.com">
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1 text-primary"></i>用于twikit库登录的邮箱地址，提供更好的兼容性和稳定性
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="twitter-password" class="form-label">
+                                <i class="bi bi-key me-1 text-primary"></i>密码
+                            </label>
+                            <input type="password" class="form-control" id="twitter-password" name="twitter_password" value="{{ config.get('TWITTER_PASSWORD', '') }}" data-config-key="TWITTER_PASSWORD">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="bi bi-card-text me-1 text-primary"></i>会话数据（可选）
+                            </label>
+                            <div class="form-text mb-2">
+                                <i class="bi bi-info-circle me-1 text-primary"></i>如果提供了会话数据，将优先使用会话数据登录。请分别输入各个字段的值：
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <label for="twitter-auth-token" class="form-label">Auth Token</label>
+                                    <input type="text" class="form-control" id="twitter-auth-token" name="twitter_auth_token" placeholder="输入auth_token值">
+                                    <div class="form-text">从浏览器Cookie中获取的auth_token</div>
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label for="twitter-ct0" class="form-label">CT0 Token</label>
+                                    <input type="text" class="form-control" id="twitter-ct0" name="twitter_ct0" placeholder="输入ct0值">
+                                    <div class="form-text">从浏览器Cookie中获取的ct0值</div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <label for="twitter-csrf-token" class="form-label">CSRF Token（可选）</label>
+                                    <input type="text" class="form-control" id="twitter-csrf-token" name="twitter_csrf_token" placeholder="输入csrf_token值">
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <label for="twitter-session-token" class="form-label">Session Token（可选）</label>
+                                    <input type="text" class="form-control" id="twitter-session-token" name="twitter_session_token" placeholder="输入session_token值">
+                                </div>
+                            </div>
+
+                            <div class="alert alert-info mt-2">
+                                <small>
+                                    <strong>获取方法：</strong><br>
+                                    1. 在浏览器中登录Twitter/X<br>
+                                    2. 按F12打开开发者工具<br>
+                                    3. 转到Application/存储 → Cookies → https://x.com<br>
+                                    4. 找到并复制auth_token和ct0的值
+                                </small>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <button type="button" id="save-twitter-btn" class="btn btn-primary me-2">
+                                    <i class="bi bi-save me-1"></i>保存Twitter配置
+                                </button>
+                                <button type="button" class="btn btn-warning me-2" id="clear-twitter-btn" onclick="clearTwitterSettings()">
+                                    <i class="bi bi-trash me-1"></i>清空所有数据
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="reset-twitter-client-btn" onclick="resetTwitterClient()">
+                                    <i class="bi bi-arrow-clockwise me-1"></i>重置客户端
+                                </button>
+                            </div>
+                            <button type="button" class="btn btn-info text-white" id="test-twitter-btn">
+                                <i class="bi bi-check2-circle me-1"></i>测试Twitter连接
+                            </button>
+                        </div>
+                    </form>
+                    <div class="mt-3">
+                        <div id="twitter-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                        <div id="twitter-test-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+        <!-- 代理设置 -->
+        <div class="tab-pane fade" id="proxy" role="tabpanel" aria-labelledby="proxy-tab">
+            <div class="card shadow-sm border-secondary mb-4">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-hdd-network me-2"></i>代理设置
+                    </h5>
+                    <div>
+                        <button type="button" class="btn btn-info btn-sm me-2" id="check-proxies-btn" onclick="checkAllProxies()">
+                            <i class="bi bi-arrow-repeat me-1"></i>检查所有代理
+                        </button>
+                        <button type="button" class="btn btn-light btn-sm" onclick="showAddProxyModal()">
+                            <i class="bi bi-plus-circle me-1"></i>添加代理
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- 代理列表 -->
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="bi bi-list-ul me-2 text-secondary"></i>代理列表
+                            </h6>
+                            <span class="badge bg-secondary" id="proxy-count">加载中...</span>
+                        </div>
+                        <div class="card-body">
+                            <div id="proxy-list-container">
+                                <div class="d-flex align-items-center">
+                                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <span>正在加载代理列表...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 代理管理器状态 -->
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="bi bi-speedometer2 me-1 text-secondary"></i>代理管理器状态
+                            </h6>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="testSelectedProxy()">
+                                <i class="bi bi-check2-circle me-1"></i>测试选中代理
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="proxy-manager-status">
+                                <div class="d-flex align-items-center">
+                                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                    <span>正在检查代理状态...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-secondary">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        设置代理，用于访问Twitter等需要代理的网站。系统支持多代理自动切换和故障转移。
+                        <hr>
+                        <small><i class="bi bi-exclamation-triangle me-1"></i>SOCKS5代理需要安装额外的依赖，系统会自动尝试安装。</small>
+                    </div>
+
+                    <div class="mt-3">
+                        <div id="proxy-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                        <div id="proxy-test-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 添加代理模态框 -->
+            <div class="modal fade" id="addProxyModal" tabindex="-1" aria-labelledby="addProxyModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-secondary text-white">
+                            <h5 class="modal-title" id="addProxyModalLabel">
+                                <i class="bi bi-plus-circle me-2"></i>添加代理
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="add-proxy-form">
+                                <div class="mb-3">
+                                    <label for="add-proxy-name" class="form-label">代理名称</label>
+                                    <input type="text" class="form-control" id="add-proxy-name" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="add-proxy-protocol" class="form-label">代理协议</label>
+                                    <select class="form-select" id="add-proxy-protocol" required>
+                                        <option value="http">HTTP</option>
+                                        <option value="https">HTTPS</option>
+                                        <option value="socks5">SOCKS5</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="add-proxy-host" class="form-label">主机地址</label>
+                                    <input type="text" class="form-control" id="add-proxy-host" placeholder="例如：127.0.0.1" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="add-proxy-port" class="form-label">端口</label>
+                                    <input type="number" class="form-control" id="add-proxy-port" placeholder="例如：7890" min="1" max="65535" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="add-proxy-username" class="form-label">用户名（可选）</label>
+                                    <input type="text" class="form-control" id="add-proxy-username">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="add-proxy-password" class="form-label">密码（可选）</label>
+                                    <input type="password" class="form-control" id="add-proxy-password">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="add-proxy-priority" class="form-label">优先级</label>
+                                    <input type="number" class="form-control" id="add-proxy-priority" value="0" min="0" max="100">
+                                    <div class="form-text">数字越小优先级越高，0为最高优先级</div>
+                                </div>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="add-proxy-active" checked>
+                                    <label class="form-check-label" for="add-proxy-active">启用此代理</label>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" onclick="addProxy()">添加</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 编辑代理模态框 -->
+            <div class="modal fade" id="editProxyModal" tabindex="-1" aria-labelledby="editProxyModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-primary text-white">
+                            <h5 class="modal-title" id="editProxyModalLabel">
+                                <i class="bi bi-pencil-square me-2"></i>编辑代理
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="edit-proxy-form">
+                                <input type="hidden" id="edit-proxy-id">
+                                <div class="mb-3">
+                                    <label for="edit-proxy-name" class="form-label">代理名称</label>
+                                    <input type="text" class="form-control" id="edit-proxy-name" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-proxy-protocol" class="form-label">代理协议</label>
+                                    <select class="form-select" id="edit-proxy-protocol" required>
+                                        <option value="http">HTTP</option>
+                                        <option value="https">HTTPS</option>
+                                        <option value="socks5">SOCKS5</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-proxy-host" class="form-label">主机地址</label>
+                                    <input type="text" class="form-control" id="edit-proxy-host" placeholder="例如：127.0.0.1" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-proxy-port" class="form-label">端口</label>
+                                    <input type="number" class="form-control" id="edit-proxy-port" placeholder="例如：7890" min="1" max="65535" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-proxy-username" class="form-label">用户名（可选）</label>
+                                    <input type="text" class="form-control" id="edit-proxy-username">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-proxy-password" class="form-label">密码（可选）</label>
+                                    <input type="password" class="form-control" id="edit-proxy-password" placeholder="不修改请留空">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-proxy-priority" class="form-label">优先级</label>
+                                    <input type="number" class="form-control" id="edit-proxy-priority" value="0" min="0" max="100">
+                                    <div class="form-text">数字越小优先级越高，0为最高优先级</div>
+                                </div>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="edit-proxy-active">
+                                    <label class="form-check-label" for="edit-proxy-active">启用此代理</label>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" onclick="updateProxy()">保存</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+        <!-- 账号设置 -->
+        <div class="tab-pane fade" id="account" role="tabpanel" aria-labelledby="account-tab">
+            <div class="card shadow-sm border-dark mb-4">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-person me-2"></i>账号设置
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="account-form">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">
+                                <i class="bi bi-person me-1 text-dark"></i>用户名
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                                <input type="text" class="form-control" id="username" name="username" value="{{ session.get('username', '') }}">
+                            </div>
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>修改用户名将需要重新登录
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="current-password" class="form-label">
+                                <i class="bi bi-key me-1 text-dark"></i>当前密码
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-shield-lock"></i></span>
+                                <input type="password" class="form-control" id="current-password" name="current_password">
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('current-password')">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="new-password" class="form-label">
+                                <i class="bi bi-key-fill me-1 text-dark"></i>新密码
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-shield-lock-fill"></i></span>
+                                <input type="password" class="form-control" id="new-password" name="new_password">
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('new-password')">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirm-password" class="form-label">
+                                <i class="bi bi-check2-circle me-1 text-dark"></i>确认新密码
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-shield-check"></i></span>
+                                <input type="password" class="form-control" id="confirm-password" name="confirm_password">
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('confirm-password')">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>安全提示：</strong>请使用强密码，包含大小写字母、数字和特殊字符，长度至少8位。
+                        </div>
+                        <button type="button" id="save-account-btn" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>保存账号设置
+                        </button>
+                    </form>
+                    <div class="mt-3">
+                        <div id="account-result" class="alert d-none" style="border: 2px solid; font-weight: 500;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+<script src="{{ url_for('static', filename='js/proxy_manager.js') }}"></script>
+<script>
+// 密码可见性切换函数
+function togglePasswordVisibility(inputId) {
+    const input = document.getElementById(inputId);
+    const icon = event.currentTarget.querySelector('i');
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('bi-eye');
+        icon.classList.add('bi-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('bi-eye-slash');
+        icon.classList.add('bi-eye');
+    }
+}
+
+// 添加CSRF令牌到所有表单
+function addCSRFTokenToForms() {
+    // 获取CSRF令牌
+    const csrfToken = "{{ csrf_token() }}";
+
+    // 为所有表单添加CSRF令牌
+    document.querySelectorAll('form').forEach(form => {
+        // 检查表单是否已有CSRF令牌
+        if (!form.querySelector('input[name="csrf_token"]')) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+            console.log('已添加CSRF令牌到表单:', form.id);
+        }
+    });
+}
+
+// 页面加载时添加CSRF令牌
+document.addEventListener('DOMContentLoaded', addCSRFTokenToForms);
+
+// 清空Twitter设置
+function clearTwitterSettings() {
+    if (confirm('确定要清空所有Twitter设置吗？此操作不可撤销。')) {
+        // 清空所有输入字段
+        document.getElementById('twitter-username').value = '';
+        document.getElementById('twitter-email').value = '';
+        document.getElementById('twitter-password').value = '';
+        document.getElementById('twitter-auth-token').value = '';
+        document.getElementById('twitter-ct0').value = '';
+        document.getElementById('twitter-csrf-token').value = '';
+        document.getElementById('twitter-session-token').value = '';
+
+        // 显示成功消息
+        showAlert('twitter-result', 'success', 'Twitter设置已清空');
+    }
+}
+
+// 重置Twitter客户端
+function resetTwitterClient() {
+    if (confirm('确定要重置Twitter客户端吗？这将清除客户端缓存并重新初始化连接。')) {
+        const btn = document.getElementById('reset-twitter-client-btn');
+        const originalText = btn.innerHTML;
+
+        // 显示加载状态
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>重置中...';
+        btn.disabled = true;
+
+        fetch('/twitter/reset_client', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('twitter-result', 'success', data.message);
+                // 更新当前库状态
+                if (data.current_library) {
+                    const libraryBadge = document.getElementById('current-twitter-library');
+                    if (libraryBadge) {
+                        libraryBadge.textContent = data.current_library;
+                        libraryBadge.className = 'badge bg-success';
+                    }
+                }
+            } else {
+                showAlert('twitter-result', 'danger', data.message || '重置Twitter客户端失败');
+            }
+        })
+        .catch(error => {
+            console.error('重置Twitter客户端出错:', error);
+            showAlert('twitter-result', 'danger', '重置Twitter客户端时发生错误');
+        })
+        .finally(() => {
+            // 恢复按钮状态
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        });
+    }
+}
+
+// 全局错误处理
+window.onerror = function(message, source, lineno, colno, error) {
+    alert(`JavaScript错误: ${message}\n在第 ${lineno} 行, 第 ${colno} 列\n来源: ${source}`);
+    console.error('JavaScript错误:', message, source, lineno, colno, error);
+    return true;
+};
+    // 添加调试函数 - 简化版本，只记录到控制台
+    function showDebugMessage(message, type = 'info') {
+        console.log(`[${type.toUpperCase()}] ${message}`);
+    }
+
+    // 初始化模态框
+    function initializeModals() {
+        showDebugMessage('初始化模态框');
+
+        // 为所有关闭按钮添加事件
+        document.querySelectorAll('[data-bs-dismiss="modal"]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const modalId = this.closest('.modal').id;
+                showDebugMessage(`模态框关闭按钮被点击: ${modalId}`);
+
+                // 使用SettingsManager的closeModal函数关闭模态框
+                if (typeof SettingsManager !== 'undefined' && typeof SettingsManager.closeModal === 'function') {
+                    SettingsManager.closeModal(modalId);
+                } else {
+                    // 备用方案
+                    if (typeof $ !== 'undefined') {
+                        $(`#${modalId}`).modal('hide');
+                    } else {
+                        const modal = document.getElementById(modalId);
+                        if (modal) {
+                            modal.classList.remove('show');
+                            modal.style.display = 'none';
+                            document.body.classList.remove('modal-open');
+
+                            // 移除模态框背景
+                            const backdrop = document.querySelector('.modal-backdrop');
+                            if (backdrop) {
+                                backdrop.remove();
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        // 为取消按钮添加事件
+        document.querySelectorAll('.modal .btn-secondary, .modal .btn-cancel').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const modalId = this.closest('.modal').id;
+                showDebugMessage(`模态框取消按钮被点击: ${modalId}`);
+
+                // 使用SettingsManager的closeModal函数关闭模态框
+                if (typeof SettingsManager !== 'undefined' && typeof SettingsManager.closeModal === 'function') {
+                    SettingsManager.closeModal(modalId);
+                } else {
+                    // 备用方案
+                    if (typeof $ !== 'undefined') {
+                        $(`#${modalId}`).modal('hide');
+                    } else {
+                        const modal = document.getElementById(modalId);
+                        if (modal) {
+                            modal.classList.remove('show');
+                            modal.style.display = 'none';
+                            document.body.classList.remove('modal-open');
+
+                            // 移除模态框背景
+                            const backdrop = document.querySelector('.modal-backdrop');
+                            if (backdrop) {
+                                backdrop.remove();
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        showDebugMessage('模态框初始化完成');
+    }
+
+
+
+
+
+
+
+    // 处理URL中的锚点，激活对应的选项卡
+    document.addEventListener('DOMContentLoaded', function() {
+        showDebugMessage('页面加载完成，初始化事件处理程序');
+
+        // 初始化模态框
+        initializeModals();
+
+        // 关闭模态框的通用函数
+        function closeModal(modalId) {
+            showDebugMessage(`关闭模态框: ${modalId}`);
+            if (typeof SettingsManager !== 'undefined' && typeof SettingsManager.closeModal === 'function') {
+                SettingsManager.closeModal(modalId);
+            } else {
+                if (typeof $ !== 'undefined') {
+                    $(`#${modalId}`).modal('hide');
+                } else {
+                    const modal = document.getElementById(modalId);
+                    if (modal) {
+                        modal.classList.remove('show');
+                        modal.style.display = 'none';
+                        document.body.classList.remove('modal-open');
+
+                        // 移除模态框背景
+                        const backdrop = document.querySelector('.modal-backdrop');
+                        if (backdrop) {
+                            backdrop.remove();
+                        }
+                    }
+                }
+            }
+        }
+
+
+
+
+
+
+
+
+
+        // 检查所有代理状态
+        function checkAllProxies() {
+            const resultDiv = document.getElementById('proxy-manager-status');
+            resultDiv.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status">
+                        <span class="visually-hidden">检查中...</span>
+                    </div>
+                    <span>正在检查所有代理状态...</span>
+                </div>
+            `;
+
+            // 发送请求检查所有代理
+            fetch('/api/test/check_all_proxies', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let html = '<div class="table-responsive"><table class="table table-sm table-bordered">';
+                    html += '<thead><tr><th>代理名称</th><th>状态</th><th>响应时间</th></tr></thead>';
+                    html += '<tbody>';
+
+                    // 添加代理状态行
+                    data.data.proxies.forEach(proxy => {
+                        const statusClass = proxy.working ? 'success' : 'danger';
+                        const statusIcon = proxy.working ? 'check-circle-fill' : 'x-circle-fill';
+                        const statusText = proxy.working ? '可用' : '不可用';
+
+                        html += `<tr>
+                            <td><i class="bi bi-hdd-network me-1"></i>${proxy.name}</td>
+                            <td><span class="badge bg-${statusClass}"><i class="bi bi-${statusIcon} me-1"></i>${statusText}</span></td>
+                            <td>${proxy.response_time || '-'}</td>
+                        </tr>`;
+                    });
+
+                    html += '</tbody></table></div>';
+
+                    // 添加当前使用的代理信息
+                    if (data.data.working_proxy) {
+                        html += `<div class="alert alert-success mt-2">
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                            当前使用的代理: <strong>${data.data.working_proxy.name}</strong>
+                        </div>`;
+                    } else {
+                        html += `<div class="alert alert-warning mt-2">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            当前没有可用的代理
+                        </div>`;
+                    }
+
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            检查代理状态失败: ${data.message}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        检查代理状态出错: ${error.message}
+                    </div>
+                `;
+            });
+        }
+
+        // 页面加载完成后初始化代理管理器
+        if (typeof ProxyManager !== 'undefined' && typeof ProxyManager.init === 'function') {
+            try {
+                showDebugMessage('初始化代理管理器');
+                setTimeout(() => ProxyManager.init(), 500);
+            } catch (e) {
+                console.error('初始化代理管理器时出错:', e);
+                showDebugMessage('初始化代理管理器时出错: ' + e.message, 'error');
+            }
+        }
+
+        // 初始化Twitter会话字段
+        initTwitterSessionFields();
+
+        // 检查当前使用的Twitter库
+        checkCurrentTwitterLibrary();
+
+        // 获取URL中的锚点
+        let hash = window.location.hash;
+        if (hash) {
+            // 移除开头的#号
+            hash = hash.substring(1);
+
+            // 尝试激活对应的选项卡
+            const tab = document.getElementById(hash + '-tab');
+            if (tab) {
+                const tabTrigger = new bootstrap.Tab(tab);
+                tabTrigger.show();
+
+                // 滚动到选项卡位置
+                setTimeout(function() {
+                    window.scrollTo(0, 0);
+                }, 100);
+            }
+        }
+
+        // 为选项卡添加点击事件，更新URL锚点
+        const tabs = document.querySelectorAll('button[data-bs-toggle="tab"]');
+        tabs.forEach(function(tab) {
+            tab.addEventListener('shown.bs.tab', function(event) {
+                // 获取激活的选项卡ID
+                const id = event.target.getAttribute('aria-controls');
+
+                // 更新URL锚点，但不刷新页面
+                if (history.pushState) {
+                    history.pushState(null, null, '#' + id);
+                } else {
+                    window.location.hash = id;
+                }
+            });
+        });
+
+        // 检查所有保存按钮是否存在
+        const saveButtons = [
+            'save-scheduler-btn',
+            'save-auto-reply-btn',
+            'save-twitter-btn',
+            'save-account-btn'
+        ];
+
+        saveButtons.forEach(btnId => {
+            const btn = document.getElementById(btnId);
+            if (btn) {
+                showDebugMessage(`找到按钮: ${btnId}`);
+            } else {
+                showDebugMessage(`未找到按钮: ${btnId}`, 'warning');
+            }
+        });
+    });
+    // 通用测试函数
+    function testConnection(type, inputId, resultDivId, buttonId, requestUrl, requestBodyFn, successHandler, failureHandler) {
+        showDebugMessage(`初始化测试函数: ${type}, ${buttonId}, ${requestUrl}`);
+
+        const button = document.getElementById(buttonId);
+        if (!button) {
+            showDebugMessage(`未找到测试按钮: ${buttonId}`, 'error');
+            return;
+        }
+
+        showDebugMessage(`为测试按钮 ${buttonId} 添加点击事件`);
+
+        // 直接添加onclick事件，避免事件绑定问题
+        button.onclick = function(event) {
+            event.preventDefault();
+            showDebugMessage(`测试按钮 ${buttonId} 被点击`);
+
+            const inputElement = inputId ? document.getElementById(inputId) : null;
+            const inputValue = inputElement ? inputElement.value : '';
+            showDebugMessage(`输入值: ${inputValue}`);
+
+            const resultDiv = document.getElementById(resultDivId);
+            if (!resultDiv) {
+                showDebugMessage(`未找到测试结果显示区域: ${resultDivId}`, 'error');
+                return;
+            }
+
+            // 显示加载状态
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 测试中...';
+            showDebugMessage('测试按钮已设置为加载状态');
+
+            // 显示初始状态信息
+            resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+            resultDiv.classList.add('alert-info');
+            resultDiv.innerHTML = `<h5><i class="bi bi-hourglass-split text-info"></i> 正在测试...</h5><p>正在连接${type}，请稍候...</p><div class="progress mt-2"><div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div></div>`;
+            showDebugMessage('测试结果区域已设置为加载状态');
+
+            // 准备请求体
+            const requestBody = requestBodyFn ? requestBodyFn(inputValue) : {};
+            showDebugMessage(`测试请求数据: ${JSON.stringify(requestBody)}`);
+
+            // 发送请求
+            showDebugMessage(`发送测试请求到: ${requestUrl}`);
+            fetch(requestUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+            })
+            .then(response => {
+                showDebugMessage(`收到测试响应，状态码: ${response.status}`);
+                if (!response.ok) {
+                    showDebugMessage(`测试响应状态不正常: ${response.status} ${response.statusText}`, 'error');
+                }
+                return response.json();
+            })
+            .then(data => {
+                showDebugMessage(`解析测试响应数据: ${JSON.stringify(data)}`);
+                if (data.success) {
+                    resultDiv.classList.remove('d-none', 'alert-danger', 'alert-info');
+                    resultDiv.classList.add('alert-success');
+
+                    let resultHtml = `<h5><i class="bi bi-check-circle-fill text-success"></i> 测试成功</h5><p>${data.message}</p>`;
+
+                    // 使用自定义成功处理函数
+                    if (successHandler) {
+                        resultHtml = successHandler(data, resultHtml);
+                    }
+
+                    resultDiv.innerHTML = resultHtml;
+                    showDebugMessage('测试成功', 'success');
+                } else {
+                    resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                    resultDiv.classList.add('alert-danger');
+
+                    let failureHtml = `<h5><i class="bi bi-x-circle-fill text-danger"></i> 测试失败</h5><p>${data.message}</p>`;
+
+                    // 使用自定义失败处理函数
+                    if (failureHandler) {
+                        failureHtml = failureHandler(data, failureHtml);
+                    }
+
+                    resultDiv.innerHTML = failureHtml;
+                    showDebugMessage(`测试失败: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                showDebugMessage(`测试请求错误: ${error.message}`, 'error');
+                console.error('Error:', error);
+                resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                resultDiv.classList.add('alert-danger');
+                resultDiv.innerHTML = `<h5><i class="bi bi-exclamation-triangle-fill text-warning"></i> 请求错误</h5>
+                    <p>${error.message}</p>
+                    <div class="mt-2">
+                        <strong>调试信息:</strong>
+                        <ul>
+                            <li>请求URL: ${requestUrl}</li>
+                            <li>请求方法: POST</li>
+                            <li>请求参数: ${JSON.stringify(requestBody)}</li>
+                        </ul>
+                    </div>`;
+            })
+            .finally(() => {
+                // 恢复按钮状态
+                button.disabled = false;
+                button.innerHTML = `测试${type}连接`;
+                showDebugMessage('测试按钮已恢复正常状态');
+            });
+        };
+
+        showDebugMessage(`已为测试按钮 ${buttonId} 设置点击事件处理程序`);
+    }
+
+    // 测试Twitter连接
+    testConnection(
+        'Twitter API',
+        'twitter-username',
+        'twitter-test-result',
+        'test-twitter-btn',
+        '/api/test/twitter',
+        (accountId) => ({ account_id: accountId }),
+        (data, resultHtml) => {
+            if (data.data) {
+                resultHtml += '<ul>';
+                if (data.data.account_id) resultHtml += `<li>账号ID: ${data.data.account_id}</li>`;
+                if (data.data.post_count) resultHtml += `<li>获取推文数: ${data.data.post_count}</li>`;
+                if (data.data.response_time) resultHtml += `<li>响应时间: ${data.data.response_time}</li>`;
+                resultHtml += '</ul>';
+
+                if (data.data.first_post) {
+                    resultHtml += '<h6>第一条推文:</h6>';
+                    resultHtml += '<ul>';
+                    resultHtml += `<li>ID: ${data.data.first_post.id}</li>`;
+                    resultHtml += `<li>时间: ${data.data.first_post.time}</li>`;
+                    resultHtml += `<li>内容: ${data.data.first_post.content}</li>`;
+                    resultHtml += '</ul>';
+                }
+            }
+            return resultHtml;
+        },
+        (data, failureHtml) => {
+            failureHtml += '<div class="mt-3 p-2 bg-light border-start border-warning border-4">';
+            failureHtml += '<p class="mb-1"><strong>可能的解决方案：</strong></p>';
+            failureHtml += '<ul class="mb-0">';
+            failureHtml += '<li>检查网络连接是否正常</li>';
+            failureHtml += '<li>确认Twitter账号和密码是否正确</li>';
+            failureHtml += '<li>检查代理设置是否正确</li>';
+            failureHtml += '<li>尝试使用会话数据登录</li>';
+            failureHtml += '</ul>';
+            failureHtml += '</div>';
+            return failureHtml;
+        }
+    );
+
+
+
+    // 测试选中的代理
+    function testSelectedProxy() {
+        ProxyManager.testSelectedProxies();
+    }
+
+
+
+    // 通用设置保存函数
+    function saveSettings(formId, buttonId, resultDivId, apiUrl, getDataFn, successMessage = "设置已保存") {
+        showDebugMessage(`初始化保存函数: ${formId}, ${buttonId}, ${apiUrl}`);
+
+        const button = document.getElementById(buttonId);
+        if (!button) {
+            showDebugMessage(`未找到按钮: ${buttonId}`, 'error');
+            return;
+        }
+
+        showDebugMessage(`为按钮 ${buttonId} 添加点击事件`);
+
+        // 直接添加onclick事件，避免事件绑定问题
+        button.onclick = function(event) {
+            event.preventDefault();
+            showDebugMessage(`按钮 ${buttonId} 被点击`);
+
+            const form = document.getElementById(formId);
+            if (!form) {
+                showDebugMessage(`未找到表单: ${formId}`, 'error');
+                return;
+            }
+
+            const resultDiv = document.getElementById(resultDivId);
+            if (!resultDiv) {
+                showDebugMessage(`未找到结果显示区域: ${resultDivId}`, 'warning');
+            }
+
+            // 显示加载状态
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 保存中...';
+            showDebugMessage('按钮已设置为加载状态');
+
+            // 显示初始状态信息
+            if (resultDiv) {
+                resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+                resultDiv.classList.add('alert-info');
+                resultDiv.innerHTML = `<h5><i class="bi bi-hourglass-split text-info"></i> 正在保存...</h5><p>请稍候...</p>`;
+                showDebugMessage('结果区域已设置为加载状态');
+            }
+
+            // 准备请求数据
+            const formData = new FormData(form);
+            const data = {};
+            formData.forEach((value, key) => {
+                data[key] = value;
+                showDebugMessage(`表单数据: ${key} = ${value}`);
+            });
+
+            // 使用自定义数据处理函数
+            const requestData = getDataFn ? getDataFn(data) : data;
+
+            // 如果处理函数返回null，表示验证失败，不发送请求
+            if (requestData === null) {
+                showDebugMessage('表单验证失败，不发送请求', 'error');
+                button.disabled = false;
+                button.innerHTML = '保存设置';
+                if (resultDiv) {
+                    resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                    resultDiv.classList.add('alert-danger');
+                    resultDiv.innerHTML = `<h5><i class="bi bi-x-circle-fill text-danger"></i> 验证失败</h5><p>请检查表单数据是否正确</p>`;
+                }
+                return;
+            }
+
+            showDebugMessage(`请求数据: ${JSON.stringify(requestData)}`);
+
+            // 发送请求
+            showDebugMessage(`发送请求到: ${apiUrl}`);
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData),
+            })
+            .then(response => {
+                showDebugMessage(`收到响应，状态码: ${response.status}`);
+                if (!response.ok) {
+                    showDebugMessage(`响应状态不正常: ${response.status} ${response.statusText}`, 'error');
+                }
+                return response.json();
+            })
+            .then(data => {
+                showDebugMessage(`解析响应数据: ${JSON.stringify(data)}`);
+                if (resultDiv) {
+                    if (data.success) {
+                        resultDiv.classList.remove('d-none', 'alert-danger', 'alert-info');
+                        resultDiv.classList.add('alert-success');
+                        resultDiv.innerHTML = `<h5><i class="bi bi-check-circle-fill text-success"></i> 保存成功</h5><p>${data.message || successMessage}</p>`;
+                        showDebugMessage('保存成功', 'success');
+                    } else {
+                        resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                        resultDiv.classList.add('alert-danger');
+                        resultDiv.innerHTML = `<h5><i class="bi bi-x-circle-fill text-danger"></i> 保存失败</h5><p>${data.message}</p>`;
+                        showDebugMessage(`保存失败: ${data.message}`, 'error');
+                    }
+                }
+            })
+            .catch(error => {
+                showDebugMessage(`请求错误: ${error.message}`, 'error');
+                console.error('Error:', error);
+                if (resultDiv) {
+                    resultDiv.classList.remove('d-none', 'alert-success', 'alert-info');
+                    resultDiv.classList.add('alert-danger');
+                    resultDiv.innerHTML = `<h5><i class="bi bi-exclamation-triangle-fill text-warning"></i> 请求错误</h5>
+                        <p>${error.message}</p>
+                        <div class="mt-2">
+                            <strong>调试信息:</strong>
+                            <ul>
+                                <li>请求URL: ${apiUrl}</li>
+                                <li>请求方法: POST</li>
+                                <li>请求参数: ${JSON.stringify(requestData)}</li>
+                            </ul>
+                        </div>`;
+                }
+            })
+            .finally(() => {
+                // 恢复按钮状态
+                button.disabled = false;
+                button.innerHTML = '保存设置';
+                showDebugMessage('按钮已恢复正常状态');
+            });
+        };
+
+        showDebugMessage(`已为按钮 ${buttonId} 设置点击事件处理程序`);
+    }
+
+
+
+    // 保存自动回复设置
+    saveSettings(
+        'auto-reply-form',
+        'save-auto-reply-btn',
+        'auto-reply-result',
+        '/api/settings/auto_reply',
+        (data) => ({
+            enable_auto_reply: document.getElementById('enable-auto-reply').checked,
+            auto_reply_prompt: document.getElementById('auto-reply-prompt').value
+        }),
+        "自动回复设置已保存"
+    );
+
+    // 测试自动回复
+    document.getElementById('test-auto-reply-btn').addEventListener('click', function() {
+        const content = prompt('请输入要测试的内容:', '这是一条测试内容，请AI生成回复。');
+        if (!content) return;
+
+        const promptTemplate = document.getElementById('auto-reply-prompt').value;
+        const resultDiv = document.getElementById('auto-reply-result');
+
+        // 显示加载中
+        resultDiv.classList.remove('d-none');
+        resultDiv.innerHTML = '<div class="alert alert-info">正在测试自动回复功能，请稍候...</div>';
+
+        // 发送请求
+        fetch('/api/test/auto_reply', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                content: content,
+                prompt_template: promptTemplate
+            }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <h5><i class="bi bi-check-circle-fill me-2"></i>测试成功</h5>
+                        <p class="mb-2">测试内容:</p>
+                        <div class="p-2 mb-2 bg-light rounded">${content}</div>
+                        <p class="mb-2">生成的回复:</p>
+                        <div class="p-2 bg-light rounded">${data.reply}</div>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5><i class="bi bi-exclamation-triangle-fill me-2"></i>测试失败</h5>
+                        <p>${data.message}</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="bi bi-exclamation-triangle-fill me-2"></i>请求错误</h5>
+                    <p>${error.message}</p>
+                </div>
+            `;
+        });
+    });
+
+    // 初始化Twitter会话字段
+    function initTwitterSessionFields() {
+        const existingSession = '{{ config.get("TWITTER_SESSION", "") }}';
+        if (existingSession && existingSession !== '******' && existingSession.trim()) {
+            try {
+                const sessionObj = JSON.parse(existingSession);
+
+                // 填充表单字段
+                if (sessionObj.auth_token) {
+                    document.getElementById('twitter-auth-token').value = sessionObj.auth_token;
+                }
+                if (sessionObj.ct0) {
+                    document.getElementById('twitter-ct0').value = sessionObj.ct0;
+                }
+                if (sessionObj.csrf_token) {
+                    document.getElementById('twitter-csrf-token').value = sessionObj.csrf_token;
+                }
+                if (sessionObj.session_token) {
+                    document.getElementById('twitter-session-token').value = sessionObj.session_token;
+                }
+            } catch (e) {
+                console.warn('无法解析现有的Twitter会话数据:', e);
+            }
+        }
+    }
+
+    // 页面加载时初始化Twitter会话字段
+    initTwitterSessionFields();
+
+    // 手动启动时间线抓取任务
+    document.getElementById('manual-timeline-btn').addEventListener('click', function() {
+        if (confirm('确定要手动启动时间线抓取任务吗？\n\n这将获取您在Twitter上关注的账号的最新推文。')) {
+            // 显示加载状态
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>启动中...';
+
+            // 发送请求
+            fetch('/api/tasks/run_timeline', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 显示成功消息
+                    const resultDiv = document.getElementById('scheduler-result');
+                    resultDiv.classList.remove('d-none', 'alert-danger');
+                    resultDiv.classList.add('alert-success');
+                    resultDiv.innerHTML = `
+                        <h5><i class="bi bi-check-circle-fill text-success"></i> 时间线抓取任务已启动</h5>
+                        <p>${data.message}</p>
+                        <p>您可以在<a href="${window.location.origin}" class="alert-link">首页</a>查看任务进度和结果。</p>
+                    `;
+                } else {
+                    // 显示错误消息
+                    const resultDiv = document.getElementById('scheduler-result');
+                    resultDiv.classList.remove('d-none', 'alert-success');
+                    resultDiv.classList.add('alert-danger');
+                    resultDiv.innerHTML = `
+                        <h5><i class="bi bi-x-circle-fill text-danger"></i> 启动时间线抓取任务失败</h5>
+                        <p>${data.message}</p>
+                    `;
+                }
+            })
+            .catch(error => {
+                // 显示错误消息
+                const resultDiv = document.getElementById('scheduler-result');
+                resultDiv.classList.remove('d-none', 'alert-success');
+                resultDiv.classList.add('alert-danger');
+                resultDiv.innerHTML = `
+                    <h5><i class="bi bi-exclamation-triangle-fill text-warning"></i> 请求错误</h5>
+                    <p>${error.message}</p>
+                `;
+                console.error('Error:', error);
+            })
+            .finally(() => {
+                // 恢复按钮状态
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+        }
+    });
+
+    // 保存Twitter设置
+    saveSettings(
+        'twitter-form',
+        'save-twitter-btn',
+        'twitter-result',
+        '/api/settings/twitter',
+        (data) => {
+            // 构建会话JSON数据
+            let sessionData = '';
+            const authToken = data.twitter_auth_token;
+            const ct0 = data.twitter_ct0;
+            const csrfToken = data.twitter_csrf_token;
+            const sessionToken = data.twitter_session_token;
+
+            // 如果提供了必要的会话字段，构建JSON
+            if (authToken && ct0) {
+                const sessionObj = {
+                    auth_token: authToken,
+                    ct0: ct0
+                };
+
+                // 添加可选字段
+                if (csrfToken) sessionObj.csrf_token = csrfToken;
+                if (sessionToken) sessionObj.session_token = sessionToken;
+
+                sessionData = JSON.stringify(sessionObj);
+            }
+
+            return {
+                twitter_username: data.twitter_username,
+                twitter_password: data.twitter_password,
+                twitter_session: sessionData
+            };
+        },
+        "Twitter设置已保存"
+    );
+
+
+
+
+
+    // 代理设置通过ProxyManager.js处理
+
+    // 保存账号设置
+    saveSettings(
+        'account-form',
+        'save-account-btn',
+        'account-result',
+        '/api/settings/account',
+        (data) => {
+            // 验证密码
+            if (data.new_password && data.new_password !== document.getElementById('confirm-password').value) {
+                showDebugMessage('新密码和确认密码不匹配', 'error');
+                alert('新密码和确认密码不匹配');
+                return null;
+            }
+
+            // 检查是否有用户名变更
+            const username = data.username ? data.username.trim() : '';
+            const currentUsername = '{{ session.get("username", "") }}';
+            const usernameChanged = username && username !== currentUsername;
+
+            // 构建请求数据
+            const requestData = {
+                current_password: data.current_password,
+                new_password: data.new_password || '',
+                confirm_password: data.confirm_password || ''
+            };
+
+            // 如果用户名已更改，添加到请求数据中
+            if (usernameChanged) {
+                requestData.username = username;
+            }
+
+            return requestData;
+        },
+        (data) => {
+            // 自定义成功消息处理
+            if (data.username_changed) {
+                // 如果用户名已更改，显示需要重新登录的消息
+                return "账号设置已更新，请重新登录以应用新的用户名";
+            } else if (data.password_changed) {
+                return "密码已成功更改";
+            } else {
+                return "账号设置已更新";
+            }
+        }
+    );
+
+    // 检查当前使用的Twitter库
+    function checkCurrentTwitterLibrary() {
+        fetch('/api/twitter/current_library')
+            .then(response => response.json())
+            .then(data => {
+                const badge = document.getElementById('current-twitter-library');
+                if (data.success) {
+                    const library = data.current_library;
+                    const available = data.available_libraries || [];
+
+                    let badgeClass = 'bg-success';
+                    let displayText = library;
+
+                    if (library === 'tweety') {
+                        displayText = 'Tweety库';
+                        badgeClass = 'bg-primary';
+                    } else if (library === 'twikit') {
+                        displayText = 'Twikit库';
+                        badgeClass = 'bg-info';
+                    } else if (library === 'none') {
+                        displayText = '未初始化';
+                        badgeClass = 'bg-warning';
+                    }
+
+                    badge.textContent = displayText;
+                    badge.className = `badge ${badgeClass}`;
+
+                    // 显示可用库信息
+                    if (available.length > 0) {
+                        badge.title = `可用库: ${available.join(', ')}`;
+                    }
+                } else {
+                    badge.textContent = '检查失败';
+                    badge.className = 'badge bg-danger';
+                    badge.title = data.message || '无法获取库状态';
+                }
+            })
+            .catch(error => {
+                const badge = document.getElementById('current-twitter-library');
+                badge.textContent = '检查失败';
+                badge.className = 'badge bg-danger';
+                badge.title = '网络错误或服务不可用';
+            });
+    }
+
+
+</script>
+{% endblock extra_js %}

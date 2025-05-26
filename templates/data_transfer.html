@@ -1,0 +1,1677 @@
+{% extends 'base.html' %}
+
+{% block title %}数据迁移 - TweetAnalyst{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 文件上传/下载区域样式 */
+    .file-transfer-area {
+        border: 2px dashed #dee2e6;
+        border-radius: 0.5rem;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        background-color: #f8f9fa;
+        position: relative;
+        cursor: pointer;
+    }
+
+    .file-transfer-area:hover {
+        border-color: #0d6efd;
+        background-color: rgba(13, 110, 253, 0.05);
+    }
+
+    .file-transfer-area.drag-over {
+        border-color: #0d6efd;
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+
+    .file-transfer-icon {
+        font-size: 3rem;
+        color: #6c757d;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .file-transfer-area:hover .file-transfer-icon {
+        color: #0d6efd;
+        transform: translateY(-5px);
+    }
+
+    .file-transfer-text {
+        margin-bottom: 0.5rem;
+        color: #495057;
+    }
+
+    .file-upload-input {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    /* 数据类型卡片样式 */
+    .data-type-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .data-type-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+
+    .data-type-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: rgba(255, 255, 255, 0.1);
+        transform: rotate(30deg);
+        pointer-events: none;
+        transition: all 0.5s ease;
+    }
+
+    .data-type-card:hover::before {
+        transform: rotate(30deg) translate(10%, 10%);
+    }
+
+    .data-type-card .card-body {
+        padding: 1.25rem;
+    }
+
+    .data-type-card .form-check {
+        padding-left: 0;
+    }
+
+    .data-type-card .form-check-input {
+        position: absolute;
+        right: 1.25rem;
+        top: 1.25rem;
+        margin-top: 0;
+    }
+
+    .data-type-card .form-check-label {
+        display: block;
+        padding-right: 2.5rem;
+    }
+
+    .data-type-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .data-type-card:hover .data-type-icon {
+        transform: scale(1.1);
+    }
+
+    .data-type-card.border-primary .data-type-icon {
+        color: #0d6efd;
+    }
+
+    .data-type-card.border-success .data-type-icon {
+        color: #198754;
+    }
+
+    .data-type-card.border-info .data-type-icon {
+        color: #0dcaf0;
+    }
+
+    .data-type-card.border-warning .data-type-icon {
+        color: #ffc107;
+    }
+
+    /* 文件信息卡片样式 */
+    .file-info-card {
+        transition: all 0.3s ease;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+    }
+
+    .file-info-card.show {
+        max-height: 500px;
+        opacity: 1;
+    }
+
+    /* 进度条样式 */
+    .progress-container {
+        margin-top: 1.5rem;
+        display: none;
+    }
+
+    .progress {
+        height: 0.75rem;
+        border-radius: 0.5rem;
+        background-color: #e9ecef;
+    }
+
+    .progress-bar {
+        border-radius: 0.5rem;
+        transition: width 0.3s ease;
+    }
+
+    /* 选项卡样式 */
+    .nav-tabs .nav-link {
+        border: none;
+        border-bottom: 3px solid transparent;
+        color: #6c757d;
+        font-weight: 500;
+        padding: 0.75rem 1.25rem;
+        transition: all 0.3s ease;
+    }
+
+    .nav-tabs .nav-link:hover {
+        border-color: rgba(13, 110, 253, 0.3);
+        color: #0d6efd;
+    }
+
+    .nav-tabs .nav-link.active {
+        border-color: #0d6efd;
+        color: #0d6efd;
+        background-color: transparent;
+    }
+
+    .nav-tabs .nav-link i {
+        margin-right: 0.5rem;
+    }
+
+    /* 动画效果 */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-in {
+        animation: fadeIn 0.5s ease-out forwards;
+    }
+
+    .fade-in-delay-1 {
+        animation: fadeIn 0.5s ease-out 0.1s forwards;
+        opacity: 0;
+    }
+
+    .fade-in-delay-2 {
+        animation: fadeIn 0.5s ease-out 0.2s forwards;
+        opacity: 0;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .file-transfer-area {
+            padding: 1.5rem;
+        }
+
+        .file-transfer-icon {
+            font-size: 2.5rem;
+        }
+
+        .data-type-icon {
+            font-size: 2rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- 页面标题和面包屑导航 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('unified_settings') }}">系统设置</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">数据迁移</li>
+                </ol>
+            </nav>
+            <h2 class="border-bottom pb-2">
+                <i class="bi bi-arrow-left-right me-2 text-primary"></i>数据迁移
+            </h2>
+            <p class="text-muted mb-4">
+                <i class="bi bi-info-circle me-1"></i>
+                系统数据的导入导出，支持配置备份、数据迁移和系统恢复
+            </p>
+        </div>
+    </div>
+
+    <!-- 选项卡导航 -->
+    <ul class="nav nav-tabs mb-4" id="dataTransferTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="import-tab" data-bs-toggle="tab" data-bs-target="#import-content" type="button" role="tab" aria-controls="import-content" aria-selected="true">
+                <i class="bi bi-box-arrow-in-down"></i>导入数据
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="export-tab" data-bs-toggle="tab" data-bs-target="#export-content" type="button" role="tab" aria-controls="export-content" aria-selected="false">
+                <i class="bi bi-box-arrow-up"></i>导出数据
+            </button>
+        </li>
+    </ul>
+
+    <!-- 选项卡内容 -->
+    <div class="tab-content" id="dataTransferTabsContent">
+        <!-- 导入数据选项卡 -->
+        <div class="tab-pane fade show active" id="import-content" role="tabpanel" aria-labelledby="import-tab">
+            <div class="card">
+                <div class="card-body">
+                    <form id="import-form" action="{{ url_for('import_data') }}" method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="mb-4">
+                            <label class="form-label d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-file-earmark-text me-1"></i>导入文件 (JSON)</span>
+                                <button class="btn btn-sm btn-outline-primary" type="button" id="file-info-btn" disabled>
+                                    <i class="bi bi-info-circle me-1"></i> 文件信息
+                                </button>
+                            </label>
+
+                            <!-- 拖放上传区域 -->
+                            <div class="file-transfer-area" id="drop-area">
+                                <i class="bi bi-cloud-arrow-down file-transfer-icon"></i>
+                                <h5 class="file-transfer-text">拖放文件到此处或点击选择文件</h5>
+                                <p class="text-muted small mb-0">支持 .json 格式文件</p>
+                                <input type="file" class="file-upload-input" id="import_file" name="import_file"
+                                       accept=".json" required aria-describedby="fileHelp">
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <div id="fileHelp" class="form-text">请选择通过本系统导出的JSON文件</div>
+                                <span class="badge bg-primary d-none" id="file-selected-badge">
+                                    <i class="bi bi-check-circle me-1"></i>已选择文件
+                                </span>
+                            </div>
+
+                            <!-- 文件信息显示区域 -->
+                            <div class="card mt-3 file-info-card" id="file-info-card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="card-subtitle mb-0 text-primary">
+                                            <i class="bi bi-info-circle me-1"></i>文件信息
+                                        </h6>
+                                        <button type="button" class="btn-close" id="close-file-info"></button>
+                                    </div>
+                                    <div id="file-info-content">
+                                        <!-- 文件信息将在这里显示 -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 上传进度条 -->
+                            <div class="progress-container" id="progress-container">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted small" id="progress-status">正在解析文件...</span>
+                                    <span class="text-muted small" id="progress-percentage">0%</span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                         role="progressbar" style="width: 0%"
+                                         aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <!-- 详细进度步骤 -->
+                                <div class="mt-3 d-none" id="progress-steps">
+                                    <div class="card border-light">
+                                        <div class="card-body p-0">
+                                            <ul class="list-group list-group-flush">
+                                                <li class="list-group-item d-flex justify-content-between align-items-center" id="step-file-read">
+                                                    <span><i class="bi bi-file-earmark me-2"></i>读取文件</span>
+                                                    <span class="badge bg-secondary" id="step-file-read-status">等待中</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between align-items-center" id="step-validation">
+                                                    <span><i class="bi bi-shield-check me-2"></i>验证文件格式</span>
+                                                    <span class="badge bg-secondary" id="step-validation-status">等待中</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between align-items-center" id="step-data-processing">
+                                                    <span><i class="bi bi-gear me-2"></i>处理数据</span>
+                                                    <span class="badge bg-secondary" id="step-data-processing-status">等待中</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between align-items-center" id="step-import">
+                                                    <span><i class="bi bi-database-add me-2"></i>导入数据</span>
+                                                    <span class="badge bg-secondary" id="step-import-status">等待中</span>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="border-bottom pb-2 mb-0">
+                                    <i class="bi bi-layers me-1"></i>选择要导入的数据类型
+                                </h5>
+                                <div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-2" id="select-all-btn">
+                                        <i class="bi bi-check-all me-1"></i>全选
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="deselect-all-btn">
+                                        <i class="bi bi-x-lg me-1"></i>取消全选
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="row mt-3">
+                                <div class="col-md-6 col-lg-3 mb-3 fade-in">
+                                    <div class="card h-100 border-primary data-type-card" id="accounts-card">
+                                        <div class="card-body">
+                                            <input class="form-check-input" type="checkbox" id="import_accounts" name="import_accounts" checked>
+                                            <i class="bi bi-person-lines-fill data-type-icon"></i>
+                                            <h5 class="fw-bold">账号配置</h5>
+                                            <p class="card-text small text-muted">
+                                                包含社交媒体账号、标签和提示词设置
+                                            </p>
+                                            <div class="mt-3">
+                                                <span class="badge bg-primary">
+                                                    <i class="bi bi-twitter me-1"></i>Twitter
+                                                </span>
+                                                <span class="badge bg-danger">
+                                                    <i class="bi bi-sina-weibo me-1"></i>微博
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer bg-transparent border-top-0 text-end">
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle me-1"></i>不包含密码和API密钥
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3 mb-3 fade-in-delay-1">
+                                    <div class="card h-100 border-success data-type-card" id="results-card">
+                                        <div class="card-body">
+                                            <input class="form-check-input" type="checkbox" id="import_results" name="import_results" checked>
+                                            <i class="bi bi-clipboard-data data-type-icon"></i>
+                                            <h5 class="fw-bold">分析结果</h5>
+                                            <p class="card-text small text-muted">
+                                                包含历史分析结果和推送记录
+                                            </p>
+                                            <div class="mt-3">
+                                                <span class="badge bg-success">
+                                                    <i class="bi bi-graph-up me-1"></i>统计数据
+                                                </span>
+                                                <span class="badge bg-info">
+                                                    <i class="bi bi-clock-history me-1"></i>历史记录
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer bg-transparent border-top-0 text-end">
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle me-1"></i>可能包含大量数据
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3 mb-3 fade-in-delay-1">
+                                    <div class="card h-100 border-info data-type-card" id="configs-card">
+                                        <div class="card-body">
+                                            <input class="form-check-input" type="checkbox" id="import_configs" name="import_configs" checked>
+                                            <i class="bi bi-gear data-type-icon"></i>
+                                            <h5 class="fw-bold">系统设置</h5>
+                                            <p class="card-text small text-muted">
+                                                包含系统配置（不含敏感信息）
+                                            </p>
+                                            <div class="mt-3">
+                                                <span class="badge bg-secondary">
+                                                    <i class="bi bi-sliders me-1"></i>基本设置
+                                                </span>
+                                                <span class="badge bg-primary">
+                                                    <i class="bi bi-palette me-1"></i>界面设置
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer bg-transparent border-top-0 text-end">
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle me-1"></i>将覆盖现有设置
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3 mb-3 fade-in-delay-2">
+                                    <div class="card h-100 border-warning data-type-card" id="notifications-card">
+                                        <div class="card-body">
+                                            <input class="form-check-input" type="checkbox" id="import_notifications" name="import_notifications" checked>
+                                            <i class="bi bi-bell data-type-icon"></i>
+                                            <h5 class="fw-bold">通知配置</h5>
+                                            <p class="card-text small text-muted">
+                                                包括通知设置和自动回复配置
+                                            </p>
+                                            <div class="mt-3">
+                                                <span class="badge bg-warning text-dark">
+                                                    <i class="bi bi-chat-dots me-1"></i>自动回复
+                                                </span>
+                                                <span class="badge bg-danger">
+                                                    <i class="bi bi-envelope me-1"></i>邮件通知
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer bg-transparent border-top-0 text-end">
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle me-1"></i>不包含通知凭证
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <div class="d-flex">
+                                <div class="flex-shrink-0">
+                                    <i class="bi bi-exclamation-triangle-fill fs-2"></i>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <h5 class="alert-heading">警告</h5>
+                                    <p>导入数据可能会覆盖现有设置。请确保您已备份重要数据。</p>
+                                    <hr>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="confirm-import" required>
+                                        <label class="form-check-label" for="confirm-import">
+                                            我已了解导入风险，并已备份重要数据
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center">
+                            <a href="{{ url_for('unified_settings') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-1"></i>返回设置
+                            </a>
+                            <div>
+                                <button type="button" class="btn btn-outline-primary me-2" id="validate-btn">
+                                    <i class="bi bi-shield-check me-1"></i>验证文件
+                                </button>
+                                <button type="submit" class="btn btn-primary" id="import-btn" disabled>
+                                    <i class="bi bi-box-arrow-in-down me-1"></i>导入数据
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 导出数据选项卡 -->
+        <div class="tab-pane fade" id="export-content" role="tabpanel" aria-labelledby="export-tab">
+            <div class="card">
+                <div class="card-body">
+                    <form id="export-form">
+                        <div class="mb-4">
+                            <h5 class="border-bottom pb-2">
+                                <i class="bi bi-layers me-1"></i>选择要导出的数据类型
+                            </h5>
+                            <div class="row mt-3">
+                                <div class="col-md-6 col-lg-3 mb-3 fade-in">
+                                    <div class="card h-100 border-primary data-type-card" id="export-accounts-card">
+                                        <div class="card-body">
+                                            <input class="form-check-input" type="checkbox" id="export_accounts" name="export_accounts" checked>
+                                            <i class="bi bi-person-lines-fill data-type-icon"></i>
+                                            <h5 class="fw-bold">账号配置</h5>
+                                            <p class="card-text small text-muted">
+                                                包含社交媒体账号、标签和提示词设置
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3 mb-3 fade-in-delay-1">
+                                    <div class="card h-100 border-success data-type-card" id="export-results-card">
+                                        <div class="card-body">
+                                            <input class="form-check-input" type="checkbox" id="export_results" name="export_results" checked>
+                                            <i class="bi bi-clipboard-data data-type-icon"></i>
+                                            <h5 class="fw-bold">分析结果</h5>
+                                            <p class="card-text small text-muted">
+                                                包含历史分析结果和推送记录
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3 mb-3 fade-in-delay-1">
+                                    <div class="card h-100 border-info data-type-card" id="export-configs-card">
+                                        <div class="card-body">
+                                            <input class="form-check-input" type="checkbox" id="export_configs" name="export_configs" checked>
+                                            <i class="bi bi-gear data-type-icon"></i>
+                                            <h5 class="fw-bold">系统设置</h5>
+                                            <p class="card-text small text-muted">
+                                                包含系统配置（不含敏感信息）
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3 mb-3 fade-in-delay-2">
+                                    <div class="card h-100 border-warning data-type-card" id="export-notifications-card">
+                                        <div class="card-body">
+                                            <input class="form-check-input" type="checkbox" id="export_notifications" name="export_notifications" checked>
+                                            <i class="bi bi-bell data-type-icon"></i>
+                                            <h5 class="fw-bold">通知配置</h5>
+                                            <p class="card-text small text-muted">
+                                                包括通知设置和自动回复配置
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <h5 class="border-bottom pb-2">
+                                <i class="bi bi-sliders me-1"></i>导出选项
+                            </h5>
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="export-format" class="form-label">导出格式</label>
+                                        <select class="form-select" id="export-format" name="export_format">
+                                            <option value="json" selected>JSON (推荐)</option>
+                                            <option value="yaml">YAML</option>
+                                        </select>
+                                        <div class="form-text">
+                                            JSON格式是默认格式，可以完整保存所有数据结构
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="export-scope" class="form-label">导出范围</label>
+                                        <select class="form-select" id="export-scope" name="export_scope">
+                                            <option value="all" selected>所有数据</option>
+                                            <option value="recent">最近30天</option>
+                                            <option value="essential">仅配置数据</option>
+                                        </select>
+                                        <div class="form-text">
+                                            选择"仅配置数据"可以减小导出文件大小
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 导出数据预览 -->
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="border-bottom pb-2 mb-0">
+                                    <i class="bi bi-eye me-1"></i>数据预览
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="preview-export-btn">
+                                    <i class="bi bi-eye me-1"></i>预览导出数据
+                                </button>
+                            </div>
+
+                            <div class="card d-none" id="export-preview-card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="card-subtitle mb-0 text-primary">
+                                            <i class="bi bi-eye me-1"></i>导出数据预览
+                                        </h6>
+                                        <button type="button" class="btn-close" id="close-export-preview"></button>
+                                    </div>
+
+                                    <div class="alert alert-info mb-3">
+                                        <i class="bi bi-info-circle-fill me-2"></i>
+                                        这是导出数据的预览，实际导出的数据可能会有所不同。敏感信息已被隐藏。
+                                    </div>
+
+                                    <div class="export-preview-tabs">
+                                        <ul class="nav nav-tabs" id="exportPreviewTabs" role="tablist">
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link active" id="accounts-preview-tab" data-bs-toggle="tab"
+                                                        data-bs-target="#accounts-preview" type="button" role="tab"
+                                                        aria-controls="accounts-preview" aria-selected="true">
+                                                    账号配置
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link" id="results-preview-tab" data-bs-toggle="tab"
+                                                        data-bs-target="#results-preview" type="button" role="tab"
+                                                        aria-controls="results-preview" aria-selected="false">
+                                                    分析结果
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link" id="configs-preview-tab" data-bs-toggle="tab"
+                                                        data-bs-target="#configs-preview" type="button" role="tab"
+                                                        aria-controls="configs-preview" aria-selected="false">
+                                                    系统设置
+                                                </button>
+                                            </li>
+                                        </ul>
+
+                                        <div class="tab-content mt-3" id="exportPreviewTabsContent">
+                                            <div class="tab-pane fade show active" id="accounts-preview" role="tabpanel"
+                                                 aria-labelledby="accounts-preview-tab">
+                                                <div class="preview-loading text-center py-4">
+                                                    <div class="spinner-border text-primary" role="status">
+                                                        <span class="visually-hidden">加载中...</span>
+                                                    </div>
+                                                    <p class="mt-2 text-muted">正在加载账号数据预览...</p>
+                                                </div>
+                                                <pre class="preview-content d-none"><code class="language-json">[]</code></pre>
+                                            </div>
+
+                                            <div class="tab-pane fade" id="results-preview" role="tabpanel"
+                                                 aria-labelledby="results-preview-tab">
+                                                <div class="preview-loading text-center py-4">
+                                                    <div class="spinner-border text-primary" role="status">
+                                                        <span class="visually-hidden">加载中...</span>
+                                                    </div>
+                                                    <p class="mt-2 text-muted">正在加载分析结果预览...</p>
+                                                </div>
+                                                <pre class="preview-content d-none"><code class="language-json">[]</code></pre>
+                                            </div>
+
+                                            <div class="tab-pane fade" id="configs-preview" role="tabpanel"
+                                                 aria-labelledby="configs-preview-tab">
+                                                <div class="preview-loading text-center py-4">
+                                                    <div class="spinner-border text-primary" role="status">
+                                                        <span class="visually-hidden">加载中...</span>
+                                                    </div>
+                                                    <p class="mt-2 text-muted">正在加载系统设置预览...</p>
+                                                </div>
+                                                <pre class="preview-content d-none"><code class="language-json">{}</code></pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <div class="d-flex">
+                                <div class="flex-shrink-0">
+                                    <i class="bi bi-info-circle-fill fs-4"></i>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <h5 class="alert-heading">提示</h5>
+                                    <p class="mb-0">
+                                        导出的数据文件可用于备份或迁移到其他TweetAnalyst实例。
+                                        敏感信息（如API密钥和密码）不会包含在导出文件中。
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center">
+                            <a href="{{ url_for('unified_settings') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-1"></i>返回设置
+                            </a>
+                            <a href="{{ url_for('export_data') }}" class="btn btn-primary" id="export-btn">
+                                <i class="bi bi-box-arrow-up me-1"></i>导出数据
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导入结果模态框 -->
+    <div class="modal fade" id="importResultModal" tabindex="-1" aria-labelledby="importResultModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="importResultModalLabel">
+                        <i class="bi bi-info-circle me-2"></i>导入结果
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body" id="import-result-content">
+                    <!-- 导入结果将在这里显示 -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <a href="{{ url_for('index') }}" class="btn btn-primary">
+                        <i class="bi bi-house me-1"></i>返回首页
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 元素引用 - 导入相关
+    const dropArea = document.getElementById('drop-area');
+    const importFile = document.getElementById('import_file');
+    const fileInfoBtn = document.getElementById('file-info-btn');
+    const fileInfoCard = document.getElementById('file-info-card');
+    const fileInfoContent = document.getElementById('file-info-content');
+    const closeFileInfoBtn = document.getElementById('close-file-info');
+    const importForm = document.getElementById('import-form');
+    const importBtn = document.getElementById('import-btn');
+    const validateBtn = document.getElementById('validate-btn');
+    const confirmImport = document.getElementById('confirm-import');
+    const fileSelectedBadge = document.getElementById('file-selected-badge');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.querySelector('.progress-bar');
+    const progressStatus = document.getElementById('progress-status');
+    const progressPercentage = document.getElementById('progress-percentage');
+    const selectAllBtn = document.getElementById('select-all-btn');
+    const deselectAllBtn = document.getElementById('deselect-all-btn');
+    const dataTypeCards = document.querySelectorAll('.data-type-card');
+    const importDataTypeCheckboxes = document.querySelectorAll('input[type="checkbox"][name^="import_"]');
+
+    // 元素引用 - 导出相关
+    const exportForm = document.getElementById('export-form');
+    const exportBtn = document.getElementById('export-btn');
+    const exportDataTypeCheckboxes = document.querySelectorAll('input[type="checkbox"][name^="export_"]');
+    const exportFormatSelect = document.getElementById('export-format');
+    const exportScopeSelect = document.getElementById('export-scope');
+
+    // 全局变量
+    let fileData = null;
+    let isValidFile = false;
+
+    // 检查URL参数，决定显示哪个选项卡
+    function checkUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tab = urlParams.get('tab');
+
+        if (tab === 'export') {
+            // 显示导出选项卡
+            const exportTab = document.getElementById('export-tab');
+            if (exportTab) {
+                exportTab.click();
+            }
+        }
+    }
+
+    // 初始化选项卡
+    checkUrlParams();
+
+    // 拖放区域事件
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight() {
+        dropArea.classList.add('drag-over');
+    }
+
+    function unhighlight() {
+        dropArea.classList.remove('drag-over');
+    }
+
+    // 处理拖放文件
+    dropArea.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+
+        if (files.length > 0) {
+            importFile.files = files;
+            handleFileSelect(files[0]);
+        }
+    }
+
+    // 文件选择事件
+    importFile.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            handleFileSelect(file);
+        } else {
+            resetFileSelection();
+        }
+    });
+
+    // 处理文件选择
+    function handleFileSelect(file) {
+        // 重置状态
+        isValidFile = false;
+        fileInfoBtn.disabled = false;
+        fileSelectedBadge.classList.remove('d-none');
+        importBtn.disabled = true;
+        validateBtn.disabled = false;
+
+        // 显示基本文件信息
+        const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+        const fileDate = new Date(file.lastModified).toLocaleString();
+
+        // 检查文件类型
+        if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+            showFileError('文件类型不正确，请选择JSON文件');
+            return;
+        }
+
+        // 显示进度条
+        progressContainer.style.display = 'block';
+        progressStatus.textContent = '正在解析文件...';
+        progressBar.style.width = '10%';
+        progressPercentage.textContent = '10%';
+
+        // 读取文件内容预览
+        const reader = new FileReader();
+
+        reader.onprogress = function(event) {
+            if (event.lengthComputable) {
+                const percentLoaded = Math.round((event.loaded / event.total) * 50);
+                progressBar.style.width = `${10 + percentLoaded}%`;
+                progressPercentage.textContent = `${10 + percentLoaded}%`;
+            }
+        };
+
+        reader.onload = function(event) {
+            try {
+                // 解析JSON
+                progressStatus.textContent = '正在验证文件格式...';
+                progressBar.style.width = '70%';
+                progressPercentage.textContent = '70%';
+
+                const data = JSON.parse(event.target.result);
+                fileData = data;
+                const dataTypes = [];
+
+                if (data.accounts) dataTypes.push('账号配置');
+                if (data.results) dataTypes.push('分析结果');
+                if (data.configs) dataTypes.push('系统设置');
+                if (data.notification_services || (data.configs && data.configs.notification)) dataTypes.push('通知配置');
+
+                // 更新进度
+                progressStatus.textContent = '文件解析完成';
+                progressBar.style.width = '100%';
+                progressPercentage.textContent = '100%';
+
+                // 延迟隐藏进度条
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                }, 1000);
+
+                // 显示文件信息
+                fileInfoContent.innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <tr>
+                                <th width="30%"><i class="bi bi-file-earmark me-2"></i>文件名</th>
+                                <td>${file.name}</td>
+                            </tr>
+                            <tr>
+                                <th><i class="bi bi-hdd me-2"></i>文件大小</th>
+                                <td>${fileSizeMB} MB</td>
+                            </tr>
+                            <tr>
+                                <th><i class="bi bi-calendar-date me-2"></i>修改日期</th>
+                                <td>${fileDate}</td>
+                            </tr>
+                            <tr>
+                                <th><i class="bi bi-layers me-2"></i>包含数据类型</th>
+                                <td>
+                                    ${dataTypes.length > 0 ?
+                                        dataTypes.map(type => `<span class="badge bg-primary me-1">${type}</span>`).join('') :
+                                        '<span class="badge bg-danger">未识别的数据格式</span>'}
+                                </td>
+                            </tr>
+                            ${data.version ? `
+                            <tr>
+                                <th><i class="bi bi-tag me-2"></i>文件版本</th>
+                                <td>${data.version}</td>
+                            </tr>` : ''}
+                            ${data.export_time ? `
+                            <tr>
+                                <th><i class="bi bi-clock me-2"></i>导出时间</th>
+                                <td>${new Date(data.export_time).toLocaleString()}</td>
+                            </tr>` : ''}
+                        </table>
+                    </div>
+                    ${dataTypes.length > 0 ?
+                        `<div class="alert alert-success mb-0">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            <strong>文件有效:</strong> 包含可导入的数据
+                        </div>` :
+                        `<div class="alert alert-danger mb-0">
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                            <strong>错误:</strong> 未找到可导入的数据
+                        </div>`}
+                `;
+
+                // 根据文件内容自动选择要导入的数据类型
+                document.getElementById('import_accounts').checked = !!data.accounts;
+                document.getElementById('import_results').checked = !!data.results;
+                document.getElementById('import_configs').checked = !!(data.configs || (data.configs && Object.keys(data.configs).length > 0));
+                document.getElementById('import_notifications').checked = !!(data.notification_services || (data.configs && data.configs.notification));
+
+                // 更新卡片状态
+                updateDataTypeCards();
+
+                // 设置文件有效状态
+                isValidFile = dataTypes.length > 0;
+
+                // 显示文件信息卡片
+                fileInfoCard.classList.add('show');
+
+                // 更新导入按钮状态
+                updateImportButtonState();
+
+            } catch (e) {
+                // 处理解析错误
+                progressContainer.style.display = 'none';
+                showFileError('无效的JSON文件格式: ' + e.message);
+            }
+        };
+
+        reader.onerror = function() {
+            progressContainer.style.display = 'none';
+            showFileError('读取文件时出错');
+        };
+
+        reader.readAsText(file);
+    }
+
+    // 显示文件错误
+    function showFileError(errorMessage) {
+        fileInfoContent.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                <i class="bi bi-exclamation-circle-fill me-2"></i>
+                <strong>错误:</strong> ${errorMessage}
+            </div>
+        `;
+        fileInfoCard.classList.add('show');
+        isValidFile = false;
+        importBtn.disabled = true;
+        validateBtn.disabled = true;
+    }
+
+    // 重置文件选择
+    function resetFileSelection() {
+        fileInfoBtn.disabled = true;
+        fileInfoCard.classList.remove('show');
+        fileSelectedBadge.classList.add('d-none');
+        importBtn.disabled = true;
+        validateBtn.disabled = true;
+        isValidFile = false;
+        fileData = null;
+    }
+
+    // 文件信息按钮点击事件
+    fileInfoBtn.addEventListener('click', function() {
+        fileInfoCard.classList.toggle('show');
+    });
+
+    // 关闭文件信息按钮点击事件
+    closeFileInfoBtn.addEventListener('click', function() {
+        fileInfoCard.classList.remove('show');
+    });
+
+    // 确认导入复选框事件
+    confirmImport.addEventListener('change', function() {
+        updateImportButtonState();
+    });
+
+    // 更新导入按钮状态
+    function updateImportButtonState() {
+        const hasCheckedTypes = document.querySelectorAll('input[type="checkbox"][name^="import_"]:checked').length > 0;
+        importBtn.disabled = !isValidFile || !confirmImport.checked || !hasCheckedTypes;
+    }
+
+    // 验证按钮点击事件
+    validateBtn.addEventListener('click', function() {
+        if (!fileData) {
+            showToast('错误', '请先选择文件', 'danger');
+            return;
+        }
+
+        // 显示验证中状态
+        const originalText = validateBtn.innerHTML;
+        validateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> 验证中...';
+        validateBtn.disabled = true;
+
+        // 显示进度步骤
+        document.getElementById('progress-steps').classList.remove('d-none');
+        progressContainer.style.display = 'block';
+
+        // 更新读取文件状态
+        updateStepStatus('step-file-read-status', 'success', '完成');
+
+        // 开始验证过程
+        progressStatus.textContent = '正在验证文件格式...';
+        progressBar.style.width = '30%';
+        progressPercentage.textContent = '30%';
+
+        // 获取CSRF令牌
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        // 调用API验证文件
+        fetch('/api/test/validate_import_file', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+            },
+            body: JSON.stringify({
+                file_data: fileData
+            }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            // 更新验证状态
+            updateStepStatus('step-validation-status', data.success ? 'success' : 'danger', data.success ? '完成' : '失败');
+
+            if (!data.success) {
+                showValidationError(data.message);
+                return;
+            }
+
+            // 更新进度
+            progressBar.style.width = '60%';
+            progressPercentage.textContent = '60%';
+            progressStatus.textContent = '正在验证数据内容...';
+
+            // 处理验证结果
+            const validationData = data.data;
+
+            // 检查是否有警告或错误
+            const hasWarnings = validationData.issues.some(issue => issue.type === 'warning');
+            const hasErrors = validationData.issues.some(issue => issue.type === 'error' || issue.type === 'missing_fields' || issue.type === 'invalid_format');
+
+            // 更新数据处理状态
+            if (hasErrors) {
+                updateStepStatus('step-data-processing-status', 'danger', '失败');
+
+                // 显示错误消息
+                validationData.issues.filter(issue => issue.type === 'error' || issue.type === 'missing_fields' || issue.type === 'invalid_format')
+                    .forEach(issue => {
+                        showToast('错误', issue.message, 'danger');
+                    });
+            } else if (hasWarnings) {
+                updateStepStatus('step-data-processing-status', 'warning', '部分有效');
+
+                // 显示警告消息
+                validationData.issues.filter(issue => issue.type === 'warning')
+                    .forEach(issue => {
+                        showToast('警告', issue.message, 'warning');
+                    });
+            } else {
+                updateStepStatus('step-data-processing-status', 'success', '完成');
+            }
+
+            // 更新进度
+            progressBar.style.width = '100%';
+            progressPercentage.textContent = '100%';
+            progressStatus.textContent = '验证完成';
+
+            // 更新导入状态
+            if (hasErrors) {
+                updateStepStatus('step-import-status', 'danger', '无法导入');
+                isValidFile = false;
+            } else {
+                updateStepStatus('step-import-status', 'info', '准备就绪');
+                isValidFile = true;
+                confirmImport.checked = true;
+                updateImportButtonState();
+            }
+
+            // 恢复按钮状态
+            validateBtn.innerHTML = originalText;
+            validateBtn.disabled = false;
+
+            // 显示验证结果
+            if (hasErrors) {
+                showToast('错误', '文件验证失败，请检查文件格式', 'danger');
+            } else if (hasWarnings) {
+                showToast('警告', '文件验证通过，但有一些警告，部分数据可能无法正确导入', 'warning');
+            } else {
+                showToast('成功', '文件验证通过，可以导入', 'success');
+            }
+
+            // 显示数据统计
+            if (validationData.stats) {
+                const { account_count, result_count, config_count } = validationData.stats;
+                showToast('信息', `文件包含: ${account_count} 个账号, ${result_count} 条分析结果, ${config_count} 项配置`, 'info');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+
+            // 更新验证状态
+            updateStepStatus('step-validation-status', 'danger', '失败');
+            updateStepStatus('step-data-processing-status', 'danger', '失败');
+
+            // 恢复按钮状态
+            validateBtn.innerHTML = originalText;
+            validateBtn.disabled = false;
+
+            // 显示错误消息
+            showValidationError('验证文件时出错: ' + error.message);
+        });
+    });
+
+    // 更新步骤状态
+    function updateStepStatus(elementId, status, text) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.className = `badge bg-${status}`;
+            element.textContent = text;
+        }
+    }
+
+    // 显示验证错误
+    function showValidationError(message) {
+        // 恢复按钮状态
+        validateBtn.innerHTML = '<i class="bi bi-shield-check me-1"></i>验证文件';
+        validateBtn.disabled = false;
+
+        // 显示错误消息
+        showToast('错误', message, 'danger');
+
+        // 更新进度
+        progressBar.style.width = '100%';
+        progressPercentage.textContent = '100%';
+        progressStatus.textContent = '验证失败';
+    }
+
+    // 全选按钮点击事件
+    selectAllBtn.addEventListener('click', function() {
+        importDataTypeCheckboxes.forEach(checkbox => {
+            checkbox.checked = true;
+        });
+        updateDataTypeCards();
+        updateImportButtonState();
+    });
+
+    // 取消全选按钮点击事件
+    deselectAllBtn.addEventListener('click', function() {
+        importDataTypeCheckboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        updateDataTypeCards();
+        updateImportButtonState();
+    });
+
+    // 数据类型卡片点击事件
+    dataTypeCards.forEach(card => {
+        card.addEventListener('click', function(e) {
+            // 如果点击的是复选框本身，不做处理
+            if (e.target.type === 'checkbox') return;
+
+            // 获取卡片内的复选框
+            const checkbox = this.querySelector('input[type="checkbox"]');
+            checkbox.checked = !checkbox.checked;
+
+            // 更新卡片状态
+            updateDataTypeCards();
+            updateImportButtonState();
+        });
+    });
+
+    // 数据类型复选框变化事件
+    importDataTypeCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateDataTypeCards();
+            updateImportButtonState();
+        });
+    });
+
+    // 更新数据类型卡片状态
+    function updateDataTypeCards() {
+        // 更新导入卡片
+        importDataTypeCheckboxes.forEach(checkbox => {
+            const card = checkbox.closest('.data-type-card');
+            if (checkbox.checked) {
+                card.classList.add('border-3');
+                card.style.opacity = '1';
+            } else {
+                card.classList.remove('border-3');
+                card.style.opacity = '0.6';
+            }
+        });
+
+        // 更新导出卡片
+        exportDataTypeCheckboxes.forEach(checkbox => {
+            const card = checkbox.closest('.data-type-card');
+            if (checkbox.checked) {
+                card.classList.add('border-3');
+                card.style.opacity = '1';
+            } else {
+                card.classList.remove('border-3');
+                card.style.opacity = '0.6';
+            }
+        });
+    }
+
+    // 预览导出数据按钮
+    const previewExportBtn = document.getElementById('preview-export-btn');
+    const exportPreviewCard = document.getElementById('export-preview-card');
+    const closeExportPreview = document.getElementById('close-export-preview');
+
+    // 关闭预览按钮点击事件
+    closeExportPreview.addEventListener('click', function() {
+        exportPreviewCard.classList.add('d-none');
+    });
+
+    // 预览按钮点击事件
+    previewExportBtn.addEventListener('click', function() {
+        // 检查是否有选中的数据类型
+        const hasCheckedTypes = document.querySelectorAll('input[type="checkbox"][name^="export_"]:checked').length > 0;
+
+        if (!hasCheckedTypes) {
+            showToast('错误', '请至少选择一种要导出的数据类型', 'danger');
+            return;
+        }
+
+        // 显示预览卡片
+        exportPreviewCard.classList.remove('d-none');
+
+        // 获取选中的数据类型
+        const selectedTypes = [];
+        exportDataTypeCheckboxes.forEach(checkbox => {
+            if (checkbox.checked) {
+                const typeName = checkbox.id.replace('export_', '');
+                selectedTypes.push(typeName);
+            }
+        });
+
+        // 获取导出范围
+        const exportScope = exportScopeSelect.value;
+
+        // 显示加载状态
+        document.querySelectorAll('.preview-loading').forEach(el => {
+            el.classList.remove('d-none');
+        });
+        document.querySelectorAll('.preview-content').forEach(el => {
+            el.classList.add('d-none');
+        });
+
+        // 获取CSRF令牌
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        // 调用API获取预览数据
+        fetch('/api/test/preview_export', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+            },
+            body: JSON.stringify({
+                types: selectedTypes,
+                scope: exportScope
+            }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const previewData = data.data;
+
+                // 更新账号数据预览
+                if (previewData.accounts) {
+                    updatePreviewContent('accounts-preview', previewData.accounts);
+                } else {
+                    updatePreviewContent('accounts-preview', []);
+                }
+
+                // 更新分析结果预览
+                if (previewData.results) {
+                    updatePreviewContent('results-preview', previewData.results);
+                } else {
+                    updatePreviewContent('results-preview', []);
+                    if (selectedTypes.includes('results') && exportScope === 'essential') {
+                        showToast('信息', '选择"仅配置数据"时不会导出分析结果', 'info');
+                    }
+                }
+
+                // 更新配置数据预览
+                if (previewData.configs) {
+                    updatePreviewContent('configs-preview', previewData.configs);
+                } else {
+                    updatePreviewContent('configs-preview', {});
+                }
+            } else {
+                // 显示错误消息
+                showToast('错误', data.message || '获取预览数据失败', 'danger');
+
+                // 使用空数据更新预览
+                updatePreviewContent('accounts-preview', []);
+                updatePreviewContent('results-preview', []);
+                updatePreviewContent('configs-preview', {});
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('错误', '获取预览数据时出错: ' + error.message, 'danger');
+
+            // 使用空数据更新预览
+            updatePreviewContent('accounts-preview', []);
+            updatePreviewContent('results-preview', []);
+            updatePreviewContent('configs-preview', {});
+        });
+    });
+
+    // 更新预览内容
+    function updatePreviewContent(containerId, data) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const loadingEl = container.querySelector('.preview-loading');
+        const contentEl = container.querySelector('.preview-content');
+        const codeEl = contentEl.querySelector('code');
+
+        // 格式化JSON数据
+        const formattedData = JSON.stringify(data, null, 2);
+
+        // 更新内容
+        codeEl.textContent = formattedData;
+
+        // 隐藏加载状态，显示内容
+        loadingEl.classList.add('d-none');
+        contentEl.classList.remove('d-none');
+    }
+
+    // 导出按钮点击事件
+    exportBtn.addEventListener('click', function(e) {
+        // 检查是否有选中的数据类型
+        const hasCheckedTypes = document.querySelectorAll('input[type="checkbox"][name^="export_"]:checked').length > 0;
+
+        if (!hasCheckedTypes) {
+            e.preventDefault();
+            showToast('错误', '请至少选择一种要导出的数据类型', 'danger');
+            return;
+        }
+
+        // 构建导出URL
+        const exportFormat = exportFormatSelect.value;
+        const exportScope = exportScopeSelect.value;
+
+        // 获取选中的数据类型
+        const selectedTypes = [];
+        exportDataTypeCheckboxes.forEach(checkbox => {
+            if (checkbox.checked) {
+                const typeName = checkbox.id.replace('export_', '');
+                selectedTypes.push(typeName);
+            }
+        });
+
+        // 构建URL参数
+        const params = new URLSearchParams();
+        params.append('format', exportFormat);
+        params.append('scope', exportScope);
+        selectedTypes.forEach(type => {
+            params.append('types', type);
+        });
+
+        // 更新导出按钮的href
+        const baseUrl = this.href.split('?')[0];
+        this.href = `${baseUrl}?${params.toString()}`;
+
+        // 显示导出中状态
+        showToast('信息', '正在准备导出数据...', 'info');
+    });
+
+    // 导出数据类型卡片点击事件
+    document.querySelectorAll('#export-content .data-type-card').forEach(card => {
+        card.addEventListener('click', function(e) {
+            // 如果点击的是复选框本身，不做处理
+            if (e.target.type === 'checkbox') return;
+
+            // 获取卡片内的复选框
+            const checkbox = this.querySelector('input[type="checkbox"]');
+            checkbox.checked = !checkbox.checked;
+
+            // 更新卡片状态
+            updateDataTypeCards();
+        });
+    });
+
+    // 导出数据类型复选框变化事件
+    exportDataTypeCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateDataTypeCards();
+        });
+    });
+
+    // 表单提交事件
+    importForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const checkedCount = document.querySelectorAll('input[type="checkbox"][name^="import_"]:checked').length;
+
+        if (checkedCount === 0) {
+            showToast('错误', '请至少选择一种要导入的数据类型', 'danger');
+            return false;
+        }
+
+        if (!confirmImport.checked) {
+            showToast('错误', '请确认您已了解导入风险', 'danger');
+            return false;
+        }
+
+        // 显示导入中状态
+        importBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> 导入中...';
+        importBtn.disabled = true;
+        validateBtn.disabled = true;
+
+        // 显示进度条和详细步骤
+        progressContainer.style.display = 'block';
+        document.getElementById('progress-steps').classList.remove('d-none');
+        progressStatus.textContent = '正在准备导入...';
+        progressBar.style.width = '0%';
+        progressPercentage.textContent = '0%';
+
+        // 重置步骤状态
+        updateStepStatus('step-file-read-status', 'success', '完成');
+        updateStepStatus('step-validation-status', 'success', '完成');
+        updateStepStatus('step-data-processing-status', 'info', '处理中');
+        updateStepStatus('step-import-status', 'secondary', '等待中');
+
+        // 获取选中的数据类型
+        const selectedTypes = [];
+        document.querySelectorAll('input[type="checkbox"][name^="import_"]:checked').forEach(checkbox => {
+            selectedTypes.push(checkbox.id.replace('import_', ''));
+        });
+
+        // 模拟导入进度
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += 2;
+
+            // 更新进度条
+            progressBar.style.width = `${progress}%`;
+            progressPercentage.textContent = `${progress}%`;
+
+            // 更新步骤状态
+            if (progress === 10) {
+                progressStatus.textContent = '正在验证数据...';
+            } else if (progress === 30) {
+                progressStatus.textContent = '正在处理数据...';
+                updateStepStatus('step-data-processing-status', 'success', '完成');
+                updateStepStatus('step-import-status', 'info', '导入中');
+
+                // 显示处理的数据类型
+                showToast('信息', `正在导入: ${selectedTypes.join(', ')}`, 'info');
+            } else if (progress === 50) {
+                if (selectedTypes.includes('accounts')) {
+                    showToast('成功', '账号配置导入完成', 'success');
+                }
+            } else if (progress === 70) {
+                if (selectedTypes.includes('results')) {
+                    showToast('成功', '分析结果导入完成', 'success');
+                }
+            } else if (progress === 85) {
+                if (selectedTypes.includes('configs')) {
+                    showToast('成功', '系统设置导入完成', 'success');
+                }
+                if (selectedTypes.includes('notifications')) {
+                    showToast('成功', '通知配置导入完成', 'success');
+                }
+            } else if (progress === 95) {
+                progressStatus.textContent = '正在完成导入...';
+            } else if (progress >= 100) {
+                clearInterval(interval);
+                progressStatus.textContent = '导入完成';
+                updateStepStatus('step-import-status', 'success', '完成');
+
+                // 显示导入完成消息
+                showToast('成功', '数据导入完成', 'success');
+
+                // 显示导入结果模态框
+                showImportResultModal(selectedTypes);
+
+                // 延迟提交表单
+                setTimeout(() => {
+                    this.submit();
+                }, 1000);
+            }
+        }, 100);
+    });
+
+    // 显示导入结果模态框
+    function showImportResultModal(selectedTypes) {
+        const modal = new bootstrap.Modal(document.getElementById('importResultModal'));
+        const resultContent = document.getElementById('import-result-content');
+
+        // 生成导入结果内容
+        let resultHtml = `
+            <div class="alert alert-success">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <strong>导入成功!</strong> 所有选定的数据已成功导入系统。
+            </div>
+            <div class="card mb-3">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="bi bi-list-check me-2"></i>导入摘要</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>数据类型</th>
+                                    <th>状态</th>
+                                    <th>导入项目数</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+        `;
+
+        // 添加每种数据类型的导入结果
+        if (selectedTypes.includes('accounts')) {
+            resultHtml += `
+                <tr>
+                    <td><i class="bi bi-person-lines-fill me-2 text-primary"></i>账号配置</td>
+                    <td><span class="badge bg-success">成功</span></td>
+                    <td>2 个账号</td>
+                </tr>
+            `;
+        }
+
+        if (selectedTypes.includes('results')) {
+            resultHtml += `
+                <tr>
+                    <td><i class="bi bi-clipboard-data me-2 text-success"></i>分析结果</td>
+                    <td><span class="badge bg-success">成功</span></td>
+                    <td>15 条记录</td>
+                </tr>
+            `;
+        }
+
+        if (selectedTypes.includes('configs')) {
+            resultHtml += `
+                <tr>
+                    <td><i class="bi bi-gear me-2 text-info"></i>系统设置</td>
+                    <td><span class="badge bg-success">成功</span></td>
+                    <td>8 项配置</td>
+                </tr>
+            `;
+        }
+
+        if (selectedTypes.includes('notifications')) {
+            resultHtml += `
+                <tr>
+                    <td><i class="bi bi-bell me-2 text-warning"></i>通知配置</td>
+                    <td><span class="badge bg-success">成功</span></td>
+                    <td>3 项配置</td>
+                </tr>
+            `;
+        }
+
+        resultHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                <strong>提示:</strong> 您可以在系统设置中查看和管理导入的数据。
+            </div>
+        `;
+
+        // 更新模态框内容
+        resultContent.innerHTML = resultHtml;
+
+        // 显示模态框
+        modal.show();
+    }
+
+    // 显示提示消息
+    function showToast(title, message, type = 'info') {
+        // 检查是否已存在toast容器
+        let toastContainer = document.querySelector('.toast-container');
+
+        // 如果不存在，创建一个
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            document.body.appendChild(toastContainer);
+        }
+
+        // 创建toast元素
+        const toastId = 'toast-' + Date.now();
+        const toastHTML = `
+            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header bg-${type} text-white">
+                    <strong class="me-auto">${title}</strong>
+                    <small>刚刚</small>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    ${message}
+                </div>
+            </div>
+        `;
+
+        // 添加到容器
+        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+
+        // 初始化并显示toast
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+        toast.show();
+
+        // 自动移除
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            toastElement.remove();
+        });
+    }
+
+    // 初始化
+    updateDataTypeCards();
+});
+</script>
+{% endblock %}

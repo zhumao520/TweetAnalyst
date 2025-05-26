@@ -7,7 +7,7 @@ import os
 import yaml
 import logging
 from models import db, SocialAccount
-from utils.config import get_default_prompt_template, get_config
+from services.config_service import get_default_prompt_template, get_config
 
 # 创建日志记录器
 logger = logging.getLogger('utils.yaml')

@@ -1,0 +1,160 @@
+/**
+ * TweetAnalyst表单验证组件样式
+ * 配合components.js中的formValidator组件使用
+ */
+
+/* 表单控件基础样式 */
+.ta-form-control {
+  display: block;
+  width: 100%;
+  padding: 0.375rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--gray-700);
+  background-color: #fff;
+  background-clip: padding-box;
+  border: 1px solid var(--gray-400);
+  border-radius: 0.25rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.ta-form-control:focus {
+  color: var(--gray-700);
+  background-color: #fff;
+  border-color: var(--primary-light);
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(29, 161, 242, 0.25);
+}
+
+/* 表单组 */
+.ta-form-group {
+  margin-bottom: 1rem;
+}
+
+.ta-form-group label {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+/* 验证状态 */
+.ta-form-control.is-valid {
+  border-color: var(--success-color);
+  padding-right: calc(1.5em + 0.75rem);
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%234CAF50' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right calc(0.375em + 0.1875rem) center;
+  background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+
+.ta-form-control.is-invalid {
+  border-color: var(--danger-color);
+  padding-right: calc(1.5em + 0.75rem);
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='%23F44336' viewBox='-2 -2 7 7'%3e%3cpath stroke='%23F44336' d='M0 0l3 3m0-3L0 3'/%3e%3ccircle r='.5'/%3e%3ccircle cx='3' r='.5'/%3e%3ccircle cy='3' r='.5'/%3e%3ccircle cx='3' cy='3' r='.5'/%3e%3c/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right calc(0.375em + 0.1875rem) center;
+  background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+
+/* 反馈消息 */
+.valid-feedback,
+.invalid-feedback {
+  display: none;
+  width: 100%;
+  margin-top: 0.25rem;
+  font-size: 0.875em;
+}
+
+.valid-feedback {
+  color: var(--success-color);
+}
+
+.invalid-feedback {
+  color: var(--danger-color);
+}
+
+.was-validated .ta-form-control:valid,
+.ta-form-control.is-valid {
+  border-color: var(--success-color);
+}
+
+.was-validated .ta-form-control:valid ~ .valid-feedback,
+.ta-form-control.is-valid ~ .valid-feedback {
+  display: block;
+}
+
+.was-validated .ta-form-control:invalid,
+.ta-form-control.is-invalid {
+  border-color: var(--danger-color);
+}
+
+.was-validated .ta-form-control:invalid ~ .invalid-feedback,
+.ta-form-control.is-invalid ~ .invalid-feedback {
+  display: block;
+}
+
+/* 复选框和单选框 */
+.ta-form-check {
+  position: relative;
+  display: block;
+  padding-left: 1.25rem;
+}
+
+.ta-form-check-input {
+  position: absolute;
+  margin-top: 0.3rem;
+  margin-left: -1.25rem;
+}
+
+.ta-form-check-label {
+  margin-bottom: 0;
+}
+
+.ta-form-check-inline {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 0;
+  margin-right: 0.75rem;
+}
+
+.ta-form-check-inline .ta-form-check-input {
+  position: static;
+  margin-top: 0;
+  margin-right: 0.3125rem;
+  margin-left: 0;
+}
+
+/* 暗黑主题适配 */
+[data-theme="dark"] .ta-form-control {
+  color: var(--body-color);
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+}
+
+[data-theme="dark"] .ta-form-control:focus {
+  color: var(--body-color);
+  background-color: var(--input-bg);
+  border-color: var(--primary-color);
+}
+
+[data-theme="dark"] .ta-form-control.is-valid {
+  border-color: var(--success-color);
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%234CAF50' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
+}
+
+[data-theme="dark"] .ta-form-control.is-invalid {
+  border-color: var(--danger-color);
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='%23F44336' viewBox='-2 -2 7 7'%3e%3cpath stroke='%23F44336' d='M0 0l3 3m0-3L0 3'/%3e%3ccircle r='.5'/%3e%3ccircle cx='3' r='.5'/%3e%3ccircle cy='3' r='.5'/%3e%3ccircle cx='3' cy='3' r='.5'/%3e%3c/svg%3E");
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .ta-form-group {
+    margin-bottom: 0.75rem;
+  }
+  
+  .ta-form-control {
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+  }
+}

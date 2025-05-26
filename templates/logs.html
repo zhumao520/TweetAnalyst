@@ -1,0 +1,1874 @@
+{% extends 'base.html' %}
+
+{% block title %}系统日志 - TweetAnalyst{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 日志容器样式 */
+    .log-container {
+        border-radius: 0.5rem;
+        background-color: var(--bs-dark-bg-subtle);
+        color: var(--bs-body-color);
+        font-family: monospace;
+        font-size: 0.9rem;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        max-height: 600px;
+        overflow-y: auto;
+        padding: 1rem;
+        border: 1px solid var(--bs-border-color);
+    }
+
+    /* 日志级别颜色 */
+    .log-debug { color: var(--bs-info); }
+    .log-info { color: var(--bs-success); }
+    .log-warning { color: var(--bs-warning); }
+    .log-error { color: var(--bs-danger); }
+
+    /* 日志行样式 */
+    .log-line {
+        padding: 2px 0;
+        border-bottom: 1px solid rgba(var(--bs-border-color-rgb), 0.1);
+    }
+
+    /* 日志来源标识 */
+    .log-line .badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.4rem;
+    }
+
+    /* 日志文件列表样式 */
+    .log-file-item {
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .log-file-item:hover {
+        transform: translateX(5px);
+        background-color: rgba(var(--bs-primary-rgb), 0.1);
+    }
+
+    .log-file-item.active {
+        background-color: rgba(var(--bs-primary-rgb), 0.2);
+        border-left: 3px solid var(--bs-primary);
+    }
+
+    /* 日志工具栏 */
+    .log-toolbar {
+        background-color: var(--bs-tertiary-bg);
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    /* 加载动画 */
+    .loading-spinner {
+        display: inline-block;
+        width: 1.5rem;
+        height: 1.5rem;
+        border: 0.2rem solid rgba(var(--bs-primary-rgb), 0.2);
+        border-right-color: var(--bs-primary);
+        border-radius: 50%;
+        animation: spinner-border 0.75s linear infinite;
+    }
+
+    /* 日志类型标签 */
+    .log-type-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.25rem;
+        margin-left: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- 页面标题和面包屑导航 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">系统日志</li>
+                </ol>
+            </nav>
+            <h2 class="mt-2"><i class="bi bi-journal-text text-primary me-2"></i>系统日志</h2>
+        </div>
+        <div>
+            <a href="{{ url_for('system_status_page') }}" class="btn btn-outline-primary">
+                <i class="bi bi-activity me-1"></i>系统状态
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 日志文件列表 -->
+        <div class="col-md-3 mb-4">
+            <div class="card border-primary border-opacity-50 h-100">
+                <div class="card-header bg-primary bg-opacity-10 text-primary">
+                    <i class="bi bi-folder me-2"></i>日志文件
+                </div>
+                <div class="card-body p-2">
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <input type="text" class="form-control form-control-sm" id="log-search" placeholder="搜索日志文件">
+                            <button class="btn btn-sm btn-outline-secondary" type="button" id="refresh-files-btn">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 日志类型过滤 -->
+                    <div class="mb-3">
+                        <h6 class="text-primary mb-2">
+                            <i class="bi bi-funnel me-1"></i>日志类型
+                        </h6>
+                        <div class="log-files-container">
+                            <div class="log-file-item" data-log-type="all" onclick="filterLogsByTypeFromSidebar(this, 'all')">
+                                <i class="bi bi-collection me-2 text-primary"></i>所有日志
+                                <span class="badge bg-primary log-type-badge float-end">ALL</span>
+                            </div>
+                            <div class="log-file-item" data-log-type="main" onclick="filterLogsByTypeFromSidebar(this, 'main')">
+                                <i class="bi bi-app-indicator me-2 text-success"></i>主程序日志
+                                <span class="badge bg-success log-type-badge float-end">MAIN</span>
+                            </div>
+                            <div class="log-file-item" data-log-type="web" onclick="filterLogsByTypeFromSidebar(this, 'web')">
+                                <i class="bi bi-globe me-2 text-info"></i>Web系统日志
+                                <span class="badge bg-info log-type-badge float-end">WEB</span>
+                            </div>
+                            <div class="log-file-item" data-log-type="llm" onclick="filterLogsByTypeFromSidebar(this, 'llm')">
+                                <i class="bi bi-robot me-2 text-warning"></i>AI分析日志
+                                <span class="badge bg-warning log-type-badge float-end">AI</span>
+                            </div>
+                            <div class="log-file-item" data-log-type="push" onclick="filterLogsByTypeFromSidebar(this, 'push')">
+                                <i class="bi bi-bell me-2 text-primary"></i>推送通知日志
+                                <span class="badge bg-primary log-type-badge float-end">PUSH</span>
+                            </div>
+                            <div class="log-file-item" data-log-type="twitter" onclick="filterLogsByTypeFromSidebar(this, 'twitter')">
+                                <i class="bi bi-twitter me-2 text-info"></i>Twitter日志
+                                <span class="badge bg-info log-type-badge float-end">TWT</span>
+                            </div>
+                            <div class="log-file-item" data-log-type="error" onclick="filterLogsByTypeFromSidebar(this, 'error')">
+                                <i class="bi bi-exclamation-triangle me-2 text-danger"></i>错误日志
+                                <span class="badge bg-danger log-type-badge float-end">ERR</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日志内容 -->
+        <div class="col-md-9 mb-4">
+            <div class="card border-primary border-opacity-50">
+                <div class="card-header bg-primary bg-opacity-10 text-primary d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0" id="log-title">
+                        <i class="bi bi-journal-text me-2"></i>系统日志
+                    </h5>
+                    <div>
+                        <button class="btn btn-sm btn-primary" id="refresh-logs-btn">
+                            <i class="bi bi-arrow-clockwise me-1"></i>刷新
+                        </button>
+                        <button class="btn btn-sm btn-secondary" id="download-logs-btn">
+                            <i class="bi bi-download me-1"></i>下载
+                        </button>
+                        <button class="btn btn-sm btn-info" id="stats-logs-btn">
+                            <i class="bi bi-bar-chart me-1"></i>统计
+                        </button>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-warning dropdown-toggle" type="button" id="clean-logs-btn" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-trash me-1"></i>清理
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="clean-logs-btn">
+                                <li><a class="dropdown-item" href="#" id="clean-logs-auto"><i class="bi bi-magic me-2"></i>自动清理</a></li>
+                                <li><a class="dropdown-item" href="#" id="clean-logs-old"><i class="bi bi-calendar-x me-2"></i>清理旧日志</a></li>
+                                <li><a class="dropdown-item" href="#" id="clean-logs-all"><i class="bi bi-trash-fill me-2"></i>清理所有非核心日志</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item text-danger" href="#" id="clean-logs-confirm"><i class="bi bi-exclamation-triangle me-2"></i>确认清理</a></li>
+                            </ul>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" id="debug-logs-btn" onclick="debugLogsFunction()">
+                            <i class="bi bi-bug me-1"></i>调试
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- 日志工具栏 -->
+                    <div class="log-toolbar d-flex flex-wrap justify-content-between align-items-center">
+                        <!-- 日志级别过滤 -->
+                        <div class="btn-group" role="group" aria-label="日志级别">
+                            <button type="button" class="btn btn-outline-success active" id="log-level-info">
+                                <i class="bi bi-info-circle me-1"></i>信息
+                            </button>
+                            <button type="button" class="btn btn-outline-info" id="log-level-debug">
+                                <i class="bi bi-bug me-1"></i>调试
+                            </button>
+                            <button type="button" class="btn btn-outline-warning" id="log-level-warning">
+                                <i class="bi bi-exclamation-triangle me-1"></i>警告
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" id="log-level-error">
+                                <i class="bi bi-x-circle me-1"></i>错误
+                            </button>
+                        </div>
+
+                        <!-- 日志行数选择 -->
+                        <div class="d-flex align-items-center">
+                            <label for="log-lines" class="form-label mb-0 me-2">显示行数:</label>
+                            <select class="form-select form-select-sm" id="log-lines">
+                                <option value="50">50行</option>
+                                <option value="100">100行</option>
+                                <option value="200">200行</option>
+                                <option value="500">500行</option>
+                                <option value="1000">1000行</option>
+                            </select>
+                            <span class="badge bg-secondary ms-2" id="log-count">0 行</span>
+                        </div>
+
+                        <!-- 组件过滤 -->
+                        <div class="d-flex align-items-center ms-3" id="component-filter-container">
+                            <label for="component-filter" class="form-label mb-0 me-2">组件过滤:</label>
+                            <select class="form-select form-select-sm" id="component-filter" onchange="filterLogsByComponent()">
+                                <option value="all">所有组件</option>
+                                <option value="ai">AI分析</option>
+                                <option value="push">推送通知</option>
+                                <option value="twitter">Twitter</option>
+                                <option value="web">Web系统</option>
+                                <option value="main">主程序</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 日志内容区域 -->
+                    <div id="system-logs" class="log-container">
+                        <div class="text-center py-5">
+                            <div class="loading-spinner"></div>
+                            <p class="text-muted mt-3">加载日志中，请稍候...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志统计模态框 -->
+<div class="modal fade" id="logs-stats-modal" tabindex="-1" aria-labelledby="logs-stats-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="logs-stats-modal-label"><i class="bi bi-bar-chart me-2"></i>日志统计信息</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="logs-stats-loading" class="text-center py-5">
+                    <div class="loading-spinner"></div>
+                    <p class="text-muted mt-3">加载统计信息中，请稍候...</p>
+                </div>
+                <div id="logs-stats-content" class="d-none">
+                    <!-- 总体统计 -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-primary bg-opacity-10">
+                            <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>总体统计</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card mb-2">
+                                        <div class="card-body p-3">
+                                            <h6 class="card-title text-primary"><i class="bi bi-files me-2"></i>文件数量</h6>
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="fs-4 fw-bold" id="stats-total-files">0</span>
+                                                <span class="badge bg-primary rounded-pill" id="stats-total-size">0 MB</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card mb-2">
+                                        <div class="card-body p-3">
+                                            <h6 class="card-title text-success"><i class="bi bi-file-earmark-text me-2"></i>核心日志</h6>
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="fs-4 fw-bold" id="stats-core-files">0</span>
+                                                <span class="badge bg-success rounded-pill" id="stats-core-size">0 MB</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card mb-2">
+                                        <div class="card-body p-3">
+                                            <h6 class="card-title text-info"><i class="bi bi-file-earmark-arrow-down me-2"></i>轮转日志</h6>
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="fs-4 fw-bold" id="stats-rotation-files">0</span>
+                                                <span class="badge bg-info rounded-pill" id="stats-rotation-size">0 MB</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card mb-2">
+                                        <div class="card-body p-3">
+                                            <h6 class="card-title text-secondary"><i class="bi bi-file-earmark me-2"></i>其他日志</h6>
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="fs-4 fw-bold" id="stats-other-files">0</span>
+                                                <span class="badge bg-secondary rounded-pill" id="stats-other-size">0 MB</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 按年龄统计 -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-primary bg-opacity-10">
+                            <h5 class="mb-0"><i class="bi bi-calendar me-2"></i>按年龄统计</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>时间段</th>
+                                            <th class="text-center">文件数量</th>
+                                            <th class="text-end">占用空间</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><i class="bi bi-clock-history text-primary me-2"></i>最近24小时</td>
+                                            <td class="text-center" id="stats-age-day-files">0</td>
+                                            <td class="text-end" id="stats-age-day-size">0 MB</td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="bi bi-calendar-week text-info me-2"></i>最近一周</td>
+                                            <td class="text-center" id="stats-age-week-files">0</td>
+                                            <td class="text-end" id="stats-age-week-size">0 MB</td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="bi bi-calendar-month text-success me-2"></i>最近一月</td>
+                                            <td class="text-center" id="stats-age-month-files">0</td>
+                                            <td class="text-end" id="stats-age-month-size">0 MB</td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="bi bi-calendar-x text-warning me-2"></i>更早</td>
+                                            <td class="text-center" id="stats-age-older-files">0</td>
+                                            <td class="text-end" id="stats-age-older-size">0 MB</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 文件详情 -->
+                    <div class="card">
+                        <div class="card-header bg-primary bg-opacity-10 d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>文件详情</h5>
+                            <div class="input-group input-group-sm" style="width: 200px;">
+                                <input type="text" class="form-control" id="stats-file-search" placeholder="搜索文件...">
+                                <button class="btn btn-outline-secondary" type="button" id="stats-file-search-btn">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>文件名</th>
+                                            <th class="text-center">类型</th>
+                                            <th class="text-end">大小</th>
+                                            <th class="text-center">修改时间</th>
+                                            <th class="text-center">年龄</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="stats-files-list">
+                                        <tr>
+                                            <td colspan="5" class="text-center py-3">
+                                                <div class="loading-spinner"></div>
+                                                <p class="text-muted mt-2 mb-0">加载文件列表中...</p>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-warning" id="clean-logs-from-stats">
+                    <i class="bi bi-trash me-1"></i>清理日志
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志清理确认模态框 -->
+<div class="modal fade" id="logs-clean-confirm-modal" tabindex="-1" aria-labelledby="logs-clean-confirm-modal-label" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="logs-clean-confirm-modal-label"><i class="bi bi-exclamation-triangle me-2"></i>确认清理日志</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong>警告：</strong>此操作将删除日志文件，且无法恢复。
+                </div>
+                <p id="clean-logs-message">您确定要清理日志文件吗？</p>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="clean-mode" id="clean-mode-auto" value="auto" checked>
+                    <label class="form-check-label" for="clean-mode-auto">
+                        <i class="bi bi-magic me-1 text-primary"></i>自动清理
+                        <small class="text-muted d-block ms-4">删除超过30天的核心日志轮转文件和超过7天的非核心日志文件</small>
+                    </label>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="clean-mode" id="clean-mode-old" value="old">
+                    <label class="form-check-label" for="clean-mode-old">
+                        <i class="bi bi-calendar-x me-1 text-warning"></i>清理旧日志
+                        <small class="text-muted d-block ms-4">删除所有超过30天的日志文件</small>
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="clean-mode" id="clean-mode-all" value="all">
+                    <label class="form-check-label" for="clean-mode-all">
+                        <i class="bi bi-trash-fill me-1 text-danger"></i>清理所有非核心日志
+                        <small class="text-muted d-block ms-4">删除所有非核心日志文件和所有轮转文件</small>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="clean-logs-execute">
+                    <i class="bi bi-trash me-1"></i>确认清理
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志清理结果模态框 -->
+<div class="modal fade" id="logs-clean-result-modal" tabindex="-1" aria-labelledby="logs-clean-result-modal-label" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="logs-clean-result-modal-label"><i class="bi bi-check-circle me-2"></i>日志清理完成</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="clean-result-loading" class="text-center py-4">
+                    <div class="loading-spinner"></div>
+                    <p class="text-muted mt-3">正在清理日志文件，请稍候...</p>
+                </div>
+                <div id="clean-result-content" class="d-none">
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <span id="clean-result-message">日志清理已完成</span>
+                    </div>
+                    <div class="card mb-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>清理前文件数量：</span>
+                                <strong id="clean-result-before">0</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>清理后文件数量：</span>
+                                <strong id="clean-result-after">0</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>已删除文件数量：</span>
+                                <strong class="text-danger" id="clean-result-deleted">0</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="clean-result-files-container">
+                        <h6><i class="bi bi-file-earmark-x me-2"></i>已删除的文件：</h6>
+                        <div class="bg-light p-2 rounded" style="max-height: 200px; overflow-y: auto;">
+                            <ul class="list-group list-group-flush" id="clean-result-files">
+                                <li class="list-group-item">暂无删除的文件</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="clean-result-refresh">
+                    <i class="bi bi-arrow-clockwise me-1"></i>刷新日志列表
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 全局变量
+    let currentLogFile = '';  // 当前选择的日志文件
+
+    // 显示通知
+    function showToast(type, title, message) {
+        // 检查是否存在通知容器
+        let toastContainer = document.querySelector('.toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            document.body.appendChild(toastContainer);
+        }
+
+        // 创建通知元素
+        const toastId = 'toast-' + Date.now();
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.id = toastId;
+        toast.setAttribute('role', 'alert');
+        toast.setAttribute('aria-live', 'assertive');
+        toast.setAttribute('aria-atomic', 'true');
+
+        // 设置通知样式
+        let bgClass = 'bg-primary';
+        let icon = 'bi-info-circle';
+
+        if (type === 'success') {
+            bgClass = 'bg-success';
+            icon = 'bi-check-circle';
+        } else if (type === 'error') {
+            bgClass = 'bg-danger';
+            icon = 'bi-exclamation-circle';
+        } else if (type === 'warning') {
+            bgClass = 'bg-warning';
+            icon = 'bi-exclamation-triangle';
+        }
+
+        // 设置通知内容
+        toast.innerHTML = `
+            <div class="toast-header ${bgClass} text-white">
+                <i class="bi ${icon} me-2"></i>
+                <strong class="me-auto">${title}</strong>
+                <small>刚刚</small>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                ${message}
+            </div>
+        `;
+
+        // 添加到容器
+        toastContainer.appendChild(toast);
+
+        // 初始化通知
+        const bsToast = new bootstrap.Toast(toast, {
+            autohide: true,
+            delay: 5000
+        });
+
+        // 显示通知
+        bsToast.show();
+
+        // 通知关闭后移除元素
+        toast.addEventListener('hidden.bs.toast', function () {
+            toast.remove();
+        });
+    }
+
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('日志页面初始化');
+
+        // 初始化事件监听器
+        initEventListeners();
+
+        // 加载日志文件列表
+        loadLogFilesList();
+
+        // 加载默认日志
+        fetchSystemLogs();
+    });
+
+    // 初始化事件监听器
+    function initEventListeners() {
+        // 刷新日志按钮
+        const refreshBtn = document.getElementById('refresh-logs-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function() {
+                console.log('刷新日志');
+                fetchSystemLogs();
+            });
+        }
+
+        // 下载日志按钮
+        const downloadBtn = document.getElementById('download-logs-btn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', function() {
+                console.log('下载日志');
+                downloadLogs();
+            });
+        }
+
+        // 统计按钮
+        const statsBtn = document.getElementById('stats-logs-btn');
+        if (statsBtn) {
+            statsBtn.addEventListener('click', function() {
+                console.log('显示日志统计');
+                showLogsStats();
+            });
+        }
+
+        // 清理日志按钮
+        const cleanAutoBtn = document.getElementById('clean-logs-auto');
+        if (cleanAutoBtn) {
+            cleanAutoBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                showCleanLogsConfirm('auto');
+            });
+        }
+
+        const cleanOldBtn = document.getElementById('clean-logs-old');
+        if (cleanOldBtn) {
+            cleanOldBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                showCleanLogsConfirm('old');
+            });
+        }
+
+        const cleanAllBtn = document.getElementById('clean-logs-all');
+        if (cleanAllBtn) {
+            cleanAllBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                showCleanLogsConfirm('all');
+            });
+        }
+
+        const cleanConfirmBtn = document.getElementById('clean-logs-confirm');
+        if (cleanConfirmBtn) {
+            cleanConfirmBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                showCleanLogsConfirm();
+            });
+        }
+
+        // 从统计页面清理日志
+        const cleanFromStatsBtn = document.getElementById('clean-logs-from-stats');
+        if (cleanFromStatsBtn) {
+            cleanFromStatsBtn.addEventListener('click', function() {
+                // 隐藏统计模态框
+                const statsModal = bootstrap.Modal.getInstance(document.getElementById('logs-stats-modal'));
+                if (statsModal) {
+                    statsModal.hide();
+                }
+
+                // 显示清理确认模态框
+                setTimeout(() => {
+                    showCleanLogsConfirm();
+                }, 500);
+            });
+        }
+
+        // 执行清理
+        const cleanExecuteBtn = document.getElementById('clean-logs-execute');
+        if (cleanExecuteBtn) {
+            cleanExecuteBtn.addEventListener('click', function() {
+                executeCleanLogs();
+            });
+        }
+
+        // 清理结果刷新按钮
+        const cleanResultRefreshBtn = document.getElementById('clean-result-refresh');
+        if (cleanResultRefreshBtn) {
+            cleanResultRefreshBtn.addEventListener('click', function() {
+                // 隐藏结果模态框
+                const resultModal = bootstrap.Modal.getInstance(document.getElementById('logs-clean-result-modal'));
+                if (resultModal) {
+                    resultModal.hide();
+                }
+
+                // 刷新日志列表
+                setTimeout(() => {
+                    loadLogFilesList();
+                    fetchSystemLogs();
+                }, 500);
+            });
+        }
+
+        // 文件搜索
+        const fileSearchBtn = document.getElementById('stats-file-search-btn');
+        if (fileSearchBtn) {
+            fileSearchBtn.addEventListener('click', function() {
+                filterStatsFiles();
+            });
+        }
+
+        const fileSearchInput = document.getElementById('stats-file-search');
+        if (fileSearchInput) {
+            fileSearchInput.addEventListener('keyup', function(e) {
+                if (e.key === 'Enter') {
+                    filterStatsFiles();
+                }
+            });
+        }
+
+        // 刷新文件列表按钮
+        const refreshFilesBtn = document.getElementById('refresh-files-btn');
+        if (refreshFilesBtn) {
+            refreshFilesBtn.addEventListener('click', function() {
+                console.log('刷新文件列表');
+                loadLogFilesList();
+            });
+        }
+
+        // 日志级别按钮
+        const levelBtns = document.querySelectorAll('.btn-group[aria-label="日志级别"] .btn');
+        levelBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                // 移除所有按钮的active类
+                levelBtns.forEach(b => b.classList.remove('active'));
+                // 添加当前按钮的active类
+                this.classList.add('active');
+                // 刷新日志
+                fetchSystemLogs();
+            });
+        });
+
+        // 日志行数选择
+        const linesSelect = document.getElementById('log-lines');
+        if (linesSelect) {
+            linesSelect.addEventListener('change', function() {
+                fetchSystemLogs();
+            });
+        }
+
+        // 组件过滤器
+        const componentFilter = document.getElementById('component-filter');
+        if (componentFilter) {
+            componentFilter.addEventListener('change', function() {
+                filterLogsByComponent();
+            });
+        }
+
+        // 日志搜索框
+        const searchInput = document.getElementById('log-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                filterLogFiles(this.value);
+            });
+        }
+
+        // 调试按钮
+        const debugBtn = document.getElementById('debug-logs-btn');
+        if (debugBtn) {
+            debugBtn.addEventListener('click', debugLogsFunction);
+        }
+
+        // 初始化日志类型过滤器
+        // 默认选中"所有日志"
+        const allLogsItem = document.querySelector('[data-log-type="all"]');
+        if (allLogsItem) {
+            allLogsItem.classList.add('active');
+        }
+    }
+
+    // 加载日志文件列表
+    function loadLogFilesList() {
+        console.log('加载日志文件列表');
+
+        // 显示加载中状态
+        document.getElementById('core-logs-list').innerHTML = '<div class="text-center py-3"><div class="loading-spinner"></div><p class="text-muted mt-2 mb-0">加载中...</p></div>';
+        document.getElementById('component-logs-list').innerHTML = '<div class="text-center py-3"><div class="loading-spinner"></div><p class="text-muted mt-2 mb-0">加载中...</p></div>';
+        document.getElementById('service-logs-list').innerHTML = '<div class="text-center py-3"><div class="loading-spinner"></div><p class="text-muted mt-2 mb-0">加载中...</p></div>';
+
+        // 添加时间戳防止缓存
+        const timestamp = new Date().getTime();
+        const url = `/api/logs/system?lines=1&level=info&_=${timestamp}`;
+
+        // 获取日志文件列表
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP错误: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.data && data.data.available_log_files) {
+                // 分类日志文件
+                categorizeLogFiles(data.data.available_log_files);
+            } else {
+                // 创建默认日志文件列表
+                createDefaultLogFilesList();
+            }
+        })
+        .catch(error => {
+            console.error('获取日志文件列表失败:', error);
+            // 创建默认日志文件列表
+            createDefaultLogFilesList();
+        });
+    }
+
+    // 分类日志文件
+    function categorizeLogFiles(files) {
+        console.log(`分类 ${files.length} 个日志文件`);
+
+        // 定义主要日志文件 - 只保留最重要的几个
+        const mainLogs = ['main.log', 'web_app.log', 'test_utils.log', 'twitter.log', 'llm.log', 'apprise_adapter.log'];
+
+        // 要忽略的日志文件 - 忽略所有其他日志文件
+        const ignoredLogs = ['secretary.log', 'test_api.log', 'scheduler.log', 'api.log', 'notification.log',
+                            'push.log', 'telegram.log', 'bark.log', 'wecom.log', 'worker.log',
+                            'ai.log', 'openai.log', 'claude.log', 'app.log'];
+
+        // 过滤掉要忽略的日志文件，只保留主要日志
+        const filteredFiles = files.filter(file => mainLogs.includes(file));
+        console.log(`过滤后保留 ${filteredFiles.length} 个主要日志文件`);
+
+        // 按照指定顺序排序日志文件
+        filteredFiles.sort((a, b) => {
+            return mainLogs.indexOf(a) - mainLogs.indexOf(b);
+        });
+
+        // 更新UI - 只使用一个列表显示所有主要日志
+        updateMainLogsUI(filteredFiles);
+    }
+
+    // 更新主要日志文件UI
+    function updateMainLogsUI(files) {
+        const container = document.querySelector('.log-files-container');
+        if (!container) return;
+
+        // 获取已有的日志类型项
+        const existingItems = container.querySelectorAll('[data-log-type]');
+        const lastItem = existingItems[existingItems.length - 1];
+
+        if (files.length === 0) {
+            return;
+        }
+
+        // 添加分隔线
+        const separator = document.createElement('div');
+        separator.className = 'border-top my-3';
+        container.insertBefore(separator, lastItem.nextSibling);
+
+        // 添加日志文件标题
+        const title = document.createElement('h6');
+        title.className = 'text-secondary mb-2 mt-3';
+        title.innerHTML = '<i class="bi bi-file-text me-1"></i>日志文件';
+        container.insertBefore(title, separator.nextSibling);
+
+        // 添加日志文件
+        files.forEach(file => {
+            // 根据文件名确定图标和颜色
+            let icon = 'bi-file-text';
+            let colorClass = 'secondary';
+            let badge = 'LOG';
+
+            if (file === 'main.log') {
+                icon = 'bi-app-indicator';
+                colorClass = 'success';
+                badge = 'MAIN';
+            } else if (file === 'web_app.log') {
+                icon = 'bi-globe';
+                colorClass = 'info';
+                badge = 'WEB';
+            } else if (file === 'test_utils.log') {
+                icon = 'bi-speedometer2';
+                colorClass = 'secondary';
+                badge = 'TEST';
+            } else if (file === 'twitter.log') {
+                icon = 'bi-twitter';
+                colorClass = 'info';
+                badge = 'TWT';
+            } else if (file === 'llm.log') {
+                icon = 'bi-robot';
+                colorClass = 'warning';
+                badge = 'AI';
+            } else if (file === 'apprise_adapter.log') {
+                icon = 'bi-bell';
+                colorClass = 'primary';
+                badge = 'PUSH';
+            }
+
+            // 创建日志文件项
+            const item = document.createElement('div');
+            item.className = 'log-file-item';
+            item.setAttribute('data-log-file', file);
+            item.setAttribute('onclick', 'selectLogFile(this)');
+            item.innerHTML = `
+                <i class="bi ${icon} me-2 text-${colorClass}"></i>${file}
+                <span class="badge bg-${colorClass} log-type-badge float-end">${badge}</span>
+            `;
+
+            container.appendChild(item);
+        });
+    }
+
+    // 更新日志文件UI
+    function updateLogFilesUI(containerId, files, colorClass) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (files.length === 0) {
+            container.innerHTML = '<div class="alert alert-secondary p-2 m-1">暂无日志文件</div>';
+            return;
+        }
+
+        let html = '';
+
+        // 添加"所有日志"选项（仅对核心日志）
+        if (containerId === 'core-logs-list') {
+            html += `
+                <div class="log-file-item active" data-log-file="" onclick="selectLogFile(this)">
+                    <i class="bi bi-collection me-2 text-${colorClass}"></i>所有日志
+                    <span class="badge bg-${colorClass} log-type-badge float-end">ALL</span>
+                </div>
+            `;
+        }
+
+        // 添加"全部"选项（对其他类别）
+        if (containerId === 'component-logs-list' || containerId === 'service-logs-list') {
+            const categoryName = containerId === 'component-logs-list' ? '功能组件' : '通知服务';
+            html += `
+                <div class="log-file-item" data-log-file="category:${containerId}" onclick="selectLogFileCategory(this, '${containerId}')">
+                    <i class="bi bi-collection me-2 text-${colorClass}"></i>全部${categoryName}日志
+                    <span class="badge bg-${colorClass} log-type-badge float-end">ALL</span>
+                </div>
+            `;
+        }
+
+        // 添加日志文件
+        files.forEach(file => {
+            // 根据文件名确定图标
+            let icon = 'bi-file-text';
+            if (file.includes('app')) icon = 'bi-app-indicator';
+            else if (file.includes('web')) icon = 'bi-globe';
+            else if (file.includes('scheduler')) icon = 'bi-calendar-check';
+            else if (file.includes('api')) icon = 'bi-hdd-network';
+            else if (file.includes('twitter')) icon = 'bi-twitter';
+            else if (file.includes('llm')) icon = 'bi-robot';
+            else if (file.includes('notification')) icon = 'bi-bell';
+            else if (file.includes('apprise')) icon = 'bi-send';
+            else if (file.includes('worker')) icon = 'bi-cpu';
+
+            // 创建日志文件项
+            html += `
+                <div class="log-file-item" data-log-file="${file}" onclick="selectLogFile(this)">
+                    <i class="bi ${icon} me-2 text-${colorClass}"></i>${file}
+                    <span class="badge bg-secondary log-type-badge float-end">${getLogTypeShort(file)}</span>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    // 获取日志类型简写
+    function getLogTypeShort(filename) {
+        if (filename.includes('app.log')) return 'APP';
+        if (filename.includes('web_app')) return 'WEB';
+        if (filename.includes('scheduler')) return 'SCHED';
+        if (filename.includes('main')) return 'MAIN';
+        if (filename.includes('api')) return 'API';
+        if (filename.includes('twitter')) return 'TWT';
+        if (filename.includes('llm')) return 'LLM';
+        if (filename.includes('openai')) return 'OPENAI';
+        if (filename.includes('claude')) return 'CLAUDE';
+        if (filename.includes('ai.log')) return 'AI';
+        if (filename.includes('notification')) return 'PUSH';
+        if (filename.includes('apprise')) return 'APPR';
+        if (filename.includes('worker')) return 'WORK';
+        if (filename.includes('push.log')) return 'PUSH';
+        if (filename.includes('telegram')) return 'TG';
+        if (filename.includes('bark')) return 'BARK';
+        if (filename.includes('wecom')) return 'WECOM';
+        return 'LOG';
+    }
+
+    // 创建默认日志文件列表
+    function createDefaultLogFilesList() {
+        console.log('创建默认日志文件列表');
+
+        // 定义默认日志文件 - 只保留最重要的几个
+        const mainLogs = ['main.log', 'web_app.log', 'test_utils.log', 'twitter.log', 'llm.log', 'apprise_adapter.log'];
+
+        // 更新UI - 只使用一个列表显示所有主要日志
+        updateMainLogsUI(mainLogs);
+    }
+
+    // 选择日志文件
+    function selectLogFile(element) {
+        // 移除所有日志文件项的active类
+        document.querySelectorAll('.log-file-item').forEach(item => {
+            item.classList.remove('active');
+        });
+
+        // 添加当前项的active类
+        element.classList.add('active');
+
+        // 更新当前选择的日志文件
+        currentLogFile = element.getAttribute('data-log-file');
+        console.log(`选择日志文件: ${currentLogFile || '所有日志'}`);
+
+        // 更新日志标题
+        const logTitle = document.getElementById('log-title');
+        if (logTitle) {
+            if (!currentLogFile) {
+                logTitle.innerHTML = '<i class="bi bi-journal-text me-2"></i>所有系统日志';
+            } else if (currentLogFile.startsWith('category:')) {
+                // 处理分类选择
+                const categoryId = currentLogFile.replace('category:', '');
+                const categoryName = categoryId === 'component-logs-list' ? '功能组件' : '通知服务';
+                logTitle.innerHTML = `<i class="bi bi-journal-text me-2"></i>全部${categoryName}日志`;
+            } else {
+                logTitle.innerHTML = `<i class="bi bi-journal-text me-2"></i>${currentLogFile}`;
+            }
+        }
+
+        // 刷新日志
+        fetchSystemLogs();
+    }
+
+    // 选择日志文件分类
+    function selectLogFileCategory(element, categoryId) {
+        // 调用通用的选择函数
+        selectLogFile(element);
+
+        // 获取该分类下的所有日志文件
+        const files = [];
+        document.querySelectorAll(`#${categoryId} .log-file-item`).forEach(item => {
+            const file = item.getAttribute('data-log-file');
+            if (file && !file.startsWith('category:')) {
+                files.push(file);
+            }
+        });
+
+        console.log(`选择分类: ${categoryId}, 包含 ${files.length} 个日志文件`);
+
+        // 这里可以实现特殊的处理逻辑，例如合并显示该分类下的所有日志
+        // 目前简单地显示第一个文件的日志
+        if (files.length > 0) {
+            currentLogFile = files[0];
+        }
+
+        // 刷新日志
+        fetchSystemLogs();
+    }
+
+    // 获取系统日志
+    function fetchSystemLogs() {
+        console.log('获取系统日志');
+
+        // 获取日志容器
+        const logsContainer = document.getElementById('system-logs');
+        if (!logsContainer) {
+            console.error('未找到日志容器');
+            return Promise.reject('未找到日志容器');
+        }
+
+        // 显示加载中状态
+        logsContainer.innerHTML = `
+            <div class="text-center py-5">
+                <div class="loading-spinner"></div>
+                <p class="text-muted mt-3">加载日志中，请稍候...</p>
+            </div>
+        `;
+
+        // 获取当前选择的日志级别
+        let level = 'info';
+        document.querySelectorAll('.btn-group[aria-label="日志级别"] .btn').forEach(btn => {
+            if (btn.classList.contains('active')) {
+                if (btn.id === 'log-level-debug') level = 'debug';
+                else if (btn.id === 'log-level-warning') level = 'warning';
+                else if (btn.id === 'log-level-error') level = 'error';
+                else level = 'info';
+            }
+        });
+
+        // 获取日志行数
+        const linesSelect = document.getElementById('log-lines');
+        const lines = linesSelect ? linesSelect.value : '50';
+
+        // 添加时间戳防止缓存
+        const timestamp = new Date().getTime();
+
+        // 检查是否是分类请求
+        let url;
+        if (currentLogFile && currentLogFile.startsWith('category:')) {
+            // 处理分类请求 - 这里我们需要获取该分类下的所有日志文件
+            const categoryId = currentLogFile.replace('category:', '');
+            const files = [];
+            document.querySelectorAll(`#${categoryId} .log-file-item`).forEach(item => {
+                const file = item.getAttribute('data-log-file');
+                if (file && !file.startsWith('category:')) {
+                    files.push(file);
+                }
+            });
+
+            // 如果有文件，使用第一个文件
+            if (files.length > 0) {
+                url = `/api/logs/system?lines=${lines}&level=${level}&file=${files[0]}&_=${timestamp}`;
+            } else {
+                url = `/api/logs/system?lines=${lines}&level=${level}&_=${timestamp}`;
+            }
+        } else {
+            // 普通请求
+            url = `/api/logs/system?lines=${lines}&level=${level}&file=${currentLogFile || ''}&_=${timestamp}`;
+        }
+
+        console.log(`请求URL: ${url}`);
+
+        // 获取系统日志
+        return fetch(url, {
+            method: 'GET',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP错误: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.data && data.data.log_entries) {
+                // 更新日志计数
+                const logCount = document.getElementById('log-count');
+                if (logCount) {
+                    logCount.textContent = `${data.data.log_entries.length} 行`;
+                }
+
+                // 格式化日志
+                const formattedLogs = data.data.log_entries.map(log => {
+                    // 检查是否是合并日志（有文件名前缀）
+                    const isCombined = data.data.is_combined;
+                    let logClass = '';
+                    let logPrefix = '';
+
+                    // 为不同级别的日志添加颜色
+                    if (log.includes('ERROR') || log.includes('CRITICAL')) {
+                        logClass = 'log-error';
+                    } else if (log.includes('WARNING')) {
+                        logClass = 'log-warning';
+                    } else if (log.includes('DEBUG')) {
+                        logClass = 'log-debug';
+                    } else if (log.includes('INFO')) {
+                        logClass = 'log-info';
+                    }
+
+                    // 为不同来源的日志添加标识
+                    if (isCombined) {
+                        // 提取文件名前缀 [file.log]
+                        const match = log.match(/\[(.*?\.log)\]/);
+                        if (match) {
+                            const fileName = match[1];
+                            let sourceClass = '';
+                            let sourceBadge = '';
+
+                            // 根据文件名设置样式
+                            if (fileName.includes('llm.log')) {
+                                sourceClass = 'bg-warning bg-opacity-10';
+                                sourceBadge = '<span class="badge bg-warning text-dark me-1">AI</span>';
+                            } else if (fileName.includes('apprise_adapter.log')) {
+                                sourceClass = 'bg-primary bg-opacity-10';
+                                sourceBadge = '<span class="badge bg-primary me-1">推送</span>';
+                            } else if (fileName.includes('twitter.log')) {
+                                sourceClass = 'bg-info bg-opacity-10';
+                                sourceBadge = '<span class="badge bg-info me-1">Twitter</span>';
+                            } else if (fileName.includes('main.log')) {
+                                sourceClass = 'bg-success bg-opacity-10';
+                                sourceBadge = '<span class="badge bg-success me-1">主程序</span>';
+                            } else if (fileName.includes('web_app.log')) {
+                                sourceClass = 'bg-secondary bg-opacity-10';
+                                sourceBadge = '<span class="badge bg-secondary me-1">Web</span>';
+                            }
+
+                            // 替换原始前缀为更明显的标识
+                            if (sourceClass && sourceBadge) {
+                                logPrefix = `<div class="${sourceClass} px-1 d-inline-block">${sourceBadge}</div> `;
+                                log = log.replace(/\[.*?\.log\] /, '');
+                            }
+                        }
+                    }
+
+                    // 返回格式化后的日志
+                    return `<div class="log-line ${logClass}">${logPrefix}${log}</div>`;
+                });
+
+                // 更新日志内容
+                logsContainer.innerHTML = formattedLogs.join('\n');
+
+                // 滚动到底部
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+            } else {
+                logsContainer.innerHTML = `<div class="alert alert-warning">暂无日志记录</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('获取系统日志失败:', error);
+            logsContainer.innerHTML = `<div class="alert alert-danger">获取日志失败: ${error.message}</div>`;
+        });
+    }
+
+    // 下载日志
+    function downloadLogs() {
+        console.log('下载日志');
+
+        // 获取当前选择的日志级别
+        let level = 'info';
+        document.querySelectorAll('.btn-group[aria-label="日志级别"] .btn').forEach(btn => {
+            if (btn.classList.contains('active')) {
+                if (btn.id === 'log-level-debug') level = 'debug';
+                else if (btn.id === 'log-level-warning') level = 'warning';
+                else if (btn.id === 'log-level-error') level = 'error';
+                else level = 'info';
+            }
+        });
+
+        // 获取日志行数
+        const linesSelect = document.getElementById('log-lines');
+        const lines = linesSelect ? linesSelect.value : '50';
+
+        // 创建下载链接
+        const downloadUrl = `/api/logs/download?level=${level}&lines=${lines}&file=${currentLogFile || ''}`;
+
+        // 创建临时链接并点击
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = currentLogFile || 'system_logs.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    // 过滤日志文件
+    function filterLogFiles(keyword) {
+        console.log(`过滤日志文件: ${keyword}`);
+
+        if (!keyword) {
+            // 显示所有日志文件
+            document.querySelectorAll('.log-file-item').forEach(item => {
+                item.style.display = '';
+            });
+            return;
+        }
+
+        // 转换为小写进行不区分大小写的搜索
+        keyword = keyword.toLowerCase();
+
+        // 过滤日志文件
+        document.querySelectorAll('.log-file-item').forEach(item => {
+            const fileName = item.getAttribute('data-log-file') || '';
+            const text = item.textContent.toLowerCase();
+
+            if (fileName.toLowerCase().includes(keyword) || text.includes(keyword)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    // 从侧边栏过滤日志类型
+    function filterLogsByTypeFromSidebar(element, type) {
+        console.log(`从侧边栏过滤日志类型: ${type}`);
+
+        // 移除所有日志类型项的active类
+        document.querySelectorAll('[data-log-type]').forEach(item => {
+            item.classList.remove('active');
+        });
+
+        // 添加当前项的active类
+        element.classList.add('active');
+
+        // 获取日志容器
+        const logsContainer = document.getElementById('system-logs');
+        if (!logsContainer) {
+            console.error('未找到日志容器');
+            return;
+        }
+
+        // 根据类型直接加载对应的日志文件
+        let logFile = '';
+
+        switch(type) {
+            case 'twitter':
+                logFile = 'twitter.log';
+                break;
+            case 'push':
+                logFile = 'apprise_adapter.log';
+                break;
+            case 'test':
+                logFile = 'test_utils.log';
+                break;
+            case 'main':
+                logFile = 'main.log';
+                break;
+            case 'web':
+                logFile = 'web_app.log';
+                break;
+            case 'llm':
+                logFile = 'llm.log';
+                break;
+            case 'all':
+                // 所有日志不指定文件
+                break;
+            default:
+                // 错误日志等其他类型使用过滤方式
+                break;
+        }
+
+        // 如果有对应的日志文件，直接加载该文件
+        if (logFile) {
+            // 更新当前选择的日志文件
+            currentLogFile = logFile;
+
+            // 显示加载中状态
+            logsContainer.innerHTML = `
+                <div class="text-center py-5">
+                    <div class="loading-spinner"></div>
+                    <p class="text-muted mt-3">加载${getLogTypeDisplayName(type)}中，请稍候...</p>
+                </div>
+            `;
+
+            // 加载指定的日志文件
+            fetchSystemLogs();
+
+            // 更新日志标题
+            const logTitle = document.getElementById('log-title');
+            if (logTitle) {
+                logTitle.innerHTML = `<i class="bi bi-journal-text me-2"></i>${getLogTypeDisplayName(type)}`;
+            }
+
+            return;
+        }
+
+        // 对于没有对应日志文件的类型（如所有日志、错误日志），使用过滤方式
+        if (type === 'all') {
+            // 重置当前日志文件
+            currentLogFile = '';
+            fetchSystemLogs();
+            return;
+        }
+
+        // 显示加载中状态
+        logsContainer.innerHTML = `
+            <div class="text-center py-5">
+                <div class="loading-spinner"></div>
+                <p class="text-muted mt-3">过滤${getLogTypeDisplayName(type)}中，请稍候...</p>
+            </div>
+        `;
+
+        // 获取当前日志内容
+        setTimeout(() => {
+            // 重置当前日志文件，获取所有日志
+            currentLogFile = '';
+
+            // 获取当前日志内容
+            fetchSystemLogs().then(() => {
+                // 获取日志内容
+                const logContent = logsContainer.innerHTML;
+
+                // 按行分割日志
+                const lines = logContent.split('\n');
+                console.log(`总共 ${lines.length} 行日志`);
+
+                // 过滤日志行
+                const filteredLines = lines.filter(line => {
+                    // 移除HTML标签以便正确匹配文本
+                    const plainText = line.replace(/<\/?[^>]+(>|$)/g, "").toLowerCase();
+
+                    // 根据选择的日志类型进行过滤
+                    switch(type) {
+                        case 'error':
+                            return plainText.includes('error') || plainText.includes('exception') ||
+                                   plainText.includes('fail') || plainText.includes('critical');
+                        case 'llm':
+                            // 匹配AI相关日志 - 包括新的组件标识和旧的文件名
+                            return plainText.includes('[ai]') ||
+                                   plainText.includes('badge bg-warning') || // 新的AI标识
+                                   plainText.includes('llm.log');
+                        case 'push':
+                            // 匹配推送相关日志
+                            return plainText.includes('[推送]') ||
+                                   plainText.includes('badge bg-primary') || // 新的推送标识
+                                   plainText.includes('apprise_adapter.log');
+                        case 'twitter':
+                            // 匹配Twitter相关日志
+                            return plainText.includes('[twitter]') ||
+                                   plainText.includes('badge bg-info') || // 新的Twitter标识
+                                   plainText.includes('twitter.log');
+                        case 'web':
+                            // 匹配Web相关日志
+                            return plainText.includes('[web]') ||
+                                   plainText.includes('badge bg-secondary') || // 新的Web标识
+                                   plainText.includes('web_app.log');
+                        case 'main':
+                            // 匹配主程序相关日志
+                            return plainText.includes('[主程序]') ||
+                                   plainText.includes('badge bg-success') || // 新的主程序标识
+                                   plainText.includes('main.log');
+                        default:
+                            return true;
+                    }
+                });
+
+                console.log(`过滤后 ${filteredLines.length} 行日志`);
+
+                // 更新日志计数
+                const logCount = document.getElementById('log-count');
+                if (logCount) {
+                    logCount.textContent = `${filteredLines.length} 行`;
+                }
+
+                // 如果没有匹配的日志，显示提示
+                if (filteredLines.length === 0) {
+                    logsContainer.innerHTML = `<div class="alert alert-info m-3"><i class="bi bi-info-circle me-2"></i>没有匹配的${getLogTypeDisplayName(type)}记录</div>`;
+                    return;
+                }
+
+                // 更新日志显示
+                logsContainer.innerHTML = filteredLines.join('\n');
+
+                // 更新日志标题
+                const logTitle = document.getElementById('log-title');
+                if (logTitle) {
+                    logTitle.innerHTML = `<i class="bi bi-journal-text me-2"></i>${getLogTypeDisplayName(type)}`;
+                }
+            });
+        }, 100);
+    }
+
+    // 根据组件过滤日志
+    function filterLogsByComponent() {
+        const component = document.getElementById('component-filter').value;
+        console.log(`按组件过滤日志: ${component}`);
+
+        // 更新日志类型按钮
+        updateLogTypeButtons(component);
+
+        // 如果是查看所有日志，则直接调用fetchSystemLogs
+        if (component === 'all') {
+            // 重置当前日志文件
+            currentLogFile = '';
+            fetchSystemLogs();
+            return;
+        }
+
+        // 映射组件到日志文件
+        const fileMap = {
+            'ai': 'llm.log',
+            'push': 'apprise_adapter.log',
+            'twitter': 'twitter.log',
+            'web': 'web_app.log',
+            'main': 'main.log',
+            'system': 'app.log'
+        };
+
+        // 更新当前日志文件
+        if (fileMap[component]) {
+            currentLogFile = fileMap[component];
+        }
+
+        // 获取日志
+        fetchSystemLogs();
+
+        // 更新日志标题
+        const logTitle = document.getElementById('log-title');
+        if (logTitle) {
+            logTitle.innerHTML = `<i class="bi bi-journal-text me-2"></i>${getLogTypeDisplayName(component)}`;
+        }
+    }
+
+    // 获取日志类型显示名称
+    function getLogTypeDisplayName(type) {
+        switch(type) {
+            case 'llm': return 'AI分析日志';
+            case 'push': return '推送通知日志';
+            case 'twitter': return 'Twitter日志';
+            case 'web': return 'Web系统日志';
+            case 'main': return '主程序日志';
+            case 'test': return '系统测试日志';
+            case 'error': return '错误日志';
+            case 'ai': return 'AI分析日志';
+            case 'system': return '系统日志';
+            default: return '所有日志';
+        }
+    }
+
+    // 按类型过滤日志 (旧函数，保留兼容性)
+    function filterLogsByType() {
+        console.log('按类型过滤日志 (旧函数)');
+
+        const typeFilter = document.getElementById('log-type-filter');
+        if (!typeFilter) return;
+
+        const selectedType = typeFilter.value;
+
+        // 查找对应的侧边栏项并点击它
+        const sidebarItem = document.querySelector(`[data-log-type="${selectedType}"]`);
+        if (sidebarItem) {
+            sidebarItem.click();
+        } else {
+            console.warn(`未找到对应的侧边栏项: ${selectedType}`);
+        }
+    }
+
+    // 调试函数
+    function debugLogsFunction() {
+        console.log('执行调试函数');
+
+        // 检查DOM元素
+        const elements = {
+            'system-logs': document.getElementById('system-logs'),
+            'refresh-logs-btn': document.getElementById('refresh-logs-btn'),
+            'download-logs-btn': document.getElementById('download-logs-btn'),
+            'log-level-info': document.getElementById('log-level-info'),
+            'log-level-debug': document.getElementById('log-level-debug'),
+            'log-level-warning': document.getElementById('log-level-warning'),
+            'log-level-error': document.getElementById('log-level-error'),
+            'log-lines': document.getElementById('log-lines'),
+            'core-logs-list': document.getElementById('core-logs-list'),
+            'component-logs-list': document.getElementById('component-logs-list'),
+            'service-logs-list': document.getElementById('service-logs-list')
+        };
+
+        let report = '调试报告:\n\n';
+
+        // 检查DOM元素
+        report += '1. DOM元素检查:\n';
+        for (const [id, element] of Object.entries(elements)) {
+            report += `   - ${id}: ${element ? '存在' : '不存在'}\n`;
+        }
+
+        // 检查事件监听器
+        report += '\n2. 事件监听器检查:\n';
+        if (elements['refresh-logs-btn']) {
+            report += '   - 刷新按钮: 尝试手动触发点击\n';
+            try {
+                elements['refresh-logs-btn'].click();
+                report += '     点击事件已触发\n';
+            } catch (e) {
+                report += `     点击事件触发失败: ${e.message}\n`;
+            }
+        }
+
+        // 检查网络连接
+        report += '\n3. 网络连接检查:\n';
+
+        const timestamp = new Date().getTime();
+        const url = `/api/logs/system?lines=10&level=info&_=${timestamp}`;
+        const testUrl = `/api/logs/test?_=${timestamp}`;
+
+        // 显示调试报告
+        alert('正在执行日志调试，请稍候...');
+
+        // 先尝试测试API
+        fetch(testUrl)
+            .then(response => {
+                report += `   - 测试API响应状态: ${response.status} ${response.statusText}\n`;
+                return response.text();
+            })
+            .then(text => {
+                try {
+                    const data = JSON.parse(text);
+                    report += '   - 测试API响应解析: 成功\n';
+
+                    // 继续尝试正常API
+                    return fetch(url);
+                } catch (e) {
+                    report += '   - 测试API响应解析: 失败\n';
+                    report += `   - 错误信息: ${e.message}\n`;
+                    throw new Error('测试API响应解析失败');
+                }
+            })
+            .then(response => {
+                report += `   - 日志API响应状态: ${response.status} ${response.statusText}\n`;
+                return response.text();
+            })
+            .then(text => {
+                try {
+                    const data = JSON.parse(text);
+                    report += '   - 响应解析: 成功\n';
+                } catch (e) {
+                    report += '   - 响应解析: 失败\n';
+                    report += `   - 错误信息: ${e.message}\n`;
+                }
+
+                // 显示完整报告
+                console.log(report);
+                alert(report);
+
+                // 更新日志内容
+                if (elements['system-logs']) {
+                    elements['system-logs'].innerHTML = `<pre>${report}</pre>`;
+                }
+            })
+            .catch(error => {
+                report += `   - 请求错误: ${error.message}\n`;
+                console.log(report);
+                alert(report);
+
+                // 更新日志内容
+                if (elements['system-logs']) {
+                    elements['system-logs'].innerHTML = `<pre>${report}</pre>`;
+                }
+            });
+    }
+
+    // 显示日志统计
+    function showLogsStats() {
+        // 显示统计模态框
+        const statsModal = new bootstrap.Modal(document.getElementById('logs-stats-modal'));
+        statsModal.show();
+
+        // 显示加载中
+        document.getElementById('logs-stats-loading').classList.remove('d-none');
+        document.getElementById('logs-stats-content').classList.add('d-none');
+
+        // 获取统计数据
+        fetch('/api/logs/stats')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateStatsUI(data.data);
+                } else {
+                    showToast('error', '获取日志统计失败', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('获取日志统计出错:', error);
+                showToast('error', '获取日志统计出错', error.message);
+            })
+            .finally(() => {
+                // 隐藏加载中
+                document.getElementById('logs-stats-loading').classList.add('d-none');
+                document.getElementById('logs-stats-content').classList.remove('d-none');
+            });
+    }
+
+    // 更新统计UI
+    function updateStatsUI(stats) {
+        // 更新总体统计
+        document.getElementById('stats-total-files').textContent = stats.total_files;
+        document.getElementById('stats-total-size').textContent = stats.total_size_human;
+
+        document.getElementById('stats-core-files').textContent = stats.core_files;
+        document.getElementById('stats-core-size').textContent = stats.core_size_human;
+
+        document.getElementById('stats-rotation-files').textContent = stats.rotation_files;
+        document.getElementById('stats-rotation-size').textContent = stats.rotation_size_human;
+
+        document.getElementById('stats-other-files').textContent = stats.other_files;
+        document.getElementById('stats-other-size').textContent = stats.other_size_human;
+
+        // 更新按年龄统计
+        document.getElementById('stats-age-day-files').textContent = stats.files_by_age.last_day;
+        document.getElementById('stats-age-day-size').textContent = stats.size_by_age.last_day_human;
+
+        document.getElementById('stats-age-week-files').textContent = stats.files_by_age.last_week;
+        document.getElementById('stats-age-week-size').textContent = stats.size_by_age.last_week_human;
+
+        document.getElementById('stats-age-month-files').textContent = stats.files_by_age.last_month;
+        document.getElementById('stats-age-month-size').textContent = stats.size_by_age.last_month_human;
+
+        document.getElementById('stats-age-older-files').textContent = stats.files_by_age.older;
+        document.getElementById('stats-age-older-size').textContent = stats.size_by_age.older_human;
+
+        // 更新文件列表
+        updateStatsFilesList(stats.files_details);
+    }
+
+    // 更新文件列表
+    function updateStatsFilesList(files) {
+        const filesList = document.getElementById('stats-files-list');
+        filesList.innerHTML = '';
+
+        if (files.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td colspan="5" class="text-center py-3">
+                    <p class="text-muted mb-0">没有找到日志文件</p>
+                </td>
+            `;
+            filesList.appendChild(row);
+            return;
+        }
+
+        // 按修改时间排序（最新的在前面）
+        files.sort((a, b) => {
+            return new Date(b.modified) - new Date(a.modified);
+        });
+
+        // 添加文件行
+        files.forEach(file => {
+            const row = document.createElement('tr');
+
+            // 设置文件类型图标和样式
+            let typeIcon = 'bi-file-earmark';
+            let typeClass = 'text-secondary';
+            let typeText = '其他';
+
+            if (file.is_core) {
+                typeIcon = 'bi-file-earmark-text';
+                typeClass = 'text-success';
+                typeText = '核心';
+            } else if (file.is_rotation) {
+                typeIcon = 'bi-file-earmark-arrow-down';
+                typeClass = 'text-info';
+                typeText = '轮转';
+            }
+
+            row.innerHTML = `
+                <td><i class="bi ${typeIcon} me-2 ${typeClass}"></i>${file.name}</td>
+                <td class="text-center"><span class="badge ${typeClass} bg-opacity-10 border border-${typeClass.replace('text-', '')} text-${typeClass.replace('text-', '')}">${typeText}</span></td>
+                <td class="text-end">${file.size_human}</td>
+                <td class="text-center">${file.modified}</td>
+                <td class="text-center">${file.age_human}</td>
+            `;
+
+            filesList.appendChild(row);
+        });
+
+        // 保存原始文件列表，用于搜索
+        window.originalFilesList = files;
+    }
+
+    // 过滤文件列表
+    function filterStatsFiles() {
+        const searchInput = document.getElementById('stats-file-search');
+        const searchText = searchInput.value.toLowerCase().trim();
+
+        if (!window.originalFilesList) {
+            return;
+        }
+
+        let filteredFiles = window.originalFilesList;
+
+        if (searchText) {
+            filteredFiles = window.originalFilesList.filter(file => {
+                return file.name.toLowerCase().includes(searchText);
+            });
+        }
+
+        updateStatsFilesList(filteredFiles);
+    }
+
+    // 显示清理日志确认
+    function showCleanLogsConfirm(mode = 'auto') {
+        // 设置选中的模式
+        document.getElementById(`clean-mode-${mode}`).checked = true;
+
+        // 显示确认模态框
+        const confirmModal = new bootstrap.Modal(document.getElementById('logs-clean-confirm-modal'));
+        confirmModal.show();
+    }
+
+    // 执行清理日志
+    function executeCleanLogs() {
+        // 获取选中的模式
+        const modeElements = document.getElementsByName('clean-mode');
+        let selectedMode = 'auto';
+
+        for (const element of modeElements) {
+            if (element.checked) {
+                selectedMode = element.value;
+                break;
+            }
+        }
+
+        // 隐藏确认模态框
+        const confirmModal = bootstrap.Modal.getInstance(document.getElementById('logs-clean-confirm-modal'));
+        if (confirmModal) {
+            confirmModal.hide();
+        }
+
+        // 显示结果模态框
+        const resultModal = new bootstrap.Modal(document.getElementById('logs-clean-result-modal'));
+        resultModal.show();
+
+        // 显示加载中
+        document.getElementById('clean-result-loading').classList.remove('d-none');
+        document.getElementById('clean-result-content').classList.add('d-none');
+
+        // 发送清理请求
+        fetch('/api/logs/clean', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                mode: selectedMode
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateCleanResultUI(data);
+                } else {
+                    showToast('error', '清理日志失败', data.message);
+                    // 隐藏结果模态框
+                    resultModal.hide();
+                }
+            })
+            .catch(error => {
+                console.error('清理日志出错:', error);
+                showToast('error', '清理日志出错', error.message);
+                // 隐藏结果模态框
+                resultModal.hide();
+            })
+            .finally(() => {
+                // 隐藏加载中
+                document.getElementById('clean-result-loading').classList.add('d-none');
+                document.getElementById('clean-result-content').classList.remove('d-none');
+            });
+    }
+
+    // 更新清理结果UI
+    function updateCleanResultUI(data) {
+        // 更新结果消息
+        document.getElementById('clean-result-message').textContent = data.message;
+
+        // 更新统计数据
+        document.getElementById('clean-result-before').textContent = data.data.total_files_before;
+        document.getElementById('clean-result-after').textContent = data.data.total_files_after;
+        document.getElementById('clean-result-deleted').textContent = data.data.deleted_files.length;
+
+        // 更新删除的文件列表
+        const filesList = document.getElementById('clean-result-files');
+        filesList.innerHTML = '';
+
+        if (data.data.deleted_files.length === 0) {
+            filesList.innerHTML = '<li class="list-group-item">没有删除任何文件</li>';
+        } else {
+            data.data.deleted_files.forEach(file => {
+                const item = document.createElement('li');
+                item.className = 'list-group-item';
+                item.innerHTML = `<i class="bi bi-file-earmark-x text-danger me-2"></i>${file}`;
+                filesList.appendChild(item);
+            });
+        }
+    }
+</script>
+{% endblock %}

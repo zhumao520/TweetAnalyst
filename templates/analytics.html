@@ -1,0 +1,1765 @@
+{% extends 'base.html' %}
+
+{% block title %}数据分析 - TweetAnalyst{% endblock %}
+
+{% block head %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.1/dist/chartjs-adapter-moment.min.js"></script>
+<style>
+    /* 卡片样式 */
+    .stats-card {
+        text-align: center;
+        padding: 1.5rem;
+        border-radius: 0.75rem;
+        margin-bottom: 1.5rem;
+        color: white;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        transition: all 0.3s ease;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .stats-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.15);
+    }
+
+    .stats-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: rgba(255, 255, 255, 0.1);
+        transform: rotate(30deg);
+        pointer-events: none;
+        transition: all 0.5s ease;
+    }
+
+    .stats-card:hover::before {
+        transform: rotate(30deg) translate(10%, 10%);
+    }
+
+    .stats-card h3 {
+        margin-top: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .stats-card h3 i {
+        margin-right: 0.5rem;
+        font-size: 1.5rem;
+    }
+
+    .stats-card .number {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0.75rem 0;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .stats-card .description {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        margin-bottom: 0;
+    }
+
+    .stats-card .trend {
+        position: absolute;
+        bottom: 0.5rem;
+        right: 0.5rem;
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 1rem;
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .trend-up {
+        color: #4ade80;
+    }
+
+    .trend-down {
+        color: #f87171;
+    }
+
+    /* 渐变背景 */
+    .bg-primary-gradient {
+        background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+    }
+
+    .bg-success-gradient {
+        background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+    }
+
+    .bg-info-gradient {
+        background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);
+    }
+
+    .bg-warning-gradient {
+        background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+    }
+
+    /* 图表容器 */
+    .chart-container {
+        position: relative;
+        height: 350px;
+        margin-bottom: 1.5rem;
+    }
+
+    .chart-card {
+        border-radius: 0.75rem;
+        overflow: hidden;
+        box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+
+    .chart-card:hover {
+        box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.1);
+    }
+
+    .chart-card .card-header {
+        background-color: #f8fafc;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        padding: 1rem 1.25rem;
+    }
+
+    .chart-card .card-header h5 {
+        margin: 0;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+    }
+
+    .chart-card .card-header h5 i {
+        margin-right: 0.5rem;
+        color: #4f46e5;
+    }
+
+    .chart-card .card-body {
+        padding: 1.25rem;
+    }
+
+    /* 表格样式 */
+    .data-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .data-table th {
+        background-color: #f8fafc;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        padding: 0.75rem 1rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .data-table td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        vertical-align: middle;
+    }
+
+    .data-table tbody tr:hover {
+        background-color: #f1f5f9;
+    }
+
+    .data-table .platform-badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .data-table .platform-badge i {
+        margin-right: 0.35rem;
+    }
+
+    /* 加载动画 */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(3px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1050;
+        transition: all 0.3s ease;
+    }
+
+    .loading-content {
+        text-align: center;
+        background-color: white;
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.1);
+        max-width: 90%;
+    }
+
+    .loading-spinner {
+        width: 3.5rem;
+        height: 3.5rem;
+        margin-bottom: 1rem;
+        color: #4f46e5;
+    }
+
+    .loading-text {
+        font-size: 1.25rem;
+        font-weight: 500;
+        color: #1e293b;
+        margin-bottom: 0.5rem;
+    }
+
+    .loading-subtext {
+        color: #64748b;
+        font-size: 0.875rem;
+    }
+
+    /* 动画效果 */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-in {
+        animation: fadeIn 0.5s ease-out forwards;
+    }
+
+    .fade-in-delay-1 {
+        animation: fadeIn 0.5s ease-out 0.1s forwards;
+        opacity: 0;
+    }
+
+    .fade-in-delay-2 {
+        animation: fadeIn 0.5s ease-out 0.2s forwards;
+        opacity: 0;
+    }
+
+    .fade-in-delay-3 {
+        animation: fadeIn 0.5s ease-out 0.3s forwards;
+        opacity: 0;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+        .stats-card {
+            padding: 1.25rem;
+        }
+
+        .stats-card .number {
+            font-size: 2rem;
+        }
+
+        .chart-container {
+            height: 300px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="loading-overlay" class="loading-overlay">
+    <div class="loading-content">
+        <div class="spinner-border loading-spinner" role="status">
+            <span class="visually-hidden">加载中...</span>
+        </div>
+        <div class="loading-text">正在加载分析数据</div>
+        <div class="loading-subtext">请稍候，我们正在处理您的请求...</div>
+    </div>
+</div>
+
+<div class="container-fluid py-4">
+    <!-- 页面标题和面包屑导航 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">数据分析</li>
+                </ol>
+            </nav>
+            <div class="d-flex justify-content-between align-items-center">
+                <h2 class="border-bottom pb-2">
+                    <i class="bi bi-bar-chart-line me-2 text-primary"></i>数据分析仪表板
+                </h2>
+                <div>
+                    <button id="refresh-data-btn" class="btn btn-primary">
+                        <i class="bi bi-arrow-clockwise me-1"></i> 刷新数据
+                    </button>
+                    <button id="export-data-btn" class="btn btn-outline-primary ms-2">
+                        <i class="bi bi-download me-1"></i> 导出数据
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row fade-in">
+        <div class="col-md-3 col-sm-6">
+            <div class="stats-card bg-primary-gradient">
+                <h3><i class="bi bi-file-text"></i>总帖子数</h3>
+                <div class="number" id="total-posts">-</div>
+                <div class="description">监控的所有帖子总数</div>
+                <div class="trend" id="total-posts-trend">
+                    <i class="bi bi-arrow-up"></i> <span>0%</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="stats-card bg-success-gradient">
+                <h3><i class="bi bi-check-circle"></i>相关帖子数</h3>
+                <div class="number" id="relevant-posts">-</div>
+                <div class="description">被判定为相关的帖子数量</div>
+                <div class="trend" id="relevant-posts-trend">
+                    <i class="bi bi-arrow-up"></i> <span>0%</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="stats-card bg-info-gradient">
+                <h3><i class="bi bi-percent"></i>相关率</h3>
+                <div class="number" id="relevance-rate">-</div>
+                <div class="description">相关帖子占总帖子的百分比</div>
+                <div class="trend" id="relevance-rate-trend">
+                    <i class="bi bi-arrow-up"></i> <span>0%</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="stats-card bg-warning-gradient">
+                <h3><i class="bi bi-people"></i>监控账号数</h3>
+                <div class="number" id="account-count">-</div>
+                <div class="description">系统中的监控账号总数</div>
+                <div class="trend" id="account-count-trend">
+                    <i class="bi bi-arrow-up"></i> <span>0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 图表区域 -->
+    <div class="row mt-4">
+        <div class="col-lg-8 fade-in-delay-1">
+            <div class="chart-card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title"><i class="bi bi-graph-up"></i>时间趋势分析</h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary active" data-period="week">周</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="month">月</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="year">年</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="time-trend-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 fade-in-delay-1">
+            <div class="chart-card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title"><i class="bi bi-pie-chart"></i>平台分布</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="platform-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6 fade-in-delay-2">
+            <div class="chart-card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title"><i class="bi bi-bar-chart"></i>相关性分布</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="relevance-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 fade-in-delay-2">
+            <div class="chart-card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title"><i class="bi bi-calendar-week"></i>每日活跃度</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="activity-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 账号统计表格 -->
+    <div class="row mt-2 fade-in-delay-3">
+        <div class="col-12">
+            <div class="chart-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title"><i class="bi bi-table"></i>账号统计详情</h5>
+                    <div class="input-group input-group-sm" style="width: 250px;">
+                        <input type="text" class="form-control" id="account-search" placeholder="搜索账号...">
+                        <button class="btn btn-outline-primary" type="button" id="account-search-btn">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        <div class="d-flex align-items-center">
+                                            <span>平台</span>
+                                            <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="platform">
+                                                <i class="bi bi-arrow-down-up"></i>
+                                            </button>
+                                        </div>
+                                    </th>
+                                    <th>
+                                        <div class="d-flex align-items-center">
+                                            <span>账号ID</span>
+                                            <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="account">
+                                                <i class="bi bi-arrow-down-up"></i>
+                                            </button>
+                                        </div>
+                                    </th>
+                                    <th>
+                                        <div class="d-flex align-items-center">
+                                            <span>总帖子数</span>
+                                            <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="total">
+                                                <i class="bi bi-arrow-down-up"></i>
+                                            </button>
+                                        </div>
+                                    </th>
+                                    <th>
+                                        <div class="d-flex align-items-center">
+                                            <span>相关帖子数</span>
+                                            <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="relevant">
+                                                <i class="bi bi-arrow-down-up"></i>
+                                            </button>
+                                        </div>
+                                    </th>
+                                    <th>
+                                        <div class="d-flex align-items-center">
+                                            <span>相关率</span>
+                                            <button class="btn btn-sm text-muted sort-btn ms-1" data-sort="rate">
+                                                <i class="bi bi-arrow-down-up"></i>
+                                            </button>
+                                        </div>
+                                    </th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="account-stats-body">
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">
+                                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status">
+                                            <span class="visually-hidden">加载中...</span>
+                                        </div>
+                                        正在加载账号统计数据...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <small class="text-muted">显示 <span id="visible-accounts">0</span> 个账号，共 <span id="total-accounts">0</span> 个</small>
+                        </div>
+                        <div>
+                            <a href="{{ url_for('accounts') }}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-person-plus me-1"></i> 管理账号
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 数据导出模态框 -->
+    <div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exportModalLabel">
+                        <i class="bi bi-download me-2"></i>导出分析数据
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="export-form">
+                        <div class="mb-3">
+                            <label for="export-format" class="form-label">导出格式</label>
+                            <select class="form-select" id="export-format">
+                                <option value="csv">CSV</option>
+                                <option value="json">JSON</option>
+                                <option value="excel">Excel</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="export-date-range" class="form-label">日期范围</label>
+                            <select class="form-select" id="export-date-range">
+                                <option value="all">所有数据</option>
+                                <option value="week">最近一周</option>
+                                <option value="month">最近一个月</option>
+                                <option value="custom">自定义范围</option>
+                            </select>
+                        </div>
+                        <div class="mb-3 date-range-custom d-none">
+                            <div class="row">
+                                <div class="col-6">
+                                    <label for="export-date-from" class="form-label">开始日期</label>
+                                    <input type="date" class="form-control" id="export-date-from">
+                                </div>
+                                <div class="col-6">
+                                    <label for="export-date-to" class="form-label">结束日期</label>
+                                    <input type="date" class="form-control" id="export-date-to">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="export-include-charts" checked>
+                                <label class="form-check-label" for="export-include-charts">
+                                    包含图表
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="confirm-export-btn">
+                        <i class="bi bi-download me-1"></i>导出
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 全局变量
+    let timeChart = null;
+    let platformChart = null;
+    let relevanceChart = null;
+    let activityChart = null;
+    let currentPeriod = 'week';
+    let analyticsData = null;
+    let currentSort = { field: 'total', direction: 'desc' };
+    let accountSearchTerm = '';
+
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化事件监听器
+        initEventListeners();
+
+        // 加载分析数据
+        loadAnalyticsData();
+    });
+
+    // 初始化事件监听器
+    function initEventListeners() {
+        // 刷新数据按钮
+        const refreshBtn = document.getElementById('refresh-data-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function() {
+                // 添加旋转动画
+                const icon = this.querySelector('i');
+                if (icon) {
+                    icon.classList.add('rotate-animation');
+                }
+
+                // 刷新数据
+                loadAnalyticsData();
+
+                // 300ms后移除动画
+                setTimeout(() => {
+                    if (icon) {
+                        icon.classList.remove('rotate-animation');
+                    }
+                }, 1000);
+            });
+        }
+
+        // 导出数据按钮
+        const exportBtn = document.getElementById('export-data-btn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', function() {
+                // 显示导出模态框
+                const exportModal = new bootstrap.Modal(document.getElementById('exportModal'));
+                exportModal.show();
+            });
+        }
+
+        // 确认导出按钮
+        const confirmExportBtn = document.getElementById('confirm-export-btn');
+        if (confirmExportBtn) {
+            confirmExportBtn.addEventListener('click', function() {
+                exportData();
+            });
+        }
+
+        // 日期范围选择变化
+        const dateRangeSelect = document.getElementById('export-date-range');
+        if (dateRangeSelect) {
+            dateRangeSelect.addEventListener('change', function() {
+                const customRangeDiv = document.querySelector('.date-range-custom');
+                if (this.value === 'custom') {
+                    customRangeDiv.classList.remove('d-none');
+                } else {
+                    customRangeDiv.classList.add('d-none');
+                }
+            });
+        }
+
+        // 时间趋势图表周期切换
+        const periodBtns = document.querySelectorAll('[data-period]');
+        periodBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                // 移除所有按钮的active类
+                periodBtns.forEach(b => b.classList.remove('active'));
+
+                // 添加当前按钮的active类
+                this.classList.add('active');
+
+                // 更新当前周期
+                currentPeriod = this.getAttribute('data-period');
+
+                // 如果有数据，更新图表
+                if (analyticsData && analyticsData.time_trend) {
+                    updateTimeChart(analyticsData.time_trend);
+                }
+            });
+        });
+
+        // 账号搜索
+        const accountSearchBtn = document.getElementById('account-search-btn');
+        const accountSearchInput = document.getElementById('account-search');
+
+        if (accountSearchBtn && accountSearchInput) {
+            // 搜索按钮点击事件
+            accountSearchBtn.addEventListener('click', function() {
+                accountSearchTerm = accountSearchInput.value.trim().toLowerCase();
+                if (analyticsData && analyticsData.accounts) {
+                    filterAndSortAccounts(analyticsData.accounts);
+                }
+            });
+
+            // 输入框回车事件
+            accountSearchInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    accountSearchTerm = this.value.trim().toLowerCase();
+                    if (analyticsData && analyticsData.accounts) {
+                        filterAndSortAccounts(analyticsData.accounts);
+                    }
+                }
+            });
+
+            // 输入框清空事件
+            accountSearchInput.addEventListener('input', function() {
+                if (this.value === '') {
+                    accountSearchTerm = '';
+                    if (analyticsData && analyticsData.accounts) {
+                        filterAndSortAccounts(analyticsData.accounts);
+                    }
+                }
+            });
+        }
+
+        // 表格排序
+        const sortBtns = document.querySelectorAll('.sort-btn');
+        sortBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const field = this.getAttribute('data-sort');
+
+                // 切换排序方向
+                if (currentSort.field === field) {
+                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.field = field;
+                    currentSort.direction = 'desc'; // 默认降序
+                }
+
+                // 更新排序图标
+                updateSortIcons();
+
+                // 如果有数据，重新排序
+                if (analyticsData && analyticsData.accounts) {
+                    filterAndSortAccounts(analyticsData.accounts);
+                }
+            });
+        });
+
+        // 添加CSS动画
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes rotate {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            .rotate-animation {
+                animation: rotate 1s linear;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // 更新排序图标
+    function updateSortIcons() {
+        const sortBtns = document.querySelectorAll('.sort-btn');
+
+        sortBtns.forEach(btn => {
+            const field = btn.getAttribute('data-sort');
+            const icon = btn.querySelector('i');
+
+            if (field === currentSort.field) {
+                icon.className = currentSort.direction === 'asc'
+                    ? 'bi bi-arrow-up'
+                    : 'bi bi-arrow-down';
+                btn.classList.add('text-primary');
+                btn.classList.remove('text-muted');
+            } else {
+                icon.className = 'bi bi-arrow-down-up';
+                btn.classList.add('text-muted');
+                btn.classList.remove('text-primary');
+            }
+        });
+    }
+
+    // 加载分析数据
+    function loadAnalyticsData() {
+        // 显示加载中
+        document.getElementById('loading-overlay').style.display = 'flex';
+
+        fetch('/api/analytics/summary')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP错误: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // 保存数据到全局变量
+                    analyticsData = data.data;
+
+                    // 更新仪表板
+                    updateDashboard(analyticsData);
+
+                    // 显示成功提示
+                    showToast('成功', '数据加载成功', 'success');
+                } else {
+                    console.error('加载数据失败:', data);
+                    let errorMessage = data.message || '未知错误';
+
+                    // 显示错误提示
+                    showToast('错误', '加载数据失败: ' + errorMessage, 'danger');
+
+                    // 显示空仪表板
+                    showEmptyDashboard();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+
+                // 显示错误提示
+                showToast('错误', '加载数据时出错: ' + (error.message || '未知错误'), 'danger');
+
+                // 显示空仪表板
+                showEmptyDashboard();
+            })
+            .finally(() => {
+                // 隐藏加载中
+                setTimeout(() => {
+                    document.getElementById('loading-overlay').style.display = 'none';
+                }, 500);
+            });
+    }
+
+    // 显示空仪表板
+    function showEmptyDashboard() {
+        // 显示空统计卡片
+        document.getElementById('total-posts').textContent = '0';
+        document.getElementById('relevant-posts').textContent = '0';
+        document.getElementById('relevance-rate').textContent = '0%';
+        document.getElementById('account-count').textContent = '0';
+
+        // 隐藏趋势指示器
+        document.getElementById('total-posts-trend').style.display = 'none';
+        document.getElementById('relevant-posts-trend').style.display = 'none';
+        document.getElementById('relevance-rate-trend').style.display = 'none';
+        document.getElementById('account-count-trend').style.display = 'none';
+
+        // 显示空图表
+        updateTimeChart([]);
+        updatePlatformChart([]);
+        updateRelevanceChart([]);
+        updateActivityChart([]);
+
+        // 更新账号统计表格为空
+        const tableBody = document.getElementById('account-stats-body');
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center py-5">
+                    <i class="bi bi-inbox fs-1 text-muted mb-3 d-block"></i>
+                    <h5>暂无数据</h5>
+                    <p class="text-muted">可能的原因：</p>
+                    <ul class="text-muted text-start d-inline-block">
+                        <li>尚未抓取任何帖子</li>
+                        <li>LLM API调用失败</li>
+                        <li>数据库连接问题</li>
+                    </ul>
+                    <div class="mt-3">
+                        <button id="empty-refresh-btn" class="btn btn-primary">
+                            <i class="bi bi-arrow-clockwise me-1"></i>重试
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+
+        // 添加重试按钮事件
+        const emptyRefreshBtn = document.getElementById('empty-refresh-btn');
+        if (emptyRefreshBtn) {
+            emptyRefreshBtn.addEventListener('click', loadAnalyticsData);
+        }
+
+        // 更新账号计数
+        document.getElementById('visible-accounts').textContent = '0';
+        document.getElementById('total-accounts').textContent = '0';
+    }
+
+    // 更新仪表板
+    function updateDashboard(data) {
+        // 检查数据是否为空
+        if (!data || !data.summary || data.summary.total_posts === 0) {
+            showEmptyDashboard();
+            return;
+        }
+
+        // 更新统计卡片
+        updateStatCards(data.summary);
+
+        // 更新时间趋势图表
+        updateTimeChart(data.time_trend);
+
+        // 更新平台分布图表
+        updatePlatformChart(data.platforms);
+
+        // 更新相关性分布图表
+        updateRelevanceChart(data.relevance_distribution || []);
+
+        // 更新每日活跃度图表
+        updateActivityChart(data.daily_activity || []);
+
+        // 更新账号统计表格
+        filterAndSortAccounts(data.accounts);
+    }
+
+    // 更新统计卡片
+    function updateStatCards(summary) {
+        // 更新数值
+        document.getElementById('total-posts').textContent = summary.total_posts.toLocaleString();
+        document.getElementById('relevant-posts').textContent = summary.relevant_posts.toLocaleString();
+        document.getElementById('relevance-rate').textContent = summary.relevance_rate + '%';
+        document.getElementById('account-count').textContent = summary.account_count || '0';
+
+        // 更新趋势
+        updateTrendIndicator('total-posts-trend', summary.total_posts_trend || 0);
+        updateTrendIndicator('relevant-posts-trend', summary.relevant_posts_trend || 0);
+        updateTrendIndicator('relevance-rate-trend', summary.relevance_rate_trend || 0);
+        updateTrendIndicator('account-count-trend', summary.account_count_trend || 0);
+    }
+
+    // 更新趋势指示器
+    function updateTrendIndicator(elementId, trendValue) {
+        const trendElement = document.getElementById(elementId);
+        if (!trendElement) return;
+
+        // 显示趋势指示器
+        trendElement.style.display = 'block';
+
+        // 设置图标和颜色
+        const iconElement = trendElement.querySelector('i');
+        const valueElement = trendElement.querySelector('span');
+
+        if (trendValue > 0) {
+            iconElement.className = 'bi bi-arrow-up';
+            trendElement.classList.add('trend-up');
+            trendElement.classList.remove('trend-down');
+            valueElement.textContent = `+${trendValue}%`;
+        } else if (trendValue < 0) {
+            iconElement.className = 'bi bi-arrow-down';
+            trendElement.classList.add('trend-down');
+            trendElement.classList.remove('trend-up');
+            valueElement.textContent = `${trendValue}%`;
+        } else {
+            iconElement.className = 'bi bi-dash';
+            trendElement.classList.remove('trend-up', 'trend-down');
+            valueElement.textContent = `${trendValue}%`;
+        }
+    }
+
+    // 更新时间趋势图表
+    function updateTimeChart(timeData) {
+        const ctx = document.getElementById('time-trend-chart').getContext('2d');
+
+        // 根据当前周期筛选数据
+        let filteredData = filterTimeDataByPeriod(timeData, currentPeriod);
+
+        // 准备数据
+        let labels = [];
+        let totalData = [];
+        let relevantData = [];
+
+        // 检查数据是否为空
+        if (filteredData && filteredData.length > 0) {
+            labels = filteredData.map(item => item.date);
+            totalData = filteredData.map(item => item.total);
+            relevantData = filteredData.map(item => item.relevant);
+        } else {
+            // 如果没有数据，显示空图表
+            labels = ['无数据'];
+            totalData = [0];
+            relevantData = [0];
+        }
+
+        // 如果图表已存在，销毁它
+        if (timeChart) {
+            timeChart.destroy();
+        }
+
+        // 创建新图表
+        timeChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '总帖子数',
+                        data: totalData,
+                        borderColor: '#4f46e5',
+                        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#4f46e5',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    },
+                    {
+                        label: '相关帖子数',
+                        data: relevantData,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#10b981',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        titleColor: '#1e293b',
+                        bodyColor: '#334155',
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: {
+                            weight: 'bold'
+                        },
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed.y.toLocaleString();
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: '#64748b',
+                            font: {
+                                size: 11
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: '日期',
+                            color: '#475569',
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(226, 232, 240, 0.5)'
+                        },
+                        ticks: {
+                            color: '#64748b',
+                            font: {
+                                size: 11
+                            },
+                            callback: function(value) {
+                                return value.toLocaleString();
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: '帖子数量',
+                            color: '#475569',
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                },
+                elements: {
+                    line: {
+                        tension: 0.4
+                    }
+                }
+            }
+        });
+    }
+
+    // 根据周期筛选时间数据
+    function filterTimeDataByPeriod(timeData, period) {
+        if (!timeData || timeData.length === 0) {
+            return [];
+        }
+
+        const now = new Date();
+        let cutoffDate;
+
+        switch (period) {
+            case 'week':
+                cutoffDate = new Date(now);
+                cutoffDate.setDate(now.getDate() - 7);
+                break;
+            case 'month':
+                cutoffDate = new Date(now);
+                cutoffDate.setMonth(now.getMonth() - 1);
+                break;
+            case 'year':
+                cutoffDate = new Date(now);
+                cutoffDate.setFullYear(now.getFullYear() - 1);
+                break;
+            default:
+                return timeData;
+        }
+
+        // 筛选日期在截止日期之后的数据
+        return timeData.filter(item => {
+            const itemDate = new Date(item.date);
+            return itemDate >= cutoffDate;
+        });
+    }
+
+    // 更新平台分布图表
+    function updatePlatformChart(platformData) {
+        const ctx = document.getElementById('platform-chart').getContext('2d');
+
+        // 准备数据
+        let labels = [];
+        let totalData = [];
+        let relevantData = [];
+        let colors = ['#4f46e5', '#10b981', '#0ea5e9', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+        // 检查数据是否为空
+        if (platformData && platformData.length > 0) {
+            labels = platformData.map(item => item.platform);
+            totalData = platformData.map(item => item.total);
+            relevantData = platformData.map(item => item.relevant);
+        } else {
+            // 如果没有数据，显示空图表
+            labels = ['无数据'];
+            totalData = [0];
+            relevantData = [0];
+        }
+
+        // 如果图表已存在，销毁它
+        if (platformChart) {
+            platformChart.destroy();
+        }
+
+        // 创建新图表
+        platformChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        data: totalData,
+                        backgroundColor: colors,
+                        borderColor: 'white',
+                        borderWidth: 2,
+                        hoverOffset: 15
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        titleColor: '#1e293b',
+                        bodyColor: '#334155',
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = Math.round((value / total) * 100);
+                                return `${label}: ${value.toLocaleString()} (${percentage}%)`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        color: 'white',
+                        font: {
+                            weight: 'bold',
+                            size: 11
+                        },
+                        formatter: function(value, context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = Math.round((value / total) * 100);
+                            return percentage > 5 ? `${percentage}%` : '';
+                        }
+                    }
+                },
+                animation: {
+                    animateScale: true,
+                    animateRotate: true
+                }
+            }
+        });
+    }
+
+    // 更新相关性分布图表
+    function updateRelevanceChart(relevanceData) {
+        const ctx = document.getElementById('relevance-chart').getContext('2d');
+
+        // 准备数据
+        let labels = [];
+        let data = [];
+        let backgroundColors = [];
+
+        // 检查数据是否为空
+        if (relevanceData && relevanceData.length > 0) {
+            // 假设数据格式为 [{range: "0-20", count: 10}, {range: "21-40", count: 20}, ...]
+            labels = relevanceData.map(item => item.range);
+            data = relevanceData.map(item => item.count);
+
+            // 根据置信度范围设置颜色
+            relevanceData.forEach(item => {
+                const range = item.range.split('-');
+                const midValue = (parseInt(range[0]) + parseInt(range[1])) / 2;
+
+                if (midValue < 30) {
+                    backgroundColors.push('rgba(239, 68, 68, 0.8)'); // 红色
+                } else if (midValue < 50) {
+                    backgroundColors.push('rgba(245, 158, 11, 0.8)'); // 橙色
+                } else if (midValue < 70) {
+                    backgroundColors.push('rgba(14, 165, 233, 0.8)'); // 蓝色
+                } else {
+                    backgroundColors.push('rgba(16, 185, 129, 0.8)'); // 绿色
+                }
+            });
+        } else {
+            // 如果没有数据，显示空图表
+            labels = ['0-20%', '21-40%', '41-60%', '61-80%', '81-100%'];
+            data = [0, 0, 0, 0, 0];
+            backgroundColors = [
+                'rgba(239, 68, 68, 0.8)',
+                'rgba(245, 158, 11, 0.8)',
+                'rgba(14, 165, 233, 0.8)',
+                'rgba(16, 185, 129, 0.8)',
+                'rgba(16, 185, 129, 0.8)'
+            ];
+        }
+
+        // 如果图表已存在，销毁它
+        if (relevanceChart) {
+            relevanceChart.destroy();
+        }
+
+        // 创建新图表
+        relevanceChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '帖子数量',
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 0,
+                        borderRadius: 4,
+                        barPercentage: 0.7,
+                        categoryPercentage: 0.8
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        titleColor: '#1e293b',
+                        bodyColor: '#334155',
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                return `帖子数量: ${context.raw.toLocaleString()}`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        color: 'white',
+                        anchor: 'center',
+                        align: 'center',
+                        font: {
+                            weight: 'bold'
+                        },
+                        formatter: function(value) {
+                            return value > 0 ? value.toLocaleString() : '';
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: '置信度范围',
+                            color: '#475569',
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(226, 232, 240, 0.5)'
+                        },
+                        title: {
+                            display: true,
+                            text: '帖子数量',
+                            color: '#475569',
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            }
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 更新每日活跃度图表
+    function updateActivityChart(activityData) {
+        const ctx = document.getElementById('activity-chart').getContext('2d');
+
+        // 准备数据
+        let labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+        let data = [0, 0, 0, 0, 0, 0, 0];
+
+        // 检查数据是否为空
+        if (activityData && activityData.length > 0) {
+            // 假设数据格式为 [{day: 1, count: 10}, {day: 2, count: 20}, ...]
+            // 其中 day 是 1-7，表示周一到周日
+            activityData.forEach(item => {
+                if (item.day >= 1 && item.day <= 7) {
+                    data[item.day - 1] = item.count;
+                }
+            });
+        }
+
+        // 如果图表已存在，销毁它
+        if (activityChart) {
+            activityChart.destroy();
+        }
+
+        // 创建新图表
+        activityChart = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '帖子数量',
+                        data: data,
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderColor: '#4f46e5',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#4f46e5',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#4f46e5',
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        ticks: {
+                            display: false,
+                            stepSize: Math.max(...data) > 0 ? Math.ceil(Math.max(...data) / 5) : 1
+                        },
+                        pointLabels: {
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            },
+                            color: '#475569'
+                        },
+                        grid: {
+                            color: 'rgba(226, 232, 240, 0.5)'
+                        },
+                        angleLines: {
+                            color: 'rgba(226, 232, 240, 0.5)'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        titleColor: '#1e293b',
+                        bodyColor: '#334155',
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                return `帖子数量: ${context.raw.toLocaleString()}`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        color: '#4f46e5',
+                        backgroundColor: 'white',
+                        borderRadius: 10,
+                        padding: 6,
+                        font: {
+                            weight: 'bold',
+                            size: 10
+                        },
+                        formatter: function(value) {
+                            return value > 0 ? value.toLocaleString() : '';
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 筛选和排序账号数据
+    function filterAndSortAccounts(accountData) {
+        if (!accountData || accountData.length === 0) {
+            // 显示空表格
+            const tableBody = document.getElementById('account-stats-body');
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-5">
+                        <i class="bi bi-inbox fs-1 text-muted mb-3 d-block"></i>
+                        <h5>暂无账号数据</h5>
+                        <p class="text-muted">尚未添加任何监控账号或未获取到数据</p>
+                    </td>
+                </tr>
+            `;
+
+            // 更新账号计数
+            document.getElementById('visible-accounts').textContent = '0';
+            document.getElementById('total-accounts').textContent = '0';
+
+            return;
+        }
+
+        // 筛选账号
+        let filteredAccounts = accountData;
+
+        if (accountSearchTerm) {
+            filteredAccounts = accountData.filter(account => {
+                return account.platform.toLowerCase().includes(accountSearchTerm) ||
+                       account.account_id.toLowerCase().includes(accountSearchTerm);
+            });
+        }
+
+        // 排序账号
+        filteredAccounts.sort((a, b) => {
+            let valueA, valueB;
+
+            switch (currentSort.field) {
+                case 'platform':
+                    valueA = a.platform;
+                    valueB = b.platform;
+                    return currentSort.direction === 'asc'
+                        ? valueA.localeCompare(valueB)
+                        : valueB.localeCompare(valueA);
+
+                case 'account':
+                    valueA = a.account_id;
+                    valueB = b.account_id;
+                    return currentSort.direction === 'asc'
+                        ? valueA.localeCompare(valueB)
+                        : valueB.localeCompare(valueA);
+
+                case 'total':
+                    valueA = a.total;
+                    valueB = b.total;
+                    return currentSort.direction === 'asc'
+                        ? valueA - valueB
+                        : valueB - valueA;
+
+                case 'relevant':
+                    valueA = a.relevant;
+                    valueB = b.relevant;
+                    return currentSort.direction === 'asc'
+                        ? valueA - valueB
+                        : valueB - valueA;
+
+                case 'rate':
+                    valueA = a.relevance_rate;
+                    valueB = b.relevance_rate;
+                    return currentSort.direction === 'asc'
+                        ? valueA - valueB
+                        : valueB - valueA;
+
+                default:
+                    return 0;
+            }
+        });
+
+        // 更新表格
+        updateAccountTable(filteredAccounts);
+
+        // 更新账号计数
+        document.getElementById('visible-accounts').textContent = filteredAccounts.length;
+        document.getElementById('total-accounts').textContent = accountData.length;
+    }
+
+    // 更新账号统计表格
+    function updateAccountTable(accountData) {
+        const tableBody = document.getElementById('account-stats-body');
+
+        // 清空表格
+        tableBody.innerHTML = '';
+
+        // 如果没有数据
+        if (accountData.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-5">
+                        <i class="bi bi-search fs-1 text-muted mb-3 d-block"></i>
+                        <h5>未找到匹配的账号</h5>
+                        <p class="text-muted">尝试使用其他关键词搜索</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        // 添加行
+        accountData.forEach(account => {
+            const row = document.createElement('tr');
+
+            // 设置平台徽章样式
+            let platformBadgeClass = 'bg-secondary';
+            let platformIcon = 'bi-globe';
+
+            if (account.platform === 'twitter') {
+                platformBadgeClass = 'bg-primary';
+                platformIcon = 'bi-twitter';
+            } else if (account.platform === 'weibo') {
+                platformBadgeClass = 'bg-danger';
+                platformIcon = 'bi-sina-weibo';
+            }
+
+            // 设置相关率进度条颜色
+            let rateColorClass = 'bg-danger';
+            if (account.relevance_rate >= 80) {
+                rateColorClass = 'bg-success';
+            } else if (account.relevance_rate >= 50) {
+                rateColorClass = 'bg-info';
+            } else if (account.relevance_rate >= 30) {
+                rateColorClass = 'bg-warning';
+            }
+
+            row.innerHTML = `
+                <td>
+                    <span class="platform-badge ${platformBadgeClass} text-white">
+                        <i class="bi ${platformIcon}"></i> ${account.platform}
+                    </span>
+                </td>
+                <td>
+                    <div class="d-flex align-items-center">
+                        ${account.avatar_url ?
+                            `<img src="${account.avatar_url}" alt="${account.account_id}" class="rounded-circle me-2" style="width: 24px; height: 24px; object-fit: cover;">` :
+                            `<i class="bi ${platformIcon} me-2"></i>`
+                        }
+                        <strong>${account.account_id}</strong>
+                    </div>
+                </td>
+                <td>
+                    ${account.total.toLocaleString()}
+                </td>
+                <td>
+                    ${account.relevant.toLocaleString()}
+                </td>
+                <td>
+                    <div class="d-flex align-items-center">
+                        <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                            <div class="progress-bar ${rateColorClass}" role="progressbar"
+                                 style="width: ${account.relevance_rate}%;"
+                                 aria-valuenow="${account.relevance_rate}"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100"></div>
+                        </div>
+                        <span>${account.relevance_rate}%</span>
+                    </div>
+                </td>
+                <td class="text-end">
+                    <div class="btn-group btn-group-sm">
+                        <a href="/accounts/edit/${account.account_id}" class="btn btn-outline-primary" title="编辑账号">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <a href="/results?account_id=${account.account_id}" class="btn btn-outline-info" title="查看结果">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                    </div>
+                </td>
+            `;
+
+            tableBody.appendChild(row);
+        });
+    }
+
+    // 导出数据
+    function exportData() {
+        // 获取导出设置
+        const format = document.getElementById('export-format').value;
+        const dateRange = document.getElementById('export-date-range').value;
+        const includeCharts = document.getElementById('export-include-charts').checked;
+
+        // 自定义日期范围
+        let dateFrom = null;
+        let dateTo = null;
+
+        if (dateRange === 'custom') {
+            dateFrom = document.getElementById('export-date-from').value;
+            dateTo = document.getElementById('export-date-to').value;
+
+            if (!dateFrom || !dateTo) {
+                showToast('错误', '请选择完整的日期范围', 'danger');
+                return;
+            }
+        }
+
+        // 显示导出中状态
+        const exportBtn = document.getElementById('confirm-export-btn');
+        const originalText = exportBtn.innerHTML;
+        exportBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> 导出中...';
+        exportBtn.disabled = true;
+
+        // 构建请求参数
+        const params = new URLSearchParams();
+        params.append('format', format);
+        params.append('date_range', dateRange);
+        params.append('include_charts', includeCharts);
+
+        if (dateRange === 'custom') {
+            params.append('date_from', dateFrom);
+            params.append('date_to', dateTo);
+        }
+
+        // 构建URL
+        const url = `/api/analytics/export?${params.toString()}`;
+
+        // 创建一个隐藏的a标签来下载文件
+        const downloadLink = document.createElement('a');
+        downloadLink.href = url;
+        downloadLink.target = '_blank';
+        downloadLink.download = `analytics_export_${new Date().toISOString().slice(0, 10)}.${format}`;
+        document.body.appendChild(downloadLink);
+
+        // 触发下载
+        downloadLink.click();
+
+        // 移除下载链接
+        setTimeout(() => {
+            document.body.removeChild(downloadLink);
+
+            // 恢复按钮状态
+            exportBtn.innerHTML = originalText;
+            exportBtn.disabled = false;
+
+            // 关闭模态框
+            const exportModal = bootstrap.Modal.getInstance(document.getElementById('exportModal'));
+            if (exportModal) {
+                exportModal.hide();
+            }
+
+            // 显示成功提示
+            showToast('成功', `数据导出请求已发送，文件将自动下载`, 'success');
+        }, 1000);
+    }
+
+    // 显示提示消息
+    function showToast(title, message, type = 'info') {
+        // 检查是否已存在toast容器
+        let toastContainer = document.querySelector('.toast-container');
+
+        // 如果不存在，创建一个
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            document.body.appendChild(toastContainer);
+        }
+
+        // 创建toast元素
+        const toastId = 'toast-' + Date.now();
+        const toastHTML = `
+            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header bg-${type} text-white">
+                    <strong class="me-auto">${title}</strong>
+                    <small>刚刚</small>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    ${message}
+                </div>
+            </div>
+        `;
+
+        // 添加到容器
+        toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+
+        // 初始化并显示toast
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+        toast.show();
+
+        // 自动移除
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            toastElement.remove();
+        });
+    }
+</script>
+{% endblock %}

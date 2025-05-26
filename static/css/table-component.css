@@ -1,0 +1,270 @@
+/**
+ * TweetAnalyst表格组件样式
+ * 配合components.js中的dataTable组件使用
+ */
+
+/* 表格基础样式 */
+.ta-table {
+  width: 100%;
+  margin-bottom: 1rem;
+  color: var(--gray-800);
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.ta-table th,
+.ta-table td {
+  padding: 0.75rem;
+  vertical-align: top;
+  border-top: 1px solid var(--gray-300);
+}
+
+.ta-table thead th {
+  vertical-align: bottom;
+  border-bottom: 2px solid var(--gray-300);
+  background-color: var(--gray-100);
+  font-weight: 600;
+  text-align: left;
+  position: relative;
+}
+
+.ta-table tbody + tbody {
+  border-top: 2px solid var(--gray-300);
+}
+
+/* 表格控件 */
+.ta-table-controls {
+  margin-bottom: 1rem;
+}
+
+.ta-table-controls-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.ta-table-controls-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+/* 长度选择器 */
+.ta-table-length {
+  display: flex;
+  align-items: center;
+}
+
+.ta-table-length label {
+  margin-bottom: 0;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.ta-table-length-select {
+  margin-left: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--gray-700);
+  background-color: #fff;
+  background-clip: padding-box;
+  border: 1px solid var(--gray-400);
+  border-radius: 0.25rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+/* 搜索框 */
+.ta-table-search {
+  display: flex;
+  align-items: center;
+}
+
+.ta-table-search label {
+  margin-bottom: 0;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.ta-table-search-input {
+  margin-left: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--gray-700);
+  background-color: #fff;
+  background-clip: padding-box;
+  border: 1px solid var(--gray-400);
+  border-radius: 0.25rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  width: 200px;
+}
+
+.ta-table-search-input:focus {
+  color: var(--gray-700);
+  background-color: #fff;
+  border-color: var(--primary-light);
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(29, 161, 242, 0.25);
+}
+
+/* 信息显示 */
+.ta-table-info {
+  font-size: 0.875rem;
+  color: var(--gray-600);
+}
+
+/* 分页 */
+.ta-pagination {
+  display: flex;
+  padding-left: 0;
+  list-style: none;
+  border-radius: 0.25rem;
+  margin: 0;
+}
+
+.ta-page-item {
+  margin-left: -1px;
+}
+
+.ta-page-item:first-child .ta-page-link {
+  margin-left: 0;
+  border-top-left-radius: 0.25rem;
+  border-bottom-left-radius: 0.25rem;
+}
+
+.ta-page-item:last-child .ta-page-link {
+  border-top-right-radius: 0.25rem;
+  border-bottom-right-radius: 0.25rem;
+}
+
+.ta-page-item.active .ta-page-link {
+  z-index: 3;
+  color: #fff;
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.ta-page-item.disabled .ta-page-link {
+  color: var(--gray-500);
+  pointer-events: none;
+  cursor: auto;
+  background-color: #fff;
+  border-color: var(--gray-300);
+}
+
+.ta-page-link {
+  position: relative;
+  display: block;
+  padding: 0.5rem 0.75rem;
+  margin-left: -1px;
+  line-height: 1.25;
+  color: var(--primary-color);
+  background-color: #fff;
+  border: 1px solid var(--gray-300);
+  text-decoration: none;
+}
+
+.ta-page-link:hover {
+  z-index: 2;
+  color: var(--primary-dark);
+  text-decoration: none;
+  background-color: var(--gray-200);
+  border-color: var(--gray-300);
+}
+
+.ta-page-link:focus {
+  z-index: 3;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(29, 161, 242, 0.25);
+}
+
+/* 空表格 */
+.ta-table-empty {
+  text-align: center;
+  padding: 2rem 0;
+  color: var(--gray-500);
+  font-style: italic;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .ta-table-controls-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .ta-table-search {
+    margin-top: 0.5rem;
+    width: 100%;
+  }
+  
+  .ta-table-search-input {
+    width: 100%;
+  }
+  
+  .ta-table-controls-bottom {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .ta-table-info {
+    margin-bottom: 0.5rem;
+    text-align: center;
+  }
+}
+
+/* 暗黑主题适配 */
+[data-theme="dark"] .ta-table {
+  color: var(--body-color);
+}
+
+[data-theme="dark"] .ta-table thead th {
+  background-color: var(--gray-300);
+  color: var(--body-color);
+  border-bottom-color: var(--gray-400);
+}
+
+[data-theme="dark"] .ta-table th,
+[data-theme="dark"] .ta-table td {
+  border-top-color: var(--gray-400);
+}
+
+[data-theme="dark"] .ta-table-length-select,
+[data-theme="dark"] .ta-table-search-input {
+  color: var(--body-color);
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+}
+
+[data-theme="dark"] .ta-page-link {
+  color: var(--primary-light);
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+[data-theme="dark"] .ta-page-link:hover {
+  color: var(--primary-color);
+  background-color: var(--gray-300);
+  border-color: var(--card-border);
+}
+
+[data-theme="dark"] .ta-page-item.active .ta-page-link {
+  color: #fff;
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+[data-theme="dark"] .ta-page-item.disabled .ta-page-link {
+  color: var(--gray-600);
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+[data-theme="dark"] .ta-table-empty {
+  color: var(--gray-500);
+}
