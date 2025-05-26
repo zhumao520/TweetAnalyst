@@ -37,11 +37,12 @@ RUN mkdir -p /data /app/logs && \
     chmod -R 755 /app/logs && \
     chmod -R 755 /data
 
-# 复制应用代码
-COPY . .
-
-# 添加启动脚本
+# 先复制启动脚本并设置权限
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
+
+# 复制其余应用代码
+COPY . .
 
 # 设置环境变量
 ENV DATABASE_PATH=/data/tweetAnalyst.db \
