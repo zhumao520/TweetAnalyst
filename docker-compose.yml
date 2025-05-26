@@ -5,7 +5,7 @@ version: "3"
 
 services:
   tweetAnalyst:
-    image: ${DOCKER_IMAGE:-zhumao520/tweetanalyst:latest}
+    image: ${DOCKER_IMAGE:-your_dockerhub_username/tweetanalyst:latest}
     # 如果需要从本地构建，取消下面这行的注释，并注释掉上面的image行
     # build: .
     container_name: tweetAnalyst
@@ -33,6 +33,10 @@ services:
 
       # 推送配置（可选）
       # - APPRISE_URLS=tgram://bottoken/ChatID,discord://webhook_id/webhook_token
+
+      # 推送队列配置
+      - PUSH_QUEUE_ENABLED=true
+      - PUSH_QUEUE_INTERVAL_SECONDS=30
 
     # 使用entrypoint脚本启动
     command: ["/app/docker-entrypoint.sh"]

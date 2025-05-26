@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 依赖安装脚本
 
@@ -9,7 +9,6 @@ import sys
 import subprocess
 import argparse
 import importlib.util
-from typing import List, Dict, Tuple, Optional
 
 def install_package(package):
     """
@@ -91,6 +90,33 @@ def check_proxy_support() -> bool:
     Returns:
         bool: 是否支持SOCKS代理
     """
+    # 尝试使用代理管理器
+    try:
+        # 动态导入代理管理器，避免循环导入
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        try:
+            from utils.api_utils import get_proxy_manager
+
+            # 获取代理管理器
+            proxy_manager = get_proxy_manager()
+
+            # 查找可用代理
+            working_proxy = proxy_manager.find_working_proxy()
+
+            if working_proxy and working_proxy.protocol.startswith('socks'):
+                print(f"检测到SOCKS代理: {working_proxy.name}")
+                if check_package('socksio'):
+                    print("✓ SOCKS代理支持已安装")
+                    return True
+                else:
+                    print("! 未安装SOCKS代理支持，尝试安装...")
+                    return install_package('httpx[socks]')
+        except ImportError:
+            print("未找到代理管理器，使用传统方式检查代理")
+    except Exception as e:
+        print(f"使用代理管理器检查代理时出错: {str(e)}")
+
+    # 回退到传统方式
     proxy = os.getenv('HTTP_PROXY', '')
     if proxy and proxy.startswith('socks'):
         print(f"检测到SOCKS代理: {proxy}")

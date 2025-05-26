@@ -1,11 +1,26 @@
 import os
 import json
 from datetime import datetime, timedelta, timezone
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
-from flask_wtf.csrf import CSRFProtect
-from sqlalchemy import func, cast, Date
+
+# 先导入基础模块
 from utils.logger import get_logger
 import yaml
+
+# 创建日志记录器
+logger = get_logger('web_app')
+
+# 在导入其他模块之前应用SSL修复
+try:
+    from utils.ssl_fix import apply_ssl_fixes
+    apply_ssl_fixes()
+    logger.info("✅ Web应用SSL连接修复已应用")
+except Exception as e:
+    logger.warning(f"⚠️ Web应用SSL修复应用失败: {str(e)}")
+
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask_wtf.csrf import CSRFProtect
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from sqlalchemy import func, cast, Date
 
 # 导入模型和服务
 from models import db
@@ -14,16 +29,18 @@ from models.social_account import SocialAccount
 from models.analysis_result import AnalysisResult
 from models.system_config import SystemConfig
 from models.system_state import SystemState
-from services.config_service import get_config, set_config, get_system_config, load_configs_to_env, get_default_prompt_template
+from models.ai_provider import AIProvider
+from services.config_service import (
+    get_config, set_config, get_system_config,
+    load_configs_to_env, get_default_prompt_template,
+    init_config as service_init_config
+)
 from services.state_service import DBStateStore
 from services.test_service import check_system_status
 from utils.yaml_utils import sync_accounts_to_yaml, import_accounts_from_yaml
 
-# 导入API模块
-from api import api_blueprint
-
-# 创建日志记录器
-logger = get_logger('web_app')
+# 导入API模块 - 延迟导入，避免循环导入问题
+# from api import api_blueprint
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev_key_please_change')
@@ -31,13 +48,16 @@ app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev_key_please_change'
 # 初始化CSRF保护
 csrf = CSRFProtect(app)
 
-# 获取数据库路径
-db_path = os.getenv('DATABASE_PATH', 'instance/tweetAnalyst.db')
+# 简单粗暴：直接从环境变量获取数据库路径，Docker环境已强制设置
+db_path = os.getenv('DATABASE_PATH', '/data/tweetAnalyst.db')
 # 确保路径是绝对路径
 if not os.path.isabs(db_path):
     db_path = os.path.join(os.getcwd(), db_path)
 # 确保目录存在
 os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+# Docker启动脚本已经处理了数据库文件清理，这里直接使用环境变量指定的路径
+
 # 设置数据库URI
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -47,11 +67,97 @@ logger.info(f"数据库路径: {db_path}")
 # 初始化数据库
 db.init_app(app)
 
+# 添加模板过滤器
+@app.template_filter('format_number')
+def format_number(num):
+    """格式化数字显示"""
+    if num is None or num == 0:
+        return '0'
+
+    try:
+        num = int(num)
+        if num < 1000:
+            return str(num)
+        elif num < 10000:
+            return f"{num/1000:.1f}K"
+        elif num < 1000000:
+            return f"{num/10000:.1f}万"
+        else:
+            return f"{num/1000000:.1f}M"
+    except (ValueError, TypeError):
+        return str(num)
+
+# 初始化 Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# 延迟导入API模块，避免循环导入问题
+from api import api_blueprint
 # 注册API蓝图
 app.register_blueprint(api_blueprint)
 
-# 创建Redis替代适配器
-redis_client = DBStateStore()
+# 导入推送通知路由
+try:
+    from routes.push_notifications import push_notifications_bp
+    # 注册推送通知蓝图
+    app.register_blueprint(push_notifications_bp)
+    logger.info("已注册推送通知蓝图")
+except ImportError as e:
+    logger.warning(f"导入推送通知蓝图失败: {str(e)}")
+except Exception as e:
+    logger.error(f"注册推送通知蓝图时出错: {str(e)}")
+
+# 导入AI设置路由
+try:
+    from routes.ai_settings import ai_settings_bp
+    # 注册AI设置蓝图
+    app.register_blueprint(ai_settings_bp)
+    logger.info("已注册AI设置蓝图")
+except ImportError as e:
+    logger.warning(f"导入AI设置蓝图失败: {str(e)}")
+except Exception as e:
+    logger.error(f"注册AI设置蓝图时出错: {str(e)}")
+
+
+
+# 初始化AI轮询服务
+try:
+    from services.ai_polling_service import ai_polling_service
+    # 启动AI轮询服务
+    ai_polling_enabled = get_config('AI_POLLING_ENABLED', 'true').lower() == 'true'
+    if ai_polling_enabled:
+        if ai_polling_service.start():
+            logger.info("已启动AI轮询服务")
+        else:
+            logger.info("AI轮询服务启动失败或已在运行")
+    else:
+        logger.info("AI轮询服务已禁用")
+except ImportError as e:
+    logger.warning(f"导入AI轮询服务失败: {str(e)}")
+except Exception as e:
+    logger.error(f"初始化AI轮询服务时出错: {str(e)}")
+
+# 添加响应头，防止缓存
+@app.after_request
+def add_header(response):
+    """添加响应头，防止缓存"""
+    # 对所有响应添加禁止缓存的头信息
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '-1'
+
+    # 对API响应特别处理
+    if request.path.startswith('/api/'):
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+
+    return response
 
 # 辅助函数
 
@@ -107,12 +213,86 @@ def create_default_admin():
             db.session.rollback()
             return False
 
+def create_default_ai_providers():
+    """创建默认AI提供商（如果不存在）"""
+    try:
+        # 确保在应用上下文中运行
+        with app.app_context():
+            # 检查是否已存在AI提供商
+            if AIProvider.query.first() is not None:
+                logger.debug("已存在AI提供商，不创建默认提供商")
+                return False
+
+            # 从配置中获取API密钥和基础URL
+            # 优先从环境变量获取，避免循环依赖
+            api_key = os.environ.get('LLM_API_KEY', '')
+            api_base = os.environ.get('LLM_API_BASE', 'https://api.openai.com/v1')
+            api_model = os.environ.get('LLM_API_MODEL', 'gpt-4')
+
+            # 如果环境变量中没有，尝试从配置服务获取
+            if not api_key:
+                try:
+                    api_key = get_config('LLM_API_KEY', '')
+                except:
+                    pass
+
+            if not api_base:
+                try:
+                    api_base = get_config('LLM_API_BASE', 'https://api.openai.com/v1')
+                except:
+                    pass
+
+            if not api_model:
+                try:
+                    api_model = get_config('LLM_API_MODEL', 'gpt-4')
+                except:
+                    pass
+
+            # 创建默认AI提供商
+            default_provider = AIProvider(
+                name="默认提供商",
+                model=api_model,
+                api_key=api_key,
+                api_base=api_base,
+                priority=0,
+                is_active=True,
+                supports_text=True,
+                supports_image=False,
+                supports_video=False,
+                supports_gif=False
+            )
+
+            # 创建多模态AI提供商
+            multimodal_provider = AIProvider(
+                name="多模态提供商",
+                model="gpt-4-vision-preview",
+                api_key=api_key,
+                api_base=api_base,
+                priority=1,
+                is_active=True,
+                supports_text=True,
+                supports_image=True,
+                supports_video=False,
+                supports_gif=True
+            )
+
+            db.session.add(default_provider)
+            db.session.add(multimodal_provider)
+            db.session.commit()
+
+            logger.info("已创建默认AI提供商")
+            return True
+    except Exception as e:
+        logger.error(f"创建默认AI提供商时出错: {str(e)}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+        return False
+
 # 配置辅助函数已移动到services/config_service.py
 
 # 状态存储类已移动到services/state_service.py
-
-# 创建Redis替代适配器
-redis_client = DBStateStore()
 
 # 账号和提示词模板函数已移动到utils/yaml_utils.py和services/config_service.py
 
@@ -235,18 +415,37 @@ def index():
                           result_count=result_count,
                           relevant_count=relevant_count)
 
-@app.route('/test')
-def test_page():
-    """测试功能页面"""
+@app.route('/system_status')
+def system_status_page():
+    """系统状态页面"""
     # 检查用户是否已登录
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    # 获取系统状态 - 使用服务模块中的函数，避免循环导入
-    from services.test_service import check_system_status
-    system_status = check_system_status()
+    # 获取系统状态信息
+    from services.system_status_service import get_system_status
+    system_status = get_system_status()
 
-    return render_template('test.html', system_status=system_status)
+    return render_template('system_status.html', system_status=system_status)
+
+@app.route('/test')
+def test_page():
+    """测试功能页面 - 重定向到系统状态页面"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    # 重定向到新的系统状态页面
+    return redirect(url_for('system_status_page'))
+
+@app.route('/test_timeline_debug')
+def test_timeline_debug():
+    """时间线任务调试测试页面"""
+    # 检查用户是否已登录
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    return render_template('test_timeline_debug.html')
 
 @app.route('/analytics')
 def analytics_page():
@@ -368,7 +567,9 @@ def login():
 
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
+            login_user(user)
             session['user_id'] = user.id
+            session['username'] = user.username
             logger.info(f"用户 {username} 登录成功")
             return redirect(url_for('index'))
 
@@ -385,7 +586,9 @@ def logout():
         if user:
             username = user.username
 
+    logout_user()
     session.pop('user_id', None)
+    session.pop('username', None)
 
     if username:
         logger.info(f"用户 {username} 已登出")
@@ -398,6 +601,7 @@ def config():
         return redirect(url_for('login'))
 
     config_path = 'config/social-networks.yml'
+    templates_path = 'config/prompt-templates.yml'
 
     if request.method == 'POST':
         try:
@@ -420,7 +624,123 @@ def config():
         logger.error(f"读取配置文件时出错: {str(e)}")
         config_content = f"# 读取配置文件时出错: {str(e)}"
 
-    return render_template('config.html', config=config_content)
+    # 读取模板配置文件
+    try:
+        if os.path.exists(templates_path):
+            with open(templates_path, 'r', encoding='utf-8') as f:
+                templates_content = f.read()
+                templates_data = yaml.safe_load(templates_content)
+        else:
+            # 创建默认模板配置
+            templates_data = {
+                'templates': {
+                    'finance': get_default_prompt_template('finance'),
+                    'tech': get_default_prompt_template('tech'),
+                    'general': get_default_prompt_template('general')
+                }
+            }
+            # 保存默认模板配置
+            with open(templates_path, 'w', encoding='utf-8') as f:
+                yaml.dump(templates_data, f, allow_unicode=True)
+    except Exception as e:
+        logger.error(f"读取或创建模板配置文件时出错: {str(e)}")
+        templates_data = {
+            'templates': {
+                'finance': get_default_prompt_template('finance'),
+                'tech': get_default_prompt_template('tech'),
+                'general': get_default_prompt_template('general')
+            }
+        }
+
+    # 获取所有账号信息，包括头像URL
+    accounts = SocialAccount.query.all()
+
+    # 创建账号字典，方便在模板中查找账号信息
+    accounts_dict = {}
+    for account in accounts:
+        accounts_dict[account.account_id] = {
+            'id': account.id,
+            'type': account.type,
+            'avatar_url': account.avatar_url,
+            'display_name': account.display_name,
+            'bio': account.bio,
+            'verified': account.verified,
+            'followers_count': account.followers_count,
+            'following_count': account.following_count
+        }
+
+    return render_template('config.html',
+                          config=config_content,
+                          templates=templates_data.get('templates', {}),
+                          accounts=accounts,
+                          accounts_dict=accounts_dict)
+
+@app.route('/api/save_templates', methods=['POST'])
+def save_templates():
+    """保存提示词模板配置"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '未登录'}), 401
+
+    templates_path = 'config/prompt-templates.yml'
+
+    try:
+        # 获取请求数据
+        data = request.json
+        if not data or 'templates' not in data:
+            return jsonify({'success': False, 'message': '无效的请求数据'}), 400
+
+        templates = data['templates']
+
+        # 验证模板数据
+        required_templates = ['finance', 'tech', 'general']
+        for template_name in required_templates:
+            if template_name not in templates:
+                templates[template_name] = get_default_prompt_template(template_name)
+
+        # 保存到配置文件
+        templates_data = {'templates': templates}
+        with open(templates_path, 'w', encoding='utf-8') as f:
+            yaml.dump(templates_data, f, allow_unicode=True)
+
+        logger.info("提示词模板配置已保存")
+        return jsonify({'success': True, 'message': '提示词模板已保存'})
+    except Exception as e:
+        logger.error(f"保存提示词模板配置时出错: {str(e)}")
+        return jsonify({'success': False, 'message': f'保存失败: {str(e)}'}), 500
+
+@app.route('/api/settings/templates', methods=['GET'])
+def get_templates():
+    """获取提示词模板配置"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '未登录'}), 401
+
+    templates_path = 'config/prompt-templates.yml'
+
+    try:
+        # 读取模板配置文件
+        if os.path.exists(templates_path):
+            with open(templates_path, 'r', encoding='utf-8') as f:
+                templates_content = f.read()
+                templates_data = yaml.safe_load(templates_content)
+                templates = templates_data.get('templates', {})
+        else:
+            # 创建默认模板配置
+            templates = {
+                'finance': get_default_prompt_template('finance'),
+                'tech': get_default_prompt_template('tech'),
+                'general': get_default_prompt_template('general')
+            }
+
+            # 保存默认模板配置
+            templates_data = {'templates': templates}
+            with open(templates_path, 'w', encoding='utf-8') as f:
+                yaml.dump(templates_data, f, allow_unicode=True)
+
+        logger.info("提示词模板配置已获取")
+        return jsonify({'success': True, 'templates': templates})
+    except Exception as e:
+        logger.error(f"获取提示词模板配置时出错: {str(e)}")
+        return jsonify({'success': False, 'message': f'获取失败: {str(e)}'}), 500
 
 @app.route('/results')
 def results():
@@ -430,34 +750,107 @@ def results():
     page = request.args.get('page', 1, type=int)
     per_page = 20
 
-    # 过滤条件
+    # 获取筛选参数
     account_id = request.args.get('account_id')
-    is_relevant = request.args.get('is_relevant')
+    platform = request.args.get('platform')
+    relevance = request.args.get('relevance')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    sort = request.args.get('sort', 'time-desc')
+    search = request.args.get('search')
 
+    # 构建查询
     query = AnalysisResult.query
 
-    # 只有当account_id存在且不是'undefined'时才应用筛选
+    # 应用筛选条件
+    # 1. 账号ID筛选
     if account_id and account_id.lower() != 'undefined':
         logger.info(f"按账号ID筛选结果: {account_id}")
         query = query.filter_by(account_id=account_id)
     elif account_id == 'undefined':
         logger.warning("收到无效的account_id参数: 'undefined'，忽略此筛选条件")
 
-    if is_relevant is not None:
-        # 确保is_relevant是有效的布尔值字符串
-        if is_relevant.lower() in ['true', 'false']:
-            is_relevant_bool = is_relevant.lower() == 'true'
-            logger.info(f"按相关性筛选结果: {is_relevant_bool}")
-            query = query.filter_by(is_relevant=is_relevant_bool)
-        else:
-            logger.warning(f"收到无效的is_relevant参数: {is_relevant}，忽略此筛选条件")
+    # 2. 平台筛选
+    if platform:
+        logger.info(f"按平台筛选结果: {platform}")
+        query = query.filter_by(social_network=platform)
 
-    results = query.order_by(AnalysisResult.created_at.desc()).paginate(page=page, per_page=per_page)
+    # 3. 相关性筛选
+    if relevance:
+        if relevance == 'relevant':
+            logger.info("筛选相关结果")
+            query = query.filter_by(is_relevant=True)
+        elif relevance == 'irrelevant':
+            logger.info("筛选不相关结果")
+            query = query.filter_by(is_relevant=False)
+
+    # 4. 日期范围筛选
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+            logger.info(f"筛选从 {from_date} 开始的结果")
+            query = query.filter(AnalysisResult.post_time >= from_date)
+        except ValueError as e:
+            logger.warning(f"无效的日期格式 date_from={date_from}: {e}")
+
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+            logger.info(f"筛选到 {to_date} 结束的结果")
+            query = query.filter(AnalysisResult.post_time <= to_date)
+        except ValueError as e:
+            logger.warning(f"无效的日期格式 date_to={date_to}: {e}")
+
+    # 5. 搜索功能
+    if search:
+        search_term = f"%{search}%"
+        logger.info(f"搜索关键词: {search}")
+        query = query.filter(
+            db.or_(
+                AnalysisResult.content.ilike(search_term),
+                AnalysisResult.account_id.ilike(search_term),
+                AnalysisResult.social_network.ilike(search_term),
+                AnalysisResult.analysis.ilike(search_term)
+            )
+        )
+
+    # 应用排序
+    if sort == 'time-asc':
+        logger.info("按时间升序排序")
+        query = query.order_by(AnalysisResult.post_time.asc())
+    elif sort == 'confidence-desc':
+        logger.info("按置信度降序排序")
+        query = query.order_by(AnalysisResult.confidence.desc())
+    elif sort == 'confidence-asc':
+        logger.info("按置信度升序排序")
+        query = query.order_by(AnalysisResult.confidence.asc())
+    elif sort == 'platform':
+        logger.info("按平台排序")
+        query = query.order_by(AnalysisResult.social_network.asc(), AnalysisResult.post_time.desc())
+    elif sort == 'account':
+        logger.info("按账号排序")
+        query = query.order_by(AnalysisResult.account_id.asc(), AnalysisResult.post_time.desc())
+    else:  # 默认按时间降序排序
+        logger.info("按时间降序排序")
+        query = query.order_by(AnalysisResult.post_time.desc())
+
+    # 分页
+    results = query.paginate(page=page, per_page=per_page)
 
     # 获取所有账号，用于过滤
     accounts = SocialAccount.query.all()
 
-    return render_template('results.html', results=results, accounts=accounts)
+    # 创建账号字典，方便在模板中查找账号信息
+    accounts_dict = {}
+    for account in accounts:
+        accounts_dict[account.account_id] = {
+            'id': account.id,
+            'type': account.type,
+            'avatar_url': account.avatar_url,
+            'display_name': account.display_name
+        }
+
+    return render_template('results.html', results=results, accounts=accounts, accounts_dict=accounts_dict)
 
 # 分析结果API端点已移动到api/analytics.py
 
@@ -479,7 +872,6 @@ def unified_settings():
 
     return render_template('unified_settings.html',
                           config=config,
-                          apprise_urls=config.get('APPRISE_URLS', ''),
                           enable_auto_reply=config.get('ENABLE_AUTO_REPLY', 'false').lower() == 'true',
                           auto_reply_prompt=config.get('AUTO_REPLY_PROMPT', ''),
                           http_proxy=config.get('HTTP_PROXY', ''))
@@ -530,6 +922,20 @@ def add_account():
         prompt_template = request.form.get('prompt_template')
         auto_reply_template = request.form.get('auto_reply_template')
 
+        # AI提供商相关字段
+        ai_provider_id = request.form.get('ai_provider_id')
+        text_provider_id = request.form.get('text_provider_id')
+        image_provider_id = request.form.get('image_provider_id')
+        video_provider_id = request.form.get('video_provider_id')
+        gif_provider_id = request.form.get('gif_provider_id')
+
+        # 转换为整数或None
+        ai_provider_id = int(ai_provider_id) if ai_provider_id and ai_provider_id.isdigit() else None
+        text_provider_id = int(text_provider_id) if text_provider_id and text_provider_id.isdigit() else None
+        image_provider_id = int(image_provider_id) if image_provider_id and image_provider_id.isdigit() else None
+        video_provider_id = int(video_provider_id) if video_provider_id and video_provider_id.isdigit() else None
+        gif_provider_id = int(gif_provider_id) if gif_provider_id and gif_provider_id.isdigit() else None
+
         if not account_type or not account_id:
             flash('平台类型和账号ID不能为空')
             return redirect(url_for('add_account'))
@@ -552,7 +958,12 @@ def add_account():
             enable_auto_reply=enable_auto_reply,
             bypass_ai=bypass_ai,
             prompt_template=prompt_template,
-            auto_reply_template=auto_reply_template
+            auto_reply_template=auto_reply_template,
+            ai_provider_id=ai_provider_id,
+            text_provider_id=text_provider_id,
+            image_provider_id=image_provider_id,
+            video_provider_id=video_provider_id,
+            gif_provider_id=gif_provider_id
         )
 
         db.session.add(new_account)
@@ -632,6 +1043,20 @@ def edit_account(account_id):
         account.prompt_template = request.form.get('prompt_template')
         account.auto_reply_template = request.form.get('auto_reply_template')
 
+        # AI提供商相关字段
+        ai_provider_id = request.form.get('ai_provider_id')
+        text_provider_id = request.form.get('text_provider_id')
+        image_provider_id = request.form.get('image_provider_id')
+        video_provider_id = request.form.get('video_provider_id')
+        gif_provider_id = request.form.get('gif_provider_id')
+
+        # 转换为整数或None
+        account.ai_provider_id = int(ai_provider_id) if ai_provider_id and ai_provider_id.isdigit() else None
+        account.text_provider_id = int(text_provider_id) if text_provider_id and text_provider_id.isdigit() else None
+        account.image_provider_id = int(image_provider_id) if image_provider_id and image_provider_id.isdigit() else None
+        account.video_provider_id = int(video_provider_id) if video_provider_id and video_provider_id.isdigit() else None
+        account.gif_provider_id = int(gif_provider_id) if gif_provider_id and gif_provider_id.isdigit() else None
+
         db.session.commit()
 
         # 同步到配置文件
@@ -672,6 +1097,9 @@ def edit_account(account_id):
 @app.route('/accounts/delete/<account_id>', methods=['POST'])
 def delete_account(account_id):
     if 'user_id' not in session:
+        # 检查请求类型，如果是AJAX请求，返回JSON响应
+        if request.headers.get('Content-Type') == 'application/json':
+            return jsonify({"success": False, "message": "未登录"}), 401
         return redirect(url_for('login'))
 
     # 尝试将account_id转换为整数（兼容旧版本的路由）
@@ -689,15 +1117,41 @@ def delete_account(account_id):
         account = SocialAccount.query.filter_by(account_id=account_id).first_or_404()
         logger.info(f"通过account_id删除账号: {account_id}")
 
-    db.session.delete(account)
-    db.session.commit()
+    try:
+        # 记录要删除的账号信息
+        account_info = f"{account.type}:{account.account_id}"
 
-    # 同步到配置文件
-    sync_accounts_to_yaml()
+        # 删除账号
+        db.session.delete(account)
+        db.session.commit()
 
-    logger.info(f"已删除账号: {account.type}:{account.account_id}")
-    flash('账号已成功删除')
-    return redirect(url_for('accounts'))
+        # 同步到配置文件
+        sync_accounts_to_yaml()
+
+        logger.info(f"已删除账号: {account_info}")
+
+        # 检查请求类型，如果是AJAX请求，返回JSON响应
+        if request.headers.get('Content-Type') == 'application/json':
+            return jsonify({"success": True, "message": "账号已成功删除"})
+
+        # 否则，使用传统的重定向方式
+        flash('账号已成功删除', 'success')
+
+        # 使用绝对URL进行重定向，避免相对路径问题
+        return redirect('/accounts')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"删除账号时出错: {str(e)}")
+
+        # 检查请求类型，如果是AJAX请求，返回JSON响应
+        if request.headers.get('Content-Type') == 'application/json':
+            return jsonify({"success": False, "message": f"删除账号失败: {str(e)}"}), 500
+
+        # 否则，使用传统的重定向方式
+        flash(f'删除账号失败: {str(e)}', 'danger')
+
+        # 使用绝对URL进行重定向，避免相对路径问题
+        return redirect('/accounts')
 
 # 账号API端点已移动到api/accounts.py
 
@@ -722,27 +1176,7 @@ def init_db():
                 db.create_all()
                 logger.info("已创建缺失的表（如果有）")
 
-                # 检查并修复 social_account 表中缺少的 bypass_ai 列
-                try:
-                    # 检查 bypass_ai 列是否存在
-                    columns = [column['name'] for column in inspector.get_columns('social_account')]
-
-                    if 'bypass_ai' not in columns:
-                        logger.info("检测到 social_account 表缺少 bypass_ai 列，尝试添加")
-
-                        # 使用 SQLAlchemy 执行 ALTER TABLE 语句
-                        from sqlalchemy import text
-                        with db.engine.connect() as conn:
-                            conn.execute(text('ALTER TABLE social_account ADD COLUMN bypass_ai BOOLEAN DEFAULT FALSE'))
-                            # 创建索引
-                            conn.execute(text('CREATE INDEX idx_bypass_ai ON social_account (bypass_ai)'))
-                            conn.commit()
-
-                        logger.info("成功添加 bypass_ai 列和索引")
-                    else:
-                        logger.info("bypass_ai 列已存在，无需修复")
-                except Exception as e:
-                    logger.error(f"修复 social_account 表时出错: {str(e)}")
+                # 字段迁移已由统一的迁移系统处理，无需在此重复处理
             else:
                 # 首次创建所有表
                 logger.info("数据库为空，创建所有表")
@@ -854,15 +1288,24 @@ def init_db():
         except Exception as e:
             logger.error(f"创建默认管理员用户时出错: {str(e)}")
 
-        # 运行通知服务表迁移脚本
+        # 创建默认AI提供商
         try:
-            from migrations.add_notification_services_table import run_migration
-            if run_migration():
-                logger.info("通知服务表迁移成功")
+            if create_default_ai_providers():
+                logger.info("创建默认AI提供商成功")
             else:
-                logger.warning("通知服务表迁移失败")
+                logger.debug("未创建默认AI提供商")
         except Exception as e:
-            logger.error(f"运行通知服务表迁移脚本时出错: {str(e)}")
+            logger.error(f"创建默认AI提供商时出错: {str(e)}")
+
+        # 运行统一数据库迁移脚本
+        try:
+            from migrations.db_migrations import run_all_migrations
+            if run_all_migrations():
+                logger.info("数据库迁移成功完成")
+            else:
+                logger.warning("数据库迁移过程中出现错误，请检查日志")
+        except Exception as e:
+            logger.error(f"运行数据库迁移脚本时出错: {str(e)}")
 
     logger.info("数据库初始化完成")
 
@@ -875,7 +1318,7 @@ def export_data():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    # 如果没有参数，重定向到数据传输页面，并显示导出选项卡
+    # 如果没有参数，重定向到数据迁移页面，并显示导出选项卡
     if not request.args:
         return redirect(url_for('data_transfer', tab='export'))
 
@@ -962,10 +1405,10 @@ def export_data():
         flash(f"导出数据失败: {str(e)}", 'danger')
         return redirect(url_for('index'))
 
-# 数据传输功能（导入和导出）
+# 数据迁移功能（导入和导出）
 @app.route('/data_transfer', methods=['GET'])
 def data_transfer():
-    """数据传输页面（导入和导出）"""
+    """数据迁移页面（导入和导出）"""
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
@@ -979,7 +1422,7 @@ def import_data():
         return redirect(url_for('login'))
 
     if request.method == 'GET':
-        # GET请求重定向到数据传输页面，并显示导入选项卡
+        # GET请求重定向到数据迁移页面，并显示导入选项卡
         return redirect(url_for('data_transfer'))
 
     # POST请求处理导入逻辑
@@ -1047,31 +1490,40 @@ def import_data():
         # 导入分析结果数据
         if request.form.get('import_results') == 'on':
             imported_results = 0
-            for result_data in import_data['results']:
-                # 检查结果是否已存在
-                existing = AnalysisResult.query.filter_by(
-                    social_network=result_data['social_network'],
-                    account_id=result_data['account_id'],
-                    post_id=result_data['post_id']
-                ).first()
 
-                if not existing:
-                    # 创建新结果
-                    new_result = AnalysisResult(
+            # 检查是否包含分析结果数据
+            if 'results' in import_data:
+                for result_data in import_data['results']:
+                    # 检查结果是否已存在
+                    existing = AnalysisResult.query.filter_by(
                         social_network=result_data['social_network'],
                         account_id=result_data['account_id'],
-                        post_id=result_data['post_id'],
-                        post_time=datetime.fromisoformat(result_data['post_time']),
-                        content=result_data['content'],
-                        analysis=result_data['analysis'],
-                        is_relevant=result_data['is_relevant']
-                    )
-                    db.session.add(new_result)
-                    imported_results += 1
+                        post_id=result_data['post_id']
+                    ).first()
 
-            if imported_results > 0:
-                db.session.commit()
-                flash(f'成功导入 {imported_results} 条分析结果', 'success')
+                    if not existing:
+                        # 创建新结果
+                        new_result = AnalysisResult(
+                            social_network=result_data['social_network'],
+                            account_id=result_data['account_id'],
+                            post_id=result_data['post_id'],
+                            post_time=datetime.fromisoformat(result_data['post_time']),
+                            content=result_data['content'],
+                            analysis=result_data['analysis'],
+                            is_relevant=result_data['is_relevant']
+                        )
+                        db.session.add(new_result)
+                        imported_results += 1
+
+                if imported_results > 0:
+                    db.session.commit()
+                    flash(f'成功导入 {imported_results} 条分析结果', 'success')
+            else:
+                # 新版本导出文件不包含分析结果数据
+                if is_essential_export:
+                    flash('当前导入的是核心配置文件，不包含分析结果数据。如需导入分析结果，请使用完整数据导出文件。', 'info')
+                else:
+                    flash('导入文件中未找到分析结果数据', 'warning')
 
         # 导入系统配置数据
         if request.form.get('import_configs') == 'on':
@@ -1241,12 +1693,49 @@ def import_data():
         flash(f"导入数据失败: {str(e)}", 'danger')
         return redirect(url_for('data_transfer'))
 
-    # 这行代码不会执行到，但为了完整性保留
-    return redirect(url_for('data_transfer'))
+
 
 if __name__ == '__main__':
-    with app.app_context():
-        init_db()
-        # 加载数据库中的配置到环境变量
-        load_configs_to_env()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    try:
+        with app.app_context():
+            try:
+                # 初始化数据库
+                init_db()
+                logger.info("数据库初始化成功")
+            except Exception as db_error:
+                logger.critical(f"数据库初始化失败: {str(db_error)}")
+                print(f"数据库初始化失败: {str(db_error)}")
+
+            # 使用统一的配置初始化函数
+            try:
+                # 使用应用上下文初始化配置
+                result = service_init_config(force=True, validate=True, app_context=app.app_context())
+
+                if result['success']:
+                    logger.info(f"配置初始化成功: {result['message']}")
+
+                    # 检查是否有缺失的关键配置
+                    if result['missing_configs']:
+                        missing_configs = ', '.join(result['missing_configs'])
+                        logger.warning(f"缺少关键配置: {missing_configs}")
+                        print(f"警告: 缺少关键配置: {missing_configs}")
+                    else:
+                        logger.info("所有关键配置都已设置")
+                else:
+                    logger.warning(f"配置初始化失败: {result['message']}")
+                    print(f"警告: 配置初始化失败: {result['message']}")
+            except Exception as config_error:
+                logger.warning(f"配置初始化失败: {str(config_error)}")
+                print(f"警告: 配置初始化失败: {str(config_error)}")
+
+        # 获取调试模式设置
+        debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+        logger.info(f"调试模式: {'启用' if debug_mode else '禁用'}")
+
+        # 启动Web服务器
+        logger.info("启动Web服务器...")
+        app.run(debug=debug_mode, host='0.0.0.0', port=5000)
+    except Exception as e:
+        logger.critical(f"应用启动失败: {str(e)}")
+        print(f"应用启动失败: {str(e)}")
+        # 在这里可以添加更多的错误处理逻辑

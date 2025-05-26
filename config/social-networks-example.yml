@@ -1,0 +1,46 @@
+social_networks:
+# 示例1：绕过AI判断，直接推送所有内容
+- type: twitter
+  socialNetworkId: elonmusk
+  tag: tech
+  enableAutoReply: false
+  bypass_ai: true  # 设置为true，所有推文将直接推送，不经过AI判断
+
+# 示例2：正常使用AI判断
+- type: twitter
+  socialNetworkId: OpenAI
+  tag: ai
+  enableAutoReply: true
+  bypass_ai: false  # 设置为false（默认值），推文将经过AI判断后再决定是否推送
+  prompt: |
+    你是一个专业的社交媒体内容分析助手。请分析以下推文内容，判断是否值得推送给用户。
+    
+    推文内容: {content}
+    
+    请以JSON格式返回你的分析结果：
+    {
+        "should_push": true/false,  // 是否应该推送
+        "confidence": 0-100,  // 置信度
+        "reason": "推送或不推送的理由",
+        "summary": "内容摘要",
+        "tech_areas": ["领域1", "领域2"]  // 相关技术领域
+    }
+
+# 示例3：未指定bypass_ai，默认使用AI判断
+- type: twitter
+  socialNetworkId: Google
+  tag: tech
+  enableAutoReply: false
+  # 未指定bypass_ai，默认为false
+  prompt: |
+    你是一个专业的社交媒体内容分析助手。请分析以下推文内容，判断是否值得推送给用户。
+    
+    推文内容: {content}
+    
+    请以JSON格式返回你的分析结果：
+    {
+        "should_push": true/false,
+        "confidence": 0-100,
+        "reason": "推送或不推送的理由",
+        "summary": "内容摘要"
+    }

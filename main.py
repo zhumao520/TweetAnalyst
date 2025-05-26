@@ -3,12 +3,11 @@ import os
 import re
 import time
 import logging
+import asyncio
 import concurrent.futures
 from datetime import datetime
-from modules.socialmedia.twitter import fetch as fetchTwitter, auto_reply
-from modules.langchain.llm import get_llm_response_with_cache, LLMAPIError, LLMRateLimitError
-from modules.bots.apprise_adapter import send_notification
-from utils.yaml_utils import load_config_with_env
+
+# 先导入基础模块
 from utils.logger import get_logger
 from dotenv import load_dotenv
 from typing import Dict, Any, Optional, Tuple, List, Union
@@ -16,7 +15,197 @@ from typing import Dict, Any, Optional, Tuple, List, Union
 # 创建日志记录器
 logger = get_logger('main')
 
+# 在导入其他模块之前应用SSL修复
+try:
+    from utils.ssl_fix import apply_ssl_fixes
+    apply_ssl_fixes()
+    logger.info("✅ SSL连接修复已应用")
+except Exception as e:
+    logger.warning(f"⚠️ SSL修复应用失败: {str(e)}")
+    # 继续执行，不阻止程序启动
+
+from modules.socialmedia.twitter import fetch as fetchTwitter, auto_reply
+# 导入twikit作为备选方案
+try:
+    from modules.socialmedia import twitter_twikit
+    TWIKIT_AVAILABLE = True
+    logger.info("Twikit库可用，支持库切换功能")
+except ImportError:
+    TWIKIT_AVAILABLE = False
+    logger.info("Twikit库不可用，仅使用tweety库")
+
+from modules.langchain.llm import get_llm_response_with_cache, LLMAPIError, LLMRateLimitError
+from utils.yaml_utils import load_config_with_env
+
+# 尝试导入队列版本的推送适配器，如果失败则使用原始版本
+try:
+    from modules.bots.apprise_adapter_queue import send_notification
+    logger.info("使用队列版本的推送适配器")
+except ImportError:
+    from modules.bots.apprise_adapter import send_notification
+    logger.info("使用原始版本的推送适配器")
+
+def get_twitter_library_preference():
+    """
+    获取Twitter库偏好设置
+
+    Returns:
+        str: 'tweety', 'twikit', 或 'auto'
+    """
+    try:
+        # 优先从数据库获取配置
+        from services.config_service import get_config
+
+        library_preference = get_config('TWITTER_LIBRARY')
+        if library_preference and library_preference.strip():
+            preference = library_preference.strip().lower()
+            if preference in ['tweety', 'twikit', 'auto']:
+                logger.info(f"使用数据库中的Twitter库设置: {preference}")
+                return preference
+    except Exception as e:
+        logger.warning(f"从数据库获取Twitter库设置时出错: {str(e)}，回退到环境变量")
+
+    # 回退到环境变量
+    env_preference = os.getenv('TWITTER_LIBRARY', 'auto').strip().lower()
+    if env_preference in ['tweety', 'twikit', 'auto']:
+        logger.info(f"使用环境变量中的Twitter库设置: {env_preference}")
+        return env_preference
+
+    # 默认值
+    logger.info("使用默认Twitter库设置: auto")
+    return 'auto'
+
+# 创建日志记录器
+logger = get_logger('main')
+
+async def fetch_twitter_posts_smart(user_id: str, limit: int = None, task_type: str = "account"):
+    """
+    智能Twitter抓取函数，根据配置选择使用tweety或twikit库
+
+    Args:
+        user_id (str): Twitter用户ID
+        limit (int): 限制返回的推文数量
+        task_type (str): 任务类型 - "account"(账号抓取) 或 "timeline"(时间线抓取)
+
+    Returns:
+        list[Post]: 帖子列表
+    """
+    library_preference = get_twitter_library_preference()
+
+    # 如果是时间线任务，只能使用支持时间线的库
+    if task_type == "timeline":
+        if library_preference == "tweety":
+            logger.info("时间线任务：使用tweety库")
+            try:
+                from modules.socialmedia.twitter import get_timeline_posts_async
+                return await get_timeline_posts_async(limit or 20)
+            except Exception as e:
+                logger.error(f"tweety时间线抓取失败: {str(e)}")
+                if TWIKIT_AVAILABLE:
+                    logger.info("尝试使用twikit作为备选方案")
+                    return await twitter_twikit.fetch_timeline_tweets(limit or 20)
+                return []
+        elif library_preference == "twikit":
+            if TWIKIT_AVAILABLE:
+                logger.info("时间线任务：使用twikit库")
+                return await twitter_twikit.fetch_timeline_tweets(limit or 20)
+            else:
+                logger.warning("twikit库不可用，回退到tweety")
+                try:
+                    from modules.socialmedia.twitter import get_timeline_posts_async
+                    return await get_timeline_posts_async(limit or 20)
+                except Exception as e:
+                    logger.error(f"tweety时间线抓取失败: {str(e)}")
+                    return []
+        else:  # auto
+            logger.info("时间线任务：自动选择库")
+            # 优先尝试tweety
+            try:
+                from modules.socialmedia.twitter import get_timeline_posts_async
+                posts = await get_timeline_posts_async(limit or 20)
+                if posts:
+                    logger.info("时间线任务：tweety库成功")
+                    return posts
+            except Exception as e:
+                logger.warning(f"tweety时间线抓取失败: {str(e)}")
+
+            # 备选twikit
+            if TWIKIT_AVAILABLE:
+                logger.info("时间线任务：尝试twikit备选方案")
+                return await twitter_twikit.fetch_timeline_tweets(limit or 20)
+
+            return []
+
+    # 账号抓取任务
+    else:
+        if library_preference == "tweety":
+            logger.info(f"账号抓取任务：使用tweety库获取 {user_id}")
+            posts = fetchTwitter(user_id, limit)
+            if not posts and TWIKIT_AVAILABLE:
+                logger.info("tweety失败，尝试twikit备选方案")
+                return await twitter_twikit.fetch_tweets(user_id, limit)
+            return posts
+        elif library_preference == "twikit":
+            if TWIKIT_AVAILABLE:
+                logger.info(f"账号抓取任务：使用twikit库获取 {user_id}")
+                return await twitter_twikit.fetch_tweets(user_id, limit)
+            else:
+                logger.warning("twikit库不可用，回退到tweety")
+                return fetchTwitter(user_id, limit)
+        else:  # auto
+            logger.info(f"账号抓取任务：自动选择库获取 {user_id}")
+            # 优先尝试tweety
+            posts = fetchTwitter(user_id, limit)
+            if posts:
+                logger.info("账号抓取任务：tweety库成功")
+                return posts
+
+            # 备选twikit
+            if TWIKIT_AVAILABLE:
+                logger.info("账号抓取任务：尝试twikit备选方案")
+                return await twitter_twikit.fetch_tweets(user_id, limit)
+
+            return posts  # 返回tweety的结果（可能为空）
+
+# 加载环境变量
 load_dotenv()
+
+# 初始化配置（使用统一的配置服务）
+def init_config():
+    """
+    初始化配置：从数据库加载最新配置到环境变量
+    这确保了即使在Web界面更改了配置，后台程序也能使用最新的设置
+
+    Returns:
+        dict: 包含初始化结果的字典
+    """
+    try:
+        # 导入配置服务
+        from services.config_service import init_config as service_init_config
+
+        # 使用统一的配置初始化函数
+        logger.info("初始化配置")
+        result = service_init_config(force=True, validate=True)
+
+        if result['success']:
+            logger.info(f"配置初始化成功: {result['message']}")
+            if result['missing_configs']:
+                logger.warning(f"缺少 {len(result['missing_configs'])} 个关键配置: {', '.join(result['missing_configs'])}")
+        else:
+            logger.warning(f"配置初始化失败: {result['message']}")
+
+        return result
+    except Exception as e:
+        logger.error(f"初始化配置时出错: {str(e)}")
+        return {
+            'success': False,
+            'message': f"初始化配置时出错: {str(e)}",
+            'missing_configs': [],
+            'configs': {}
+        }
+
+# 避免在模块级别初始化配置，改为在需要时初始化
+# init_config()
 
 # 辅助函数
 
@@ -106,7 +295,7 @@ def process_llm_result(format_result: Dict[str, Any], is_old_format: bool, conte
 
 def call_llm_with_retry(prompt: str, account_type: str, account_id: str) -> Optional[Dict[str, Any]]:
     """
-    调用LLM并解析响应，支持重试
+    调用LLM并解析响应，支持重试和多AI提供商
 
     Args:
         prompt: 提示词
@@ -119,6 +308,7 @@ def call_llm_with_retry(prompt: str, account_type: str, account_id: str) -> Opti
     format_result = None
     rawData = ''
     retry_count = 0
+    provider_info = {}
 
     # 在某些情况下，LLM会返回一些非法的json字符串，所以这里需要循环尝试，直到解析成功为止
     while format_result is None and retry_count < LLM_PROCESS_MAX_RETRIED:
@@ -131,13 +321,35 @@ def call_llm_with_retry(prompt: str, account_type: str, account_id: str) -> Opti
             logger.debug("调用LLM进行内容分析")
 
             # 使用带缓存的LLM响应获取
-            rawData = get_llm_response_with_cache(prompt, use_cache=USE_LLM_CACHE)
+            try:
+                # 尝试使用多AI提供商版本
+                rawData, provider_info = get_llm_response_with_cache(prompt, use_cache=USE_LLM_CACHE)
+
+                # 记录使用的AI提供商信息
+                if provider_info and 'provider_id' in provider_info:
+                    logger.info(f"使用AI提供商ID: {provider_info['provider_id']}")
+                    if 'model' in provider_info:
+                        logger.info(f"使用模型: {provider_info['model']}")
+                    if 'cached' in provider_info:
+                        logger.info(f"使用缓存: {'是' if provider_info['cached'] else '否'}")
+            except Exception as e:
+                # 如果多AI提供商版本失败，回退到单一AI提供商版本
+                logger.warning(f"多AI提供商调用失败，回退到单一AI提供商: {str(e)}")
+                rawData = get_llm_response_with_cache(prompt, use_cache=USE_LLM_CACHE)
+                provider_info = {}
 
             # 解析LLM响应
             format_result = parse_llm_response(rawData)
 
             if format_result:
                 logger.info(f"成功解析LLM响应")
+
+                # 如果有提供商信息，添加到结果中
+                if provider_info:
+                    if 'provider_id' in provider_info:
+                        format_result['ai_provider_id'] = provider_info['provider_id']
+                    if 'model' in provider_info:
+                        format_result['ai_model'] = provider_info['model']
             else:
                 logger.warning(f"解析LLM响应失败，尝试重试")
                 retry_count += 1
@@ -159,73 +371,33 @@ def call_llm_with_retry(prompt: str, account_type: str, account_id: str) -> Opti
 
     return format_result
 
-def load_env_from_file(env_file: str = '/data/.env') -> Dict[str, str]:
-    """
-    从环境变量文件加载配置
-
-    Args:
-        env_file: 环境变量文件路径
-
-    Returns:
-        Dict[str, str]: 加载的环境变量字典
-    """
-    env_vars = {}
-
-    if not os.path.exists(env_file):
-        logger.debug(f"环境变量文件不存在: {env_file}")
-        return env_vars
-
-    try:
-        with open(env_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-
-                if '=' in line:
-                    key, value = line.split('=', 1)
-                    key = key.strip()
-                    value = value.strip()
-
-                    # 如果有引号，去掉引号
-                    if value.startswith('"') and value.endswith('"'):
-                        value = value[1:-1]
-                    elif value.startswith("'") and value.endswith("'"):
-                        value = value[1:-1]
-
-                    env_vars[key] = value
-
-                    # 设置环境变量
-                    os.environ[key] = value
-                    logger.debug(f"从{env_file}加载环境变量: {key}")
-
-        return env_vars
-    except Exception as e:
-        logger.error(f"读取环境变量文件时出错: {e}")
-        return env_vars
-
 def ensure_env_vars() -> None:
     """
-    确保必要的环境变量已设置
+    确保必要的环境变量已设置（使用统一的配置服务）
     """
-    # 检查APPRISE_URLS是否已设置
-    if 'APPRISE_URLS' not in os.environ:
-        load_env_from_file()
+    try:
+        # 使用配置服务确保环境变量已设置
+        from services.config_service import ensure_env_vars as service_ensure_env_vars
+        service_ensure_env_vars()
+    except ImportError:
+        # 如果配置服务不可用，使用基本的环境变量设置
+        logger.warning("配置服务不可用，使用基本的环境变量设置")
 
-    # 检查HTTP_PROXY是否已设置
-    if 'HTTP_PROXY' in os.environ:
-        # 同时设置http_proxy和https_proxy（小写版本）
-        http_proxy = os.environ['HTTP_PROXY']
-        os.environ['http_proxy'] = http_proxy
-        os.environ['HTTPS_PROXY'] = http_proxy
-        os.environ['https_proxy'] = http_proxy
+        # 检查HTTP_PROXY是否已设置
+        if 'HTTP_PROXY' in os.environ:
+            # 同时设置http_proxy和https_proxy（小写版本）
+            http_proxy = os.environ['HTTP_PROXY']
+            os.environ['http_proxy'] = http_proxy
+            os.environ['HTTPS_PROXY'] = http_proxy
+            os.environ['https_proxy'] = http_proxy
 
 def send_push_notification(
     post: Any,
     summary: str,
     reason: str,
     tag: str,
-    is_ai_decision: bool = True
+    is_ai_decision: bool = True,
+    use_queue: bool = True
 ) -> bool:
     """
     发送推送通知
@@ -236,6 +408,7 @@ def send_push_notification(
         reason: 推送原因
         tag: 标签
         is_ai_decision: 是否是AI决定推送
+        use_queue: 是否使用队列，如果为False则直接发送
 
     Returns:
         bool: 是否成功发送
@@ -251,30 +424,103 @@ def send_push_notification(
 
     # 构建通知消息
     decision_type = "AI推送理由" if is_ai_decision else "直接推送"
-    markdown_msg = f"""# [{post.poster_name}]({post.poster_url}) {post_time.strftime('%Y-%m-%d %H:%M:%S')}
 
-{processed_summary}
+    # 获取完整的原始内容
+    original_content = post.content if hasattr(post, 'content') else ""
+
+    # 处理可能包含转义换行符的AI分析内容
+    processed_summary = summary.replace('\\n', '\n')
+
+    # 基本消息内容 - 包含完整原始内容和AI分析
+    if is_ai_decision and processed_summary and processed_summary.strip() != original_content.strip():
+        # 如果有AI分析且与原始内容不同，则显示AI分析
+        markdown_msg = f"""# [{post.poster_name}]({post.poster_url}) {post_time.strftime('%Y-%m-%d %H:%M:%S')}
+
+{original_content}
+
+**AI分析**: {processed_summary}
 
 **{decision_type}**: {reason}
 
-origin: [{post.url}]({post.url})"""
+origin: {post.url}"""
+    else:
+        # 如果没有AI分析或AI分析与原始内容相同，只显示原始内容
+        markdown_msg = f"""# [{post.poster_name}]({post.poster_url}) {post_time.strftime('%Y-%m-%d %H:%M:%S')}
 
-    # 确保tag是字符串
-    tag_str = str(tag) if tag is not None else 'all'
+{original_content}
+
+**{decision_type}**: {reason}
+
+origin: {post.url}"""
+
+    # 添加媒体内容（如果有）
+    media_urls = []
+    if hasattr(post, 'has_media') and callable(getattr(post, 'has_media')) and post.has_media():
+        media_info = post.get_media_info()
+        if media_info:
+            # 添加媒体内容标题
+            markdown_msg += "\n\n**媒体内容**:"
+
+            # 最多显示3个媒体内容，避免消息过长
+            max_media = 3
+            for i, media in enumerate(media_info[:max_media]):
+                media_url = media.get('url', '')
+                media_type = media.get('type', 'image')
+
+                # 收集媒体URL
+                if media_url:
+                    media_urls.append(media_url)
+
+                # 根据媒体类型添加不同的标记，直接显示链接地址
+                if media_type == 'video':
+                    markdown_msg += f"\n- 视频: {media_url}"
+                elif media_type == 'gif':
+                    markdown_msg += f"\n- GIF: {media_url}"
+                else:  # 默认为图片
+                    markdown_msg += f"\n- 图片: {media_url}"
+
+            # 如果有更多媒体内容，添加提示
+            if len(media_info) > max_media:
+                markdown_msg += f"\n- 还有 {len(media_info) - max_media} 个媒体内容未显示"
+
+    # 确保tag是字符串，并且添加'all'标签确保所有推送服务都能收到
+    tag_str = 'all'
+    if tag is not None and str(tag) != 'all':
+        # 使用逗号分隔的标签列表，确保包含'all'标签
+        tag_str = f"{str(tag)},all"
+
+    # 记录使用的标签
+    logger.info(f"推送通知使用标签: {tag_str}")
 
     try:
+        # 获取帖子ID和账号ID
+        post_id = getattr(post, 'id', None)
+        account_id = getattr(post, 'account_id', None)
+
+        # 准备元数据
+        metadata = {
+            'is_ai_decision': is_ai_decision,
+            'post_url': getattr(post, 'url', None),
+            'post_time': post_time.isoformat() if post_time else None,
+            'media_urls': media_urls if media_urls else None
+        }
+
         # 发送通知
         notification_result = send_notification(
             message=markdown_msg,
             title=f"来自 {post.poster_name} 的更新",
-            tag=tag_str
+            tag=tag_str,
+            account_id=account_id,
+            post_id=post_id,
+            metadata=metadata,
+            use_queue=use_queue
         )
 
         if notification_result:
-            logger.info("通知发送成功")
+            logger.info("通知已加入队列或发送成功")
             return True
         else:
-            logger.warning("通知发送失败")
+            logger.warning("通知加入队列或发送失败")
             return False
     except Exception as e:
         logger.error(f"发送通知时出错: {str(e)}")
@@ -288,7 +534,9 @@ def save_analysis_to_db(
     is_relevant: bool,
     confidence: int,
     reason: str,
-    save_to_db: bool = True
+    save_to_db: bool = True,
+    ai_provider: str = None,
+    ai_model: str = None
 ) -> bool:
     """
     保存分析结果到数据库
@@ -302,6 +550,8 @@ def save_analysis_to_db(
         confidence: 置信度
         reason: 原因
         save_to_db: 是否保存到数据库
+        ai_provider: AI提供商ID或名称
+        ai_model: AI模型名称
 
     Returns:
         bool: 是否成功保存
@@ -316,8 +566,61 @@ def save_analysis_to_db(
         post_time = post.get_local_time()
         content = post.content
 
+        # 处理媒体内容
+        has_media = False
+        media_content = None
+
+        if hasattr(post, 'has_media') and callable(getattr(post, 'has_media')) and post.has_media():
+            has_media = True
+            if hasattr(post, 'get_media_info') and callable(getattr(post, 'get_media_info')):
+                media_info = post.get_media_info()
+                if media_info:
+                    import json
+                    media_content = json.dumps(media_info)
+                    logger.debug(f"保存媒体内容，数量: {len(media_info)}")
+
         # 确保在应用上下文中执行数据库操作
         with app.app_context():
+            # 检查是否已存在相同的记录
+            existing_result = AnalysisResult.query.filter_by(
+                social_network=account_type,
+                account_id=account_id,
+                post_id=post.id
+            ).first()
+
+            if existing_result:
+                logger.info(f"已存在相同的分析结果记录，跳过保存: {existing_result.id}")
+
+                # 如果需要更新现有记录的某些字段，可以在这里添加代码
+                # 例如，如果新的置信度更高，可以更新现有记录
+                if hasattr(existing_result, 'confidence') and confidence > existing_result.confidence:
+                    logger.info(f"更新现有记录的置信度: {existing_result.confidence} -> {confidence}")
+                    existing_result.confidence = confidence
+                    existing_result.is_relevant = is_relevant
+                    existing_result.analysis = summary
+                    existing_result.reason = reason
+
+                    # 更新AI提供商信息（如果有）
+                    if hasattr(existing_result, 'ai_provider') and ai_provider:
+                        existing_result.ai_provider = str(ai_provider)
+                    if hasattr(existing_result, 'ai_model') and ai_model:
+                        existing_result.ai_model = ai_model
+
+                    db.session.commit()
+                    logger.debug("已更新现有分析结果记录")
+
+                return True
+
+            # 获取头像URL（如果有）
+            poster_avatar_url = getattr(post, 'poster_avatar_url', None)
+
+            # 获取发布者真实用户名（如果有）
+            poster_name = getattr(post, 'poster_name', None)
+            if not poster_name:
+                # 如果没有poster_name，尝试从其他字段获取
+                poster_name = getattr(post, 'original_author', None) or getattr(post, 'account_id', None) or account_id
+
+            # 创建基本的分析结果对象
             db_result = AnalysisResult(
                 social_network=account_type,
                 account_id=account_id,
@@ -327,8 +630,23 @@ def save_analysis_to_db(
                 analysis=summary,
                 is_relevant=is_relevant,
                 confidence=confidence,
-                reason=reason
+                reason=reason,
+                poster_avatar_url=poster_avatar_url,
+                poster_name=poster_name
             )
+
+            # 添加媒体内容（如果有）
+            if hasattr(db_result, 'has_media'):
+                db_result.has_media = has_media
+            if hasattr(db_result, 'media_content') and media_content:
+                db_result.media_content = media_content
+
+            # 添加AI提供商信息（如果有）
+            if hasattr(db_result, 'ai_provider') and ai_provider:
+                db_result.ai_provider = str(ai_provider)
+            if hasattr(db_result, 'ai_model') and ai_model:
+                db_result.ai_model = ai_model
+
             db.session.add(db_result)
             db.session.commit()
             logger.debug("分析结果已保存到数据库")
@@ -336,9 +654,17 @@ def save_analysis_to_db(
     except Exception as e:
         logger.error(f"保存分析结果到数据库时出错: {str(e)}")
         try:
-            if 'db' in locals() and hasattr(db, 'session'):
-                with app.app_context():
-                    db.session.rollback()
+            # 确保db和app都在当前上下文中可用
+            if 'db' in locals() and 'app' in locals() and hasattr(db, 'session'):
+                # 使用安全的方式回滚事务
+                try:
+                    with app.app_context():
+                        db.session.rollback()
+                except RuntimeError:
+                    # 如果应用上下文不可用，记录错误但不中断程序
+                    logger.error("无法在应用上下文外回滚事务，跳过回滚操作")
+            else:
+                logger.warning("数据库会话不可用，跳过回滚操作")
         except Exception as rollback_error:
             logger.error(f"回滚事务时出错: {str(rollback_error)}")
         return False
@@ -597,7 +923,9 @@ def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = F
                 is_relevant=True,
                 confidence=confidence,
                 reason=reason,
-                save_to_db=save_to_db
+                save_to_db=save_to_db,
+                ai_provider="direct_push",  # 直接推送，不是AI决定
+                ai_model="none"
             )
 
             return result
@@ -624,7 +952,9 @@ def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = F
                 is_relevant=False,
                 confidence=0,
                 reason="LLM API调用失败",
-                save_to_db=save_to_db
+                save_to_db=save_to_db,
+                ai_provider="error",
+                ai_model="error"
             )
 
             return result
@@ -655,6 +985,10 @@ def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = F
                 logger.debug(f"不推送原因: {reason}")
                 logger.debug(f"内容: {content[:100]}..." if len(content) > 100 else content)
 
+            # 获取AI提供商信息（如果有）
+            ai_provider = format_result.get('ai_provider_id', None)
+            ai_model = format_result.get('ai_model', None)
+
             # 保存到数据库
             save_analysis_to_db(
                 post=post,
@@ -664,7 +998,9 @@ def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = F
                 is_relevant=False,
                 confidence=confidence,
                 reason=reason,
-                save_to_db=save_to_db
+                save_to_db=save_to_db,
+                ai_provider=ai_provider,
+                ai_model=ai_model
             )
 
             return result
@@ -697,6 +1033,10 @@ def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = F
             except Exception as e:
                 logger.error(f"自动回复时出错: {str(e)}")
 
+        # 获取AI提供商信息（如果有）
+        ai_provider = format_result.get('ai_provider_id', None)
+        ai_model = format_result.get('ai_model', None)
+
         # 保存分析结果到数据库
         save_analysis_to_db(
             post=post,
@@ -706,7 +1046,9 @@ def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = F
             is_relevant=True,
             confidence=confidence,
             reason=reason,
-            save_to_db=save_to_db
+            save_to_db=save_to_db,
+            ai_provider=ai_provider,
+            ai_model=ai_model
         )
 
         return result
@@ -743,12 +1085,12 @@ def process_account_posts(account: Dict[str, Any], enable_auto_reply: bool = Fal
     error_count = 0
 
     try:
-        # 获取帖子
+        # 获取帖子 - 使用智能抓取
         posts = []
         if account_type == 'twitter':
-            posts = fetchTwitter(account_id)
+            posts = asyncio.run(fetch_twitter_posts_smart(account_id, None, "account"))
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"从 Twitter 账号 {account_id} 获取到 {len(posts)} 条新帖子")
+                logger.debug(f"从 Twitter 账号 {account_id} 智能抓取到 {len(posts)} 条新帖子")
 
         # 如果没有新帖子，直接返回
         if not posts:
@@ -820,20 +1162,34 @@ def process_timeline_posts(enable_auto_reply: bool = False, auto_reply_prompt: s
     ensure_env_vars()
 
     try:
-        # 获取时间线推文
-        from modules.socialmedia.twitter import fetch_timeline
-        posts = fetch_timeline()
+        # 获取时间线推文 - 使用智能抓取
+        logger.info("正在使用智能抓取获取时间线推文...")
+
+        # 导入新的智能抓取接口
+        from modules.socialmedia.smart_fetch import fetch_twitter_posts_smart
+        from modules.socialmedia.async_utils import safe_asyncio_run
+
+        posts = safe_asyncio_run(fetch_twitter_posts_smart(None, 20, "timeline"))
+        logger.info(f"智能抓取返回结果：{len(posts) if posts else 0} 条推文")
+
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"从时间线获取到 {len(posts)} 条推文")
 
         # 如果没有新推文，直接返回
         if not posts:
-            logger.info("时间线上未发现有更新的内容")
+            logger.warning("⚠️ 时间线上未发现有更新的内容")
+            logger.warning("可能的原因：")
+            logger.warning("1. Twitter账号未关注任何人")
+            logger.warning("2. 关注的账号最近没有发推文")
+            logger.warning("3. Twitter客户端认证失败")
+            logger.warning("4. 网络连接或代理问题")
+            logger.warning("5. Twitter API限制或账号被限制")
             return (0, 0)
 
         total = len(posts)
 
         # 创建一个虚拟账号配置，用于处理时间线推文
+        # 注意：现在推文保留了原始作者信息，通过source_type来识别来源
         timeline_account = {
             'type': 'twitter',
             'socialNetworkId': 'timeline',
@@ -868,8 +1224,9 @@ def process_timeline_posts(enable_auto_reply: bool = False, auto_reply_prompt: s
             post = post_queue.pop(0)
 
             try:
-                # 处理推文
-                logger.info(f"处理第 {processed_count + 1}/{total} 条时间线推文，ID: {post.id}")
+                # 处理推文，显示原始作者信息
+                author_info = f"作者: {post.poster_name}" if hasattr(post, 'poster_name') else ""
+                logger.info(f"处理第 {processed_count + 1}/{total} 条时间线推文，ID: {post.id} {author_info}")
                 result = process_post(post, timeline_account, enable_auto_reply, auto_reply_prompt, save_to_db)
 
                 # 更新计数
@@ -902,6 +1259,9 @@ def main() -> None:
     logger.info("开始执行社交媒体监控任务")
 
     try:
+        # 确保配置已初始化
+        init_config()
+
         # 确保环境变量已设置
         ensure_env_vars()
 

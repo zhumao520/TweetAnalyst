@@ -1,143 +1,142 @@
+#!/usr/bin/env python3
 """
 定时任务启动脚本
 """
 import time
 import schedule
-import main
 import os
-import datetime
+import subprocess
+import threading
 from dotenv import load_dotenv
 import sys
 
 # 添加当前目录到路径，确保能导入web_app模块
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# 导入配置加载函数
+# 导入日志设置函数
+from utils.logger import setup_third_party_logging
+
+# 设置第三方库的日志级别，减少不必要的日志输出
+setup_third_party_logging()
+
+# 导入配置和数据库初始化函数
 try:
-    from web_app import load_configs_to_env, init_db
-    from models import db, AnalysisResult
-    # 初始化数据库并加载配置
+    from web_app import init_db
+    from services.config_service import init_config
+
+    # 初始化数据库
     init_db()
-    load_configs_to_env()
+
+    # 使用统一的配置初始化函数
+    # 创建应用上下文
+    from web_app import app
+    with app.app_context() as ctx:
+        if init_config(app_context=ctx):
+            print("配置初始化成功")
+        else:
+            print("配置初始化失败，将使用环境变量中的配置")
 except ImportError:
-    print("警告: 无法导入web_app模块，将使用环境变量中的配置")
+    print("警告: 无法导入必要模块，将使用环境变量中的配置")
 
 load_dotenv()
 
+# 全局变量跟踪正在运行的任务
+running_tasks = {}
+task_lock = threading.Lock()
+
 def job():
     """
-    执行主程序
+    执行主程序（使用独立进程，避免阻塞调度器）
     """
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始执行社交媒体监控任务...")
+    task_id = f"social_media_task_{int(time.time())}"
+
+    with task_lock:
+        # 检查是否有任务正在运行
+        if running_tasks:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务已在运行中，跳过本次执行")
+            # 清理已完成的任务
+            completed_tasks = [tid for tid, process in running_tasks.items() if process.poll() is not None]
+            for tid in completed_tasks:
+                process = running_tasks.pop(tid)
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 任务 {tid} 已完成，返回码: {process.returncode}")
+            return
+
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始执行社交媒体监控任务 {task_id}...")
+
     try:
-        main.main()
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务执行完成")
+        # 使用独立进程执行主程序
+        python_executable = sys.executable
+        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
+
+        # 启动独立进程
+        process = subprocess.Popen(
+            [python_executable, script_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=os.path.dirname(os.path.abspath(__file__))
+        )
+
+        with task_lock:
+            running_tasks[task_id] = process
+
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务 {task_id} 已启动，PID: {process.pid}")
+
+        # 启动线程监控任务完成
+        monitor_thread = threading.Thread(target=monitor_task, args=(task_id, process))
+        monitor_thread.daemon = True
+        monitor_thread.start()
+
     except Exception as e:
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务执行出错: {e}")
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 启动社交媒体监控任务时出错: {e}")
+        with task_lock:
+            if task_id in running_tasks:
+                del running_tasks[task_id]
 
-def auto_clean_database():
+def monitor_task(task_id, process):
     """
-    自动清理数据库
-    根据配置清理旧数据或保持每个账号的记录数在限制范围内
+    监控任务执行状态
     """
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始执行数据库自动清理任务...")
-
     try:
-        # 从环境变量获取配置
-        clean_by_count = os.getenv('DB_CLEAN_BY_COUNT', 'false').lower() == 'true'
-        max_records = int(os.getenv('DB_MAX_RECORDS_PER_ACCOUNT', '100'))
-        retention_days = int(os.getenv('DB_RETENTION_DAYS', '30'))
-        clean_irrelevant_only = os.getenv('DB_CLEAN_IRRELEVANT_ONLY', 'true').lower() == 'true'
+        # 等待进程完成
+        stdout, stderr = process.communicate()
 
-        # 根据配置选择清理方式
-        if clean_by_count:
-            # 基于数量的清理
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 使用基于数量的清理方式，每个账号保留最新的 {max_records} 条{'不相关' if clean_irrelevant_only else ''}记录")
+        with task_lock:
+            if task_id in running_tasks:
+                del running_tasks[task_id]
 
-            # 获取所有不同的账号ID
-            with db.app.app_context():
-                account_ids = db.session.query(AnalysisResult.account_id).distinct().all()
-                account_ids = [account[0] for account in account_ids]
-
-                total_deleted = 0
-
-                # 对每个账号分别处理
-                for account_id in account_ids:
-                    # 构建查询
-                    if clean_irrelevant_only:
-                        # 只清理不相关的记录
-                        query = AnalysisResult.query.filter_by(account_id=account_id, is_relevant=False)
-                    else:
-                        # 清理所有记录
-                        query = AnalysisResult.query.filter_by(account_id=account_id)
-
-                    # 获取该账号的记录，按时间降序排序
-                    records = query.order_by(AnalysisResult.post_time.desc()).all()
-
-                    # 如果记录数超过最大值，删除多余的记录
-                    if len(records) > max_records:
-                        # 获取要删除的记录ID
-                        records_to_delete = records[max_records:]
-                        delete_ids = [record.id for record in records_to_delete]
-
-                        # 删除记录
-                        deleted_count = AnalysisResult.query.filter(AnalysisResult.id.in_(delete_ids)).delete()
-                        total_deleted += deleted_count
-
-                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 已清理账号 {account_id} 的 {deleted_count} 条{'不相关' if clean_irrelevant_only else ''}记录")
-
-                # 提交事务
-                db.session.commit()
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 数据库自动清理完成，共清理 {total_deleted} 条记录")
+        if process.returncode == 0:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务 {task_id} 执行完成")
+            if stdout:
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 任务输出: {stdout.strip()}")
         else:
-            # 基于时间的清理
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 使用基于时间的清理方式，清理超过 {retention_days} 天的{'不相关' if clean_irrelevant_only else ''}数据")
-
-            # 计算截止日期
-            cutoff_date = datetime.datetime.now() - datetime.timedelta(days=retention_days)
-
-            with db.app.app_context():
-                # 构建查询
-                query = AnalysisResult.query.filter(AnalysisResult.created_at < cutoff_date)
-
-                if clean_irrelevant_only:
-                    # 只清理不相关的记录
-                    query = query.filter(AnalysisResult.is_relevant == False)
-
-                # 执行删除
-                deleted_count = query.delete()
-
-                # 提交事务
-                db.session.commit()
-
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 数据库自动清理完成，共清理 {deleted_count} 条超过 {retention_days} 天的{'不相关' if clean_irrelevant_only else ''}数据")
-
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务 {task_id} 执行失败，返回码: {process.returncode}")
+            if stderr:
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 错误信息: {stderr.strip()}")
     except Exception as e:
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 数据库自动清理任务执行出错: {e}")
-        try:
-            db.session.rollback()
-        except:
-            pass
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 监控任务 {task_id} 时出错: {e}")
+        with task_lock:
+            if task_id in running_tasks:
+                del running_tasks[task_id]
 
 if __name__ == "__main__":
     # 获取执行间隔（分钟）
     interval_minutes = int(os.getenv("SCHEDULER_INTERVAL_MINUTES", "30"))
 
-    # 设置定时任务
-    schedule.every(interval_minutes).minutes.do(job)
+    # 检查是否启用自动抓取
+    auto_fetch_enabled = os.getenv('AUTO_FETCH_ENABLED', 'false').lower() == 'true'
 
-    # 设置数据库自动清理任务
-    # 默认每天凌晨3点执行一次
-    auto_clean_enabled = os.getenv('DB_AUTO_CLEAN_ENABLED', 'false').lower() == 'true'
-    if auto_clean_enabled:
-        auto_clean_time = os.getenv('DB_AUTO_CLEAN_TIME', '03:00')
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 已启用数据库自动清理，将在每天 {auto_clean_time} 执行")
-        schedule.every().day.at(auto_clean_time).do(auto_clean_database)
+    if auto_fetch_enabled:
+        # 设置定时任务
+        schedule.every(interval_minutes).minutes.do(job)
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 已启用自动抓取，每 {interval_minutes} 分钟执行一次")
+    else:
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 自动抓取已禁用，请通过Web界面手动启动抓取任务")
 
-    print(f"定时任务已启动，每 {interval_minutes} 分钟执行一次")
-
-    # 立即执行一次
-    job()
+    # 如果启用了自动抓取，立即执行一次
+    if auto_fetch_enabled:
+        print(f"定时任务已启动，每 {interval_minutes} 分钟执行一次")
+        job()
 
     # 循环执行定时任务
     while True:
