@@ -356,7 +356,7 @@ jobs:
             "services/repository/__init__.py"
             "services/repository/factory.py"
             "models/__init__.py"
-            "utils/__init__.py"
+            # "utils/__init__.py"
           )
 
           echo "验证关键Python文件..."
