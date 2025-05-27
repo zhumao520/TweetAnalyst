@@ -14,17 +14,24 @@ social_networks:
   bypass_ai: false  # 设置为false（默认值），推文将经过AI判断后再决定是否推送
   prompt: |
     你是一个专业的社交媒体内容分析助手。请分析以下推文内容，判断是否值得推送给用户。
-    
+
     推文内容: {content}
-    
+
     请以JSON格式返回你的分析结果：
     {
-        "should_push": true/false,  // 是否应该推送
-        "confidence": 0-100,  // 置信度
+        "should_push": true,
+        "confidence": 85,
         "reason": "推送或不推送的理由",
         "summary": "内容摘要",
-        "tech_areas": ["领域1", "领域2"]  // 相关技术领域
+        "tech_areas": ["领域1", "领域2"]
     }
+
+    说明：
+    - should_push: 是否应该推送，布尔值true或false
+    - confidence: 置信度，0-100的整数
+    - reason: 推送或不推送的理由
+    - summary: 内容摘要
+    - tech_areas: 相关技术领域数组
 
 # 示例3：未指定bypass_ai，默认使用AI判断
 - type: twitter
@@ -34,9 +41,9 @@ social_networks:
   # 未指定bypass_ai，默认为false
   prompt: |
     你是一个专业的社交媒体内容分析助手。请分析以下推文内容，判断是否值得推送给用户。
-    
+
     推文内容: {content}
-    
+
     请以JSON格式返回你的分析结果：
     {
         "should_push": true/false,

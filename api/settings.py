@@ -37,24 +37,45 @@ def update_scheduler_settings():
                 logger.error(f"不支持的Content-Type: {request.content_type}")
                 return jsonify({"success": False, "message": f"不支持的Content-Type: {request.content_type}"}), 415
 
+        # 获取并验证参数
         scheduler_interval = data.get('scheduler_interval')
+        auto_fetch_enabled = data.get('auto_fetch_enabled')
+        timeline_interval = data.get('timeline_interval')
+        timeline_fetch_enabled = data.get('timeline_fetch_enabled')
 
-        if scheduler_interval:
-            # 验证参数
+        # 验证并保存定时任务间隔
+        if scheduler_interval is not None:
             try:
                 interval = int(scheduler_interval)
                 if interval < 1 or interval > 1440:
                     return jsonify({"success": False, "message": "执行间隔必须在1-1440分钟之间"}), 400
+                set_config('SCHEDULER_INTERVAL_MINUTES', str(interval), description='定时任务执行间隔（分钟）')
+                logger.info(f"定时任务执行间隔已更新为 {interval} 分钟")
             except ValueError:
                 return jsonify({"success": False, "message": "执行间隔必须是整数"}), 400
 
-            # 保存设置
-            set_config('SCHEDULER_INTERVAL_MINUTES', scheduler_interval, description='定时任务执行间隔（分钟）')
-            logger.info(f"定时任务执行间隔已更新为 {scheduler_interval} 分钟")
+        # 保存自动抓取设置
+        if auto_fetch_enabled is not None:
+            set_config('AUTO_FETCH_ENABLED', str(auto_fetch_enabled).lower(), description='是否启用账号抓取定时任务')
+            logger.info(f"自动抓取已{'启用' if auto_fetch_enabled else '禁用'}")
 
-            return jsonify({"success": True, "message": "定时任务设置已更新"})
-        else:
-            return jsonify({"success": False, "message": "缺少必要参数"}), 400
+        # 验证并保存时间线任务间隔
+        if timeline_interval is not None:
+            try:
+                interval = int(timeline_interval)
+                if interval < 1 or interval > 1440:
+                    return jsonify({"success": False, "message": "时间线执行间隔必须在1-1440分钟之间"}), 400
+                set_config('TIMELINE_INTERVAL_MINUTES', str(interval), description='时间线抓取任务执行间隔（分钟）')
+                logger.info(f"时间线任务执行间隔已更新为 {interval} 分钟")
+            except ValueError:
+                return jsonify({"success": False, "message": "时间线执行间隔必须是整数"}), 400
+
+        # 保存时间线任务设置
+        if timeline_fetch_enabled is not None:
+            set_config('TIMELINE_FETCH_ENABLED', str(timeline_fetch_enabled).lower(), description='是否启用时间线抓取定时任务')
+            logger.info(f"时间线抓取已{'启用' if timeline_fetch_enabled else '禁用'}")
+
+        return jsonify({"success": True, "message": "定时任务设置已更新"})
     except Exception as e:
         logger.error(f"更新定时任务设置时出错: {str(e)}")
         return jsonify({"success": False, "message": f"更新设置失败: {str(e)}"}), 500
@@ -334,8 +355,6 @@ def update_proxy_settings():
     except Exception as e:
         logger.error(f"更新代理设置时出错: {str(e)}")
         return jsonify({"success": False, "message": f"更新设置失败: {str(e)}"}), 500
-
-
 
 @settings_api.route('/batch', methods=['POST'])
 def batch_update_settings():

@@ -170,6 +170,14 @@ def run_task_in_thread(account_id=None):
         task_status["status"] = "completed"
         task_status["message"] = "任务已完成"
         logger.info("手动抓取任务完成")
+
+        # 更新最后运行时间
+        try:
+            from utils.redisClient import redis_client
+            redis_client.set("last_run_time", time.time())
+            logger.info("已更新最后运行时间")
+        except Exception as e:
+            logger.error(f"更新最后运行时间时出错: {str(e)}")
     except Exception as e:
         logger.error(f"执行抓取任务时出错: {str(e)}", exc_info=True)
         task_status["status"] = "failed"
@@ -269,43 +277,47 @@ def run_timeline_task_in_thread():
         # 创建应用上下文
         with app.app_context():
             try:
-                # 导入process_timeline_posts函数
-                from main import process_timeline_posts
+                # 延迟导入main模块，避免循环导入
+                import main
 
-                # 处理时间线推文
-                logger.info("开始处理时间线推文")
-                timeline_task_status["message"] = "正在获取时间线推文..."
+                # 记录处理前的分析结果数量
+                from models.analysis_result import AnalysisResult
+                before_total = AnalysisResult.query.count()
+                before_relevant = AnalysisResult.query.filter_by(is_relevant=True).count()
 
-                total, relevant = process_timeline_posts(
-                    enable_auto_reply,
-                    auto_reply_prompt,
-                    True  # 保存到数据库
-                )
+                # 调用时间线处理函数，确保保存到数据库
+                main.process_timeline_posts(enable_auto_reply, auto_reply_prompt, save_to_db=True)
 
-                timeline_task_status["total_posts"] = total
-                timeline_task_status["relevant_posts"] = relevant
+                # 计算处理后的分析结果数量，得出新增数量
+                after_total = AnalysisResult.query.count()
+                after_relevant = AnalysisResult.query.filter_by(is_relevant=True).count()
 
-                logger.info(f"时间线任务完成，处理了 {total} 条推文，其中 {relevant} 条相关内容")
-
-                # 更新任务消息
-                if total == 0:
-                    timeline_task_status["message"] = "时间线抓取完成，但未获取到任何推文。可能原因：1) 未关注任何账号 2) 时间线为空 3) 网络或认证问题"
-                else:
-                    timeline_task_status["message"] = f"时间线抓取完成，处理了 {total} 条推文，发现 {relevant} 条相关内容"
+                # 更新任务状态
+                timeline_task_status["total_posts"] = after_total - before_total
+                timeline_task_status["relevant_posts"] = after_relevant - before_relevant
+                timeline_task_status["message"] = f"时间线抓取完成，处理了 {timeline_task_status['total_posts']} 条内容，发现 {timeline_task_status['relevant_posts']} 条相关内容"
             except Exception as e:
-                logger.error(f"处理时间线推文时出错: {str(e)}", exc_info=True)
+                logger.error(f"处理时间线时出错: {str(e)}", exc_info=True)
                 timeline_task_status["status"] = "failed"
-                timeline_task_status["message"] = f"处理时间线推文时出错: {str(e)}"
+                timeline_task_status["message"] = f"处理时间线时出错: {str(e)}"
                 return
 
         # 更新任务状态
         timeline_task_status["status"] = "completed"
         timeline_task_status["message"] = "时间线抓取任务已完成"
         logger.info("时间线抓取任务完成")
+
+        # 更新最后运行时间
+        try:
+            from utils.redisClient import redis_client
+            redis_client.set("last_run_time", time.time())
+            logger.info("已更新最后运行时间")
+        except Exception as e:
+            logger.error(f"更新最后运行时间时出错: {str(e)}")
     except Exception as e:
         logger.error(f"执行时间线抓取任务时出错: {str(e)}", exc_info=True)
         timeline_task_status["status"] = "failed"
-        timeline_task_status["message"] = f"时间线抓取任务执行失败: {str(e)}"
+        timeline_task_status["message"] = f"任务执行失败: {str(e)}"
     finally:
         timeline_task_status["is_running"] = False
         timeline_task_status["end_time"] = time.time()
