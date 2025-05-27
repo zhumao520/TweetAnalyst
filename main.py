@@ -221,20 +221,76 @@ def get_prompt_for_account(account: Dict[str, Any], content: str, tag: str) -> s
     Returns:
         str: 提示词
     """
+    def safe_format_template(template: str, content: str) -> str:
+        """安全地格式化模板，处理可能存在的其他占位符"""
+        try:
+            return template.format(content=content)
+        except KeyError as e:
+            # 如果模板包含其他占位符，尝试提供默认值
+            error_key = str(e).strip("'\"")
+            logger.warning(f"提示词模板包含未知占位符: {error_key}")
+
+            # 检查是否是JSON格式中的换行符导致的问题
+            if '\n' in error_key or '"' in error_key:
+                logger.error(f"模板格式错误：检测到可能是JSON注释或格式问题导致的占位符错误")
+                logger.error(f"问题占位符: {repr(error_key)}")
+                logger.error("建议检查模板中的JSON格式，移除注释或修复格式")
+
+                # 尝试清理模板中的问题格式
+                cleaned_template = template
+                # 移除可能的JSON注释
+                import re
+                cleaned_template = re.sub(r'//.*$', '', cleaned_template, flags=re.MULTILINE)
+
+                try:
+                    return cleaned_template.format(content=content)
+                except KeyError:
+                    logger.warning("清理模板后仍有格式问题，使用默认值填充")
+
+            # 创建一个包含常见占位符的字典
+            format_dict = {
+                'content': content,
+                'should_push': '',  # 空字符串作为默认值
+                'confidence': '',
+                'reason': '',
+                'summary': '',
+                'translation': '',
+                'impact_areas': '',
+                'tech_areas': '',
+                'news_categories': '',
+                # 添加可能出现的其他占位符
+                error_key: ''  # 为具体的错误占位符提供空值
+            }
+
+            try:
+                return template.format(**format_dict)
+            except KeyError as e2:
+                # 如果仍然有问题，记录详细错误并返回基本模板
+                logger.error(f"模板格式化完全失败: {e2}")
+                logger.error(f"原始模板: {repr(template[:200])}...")
+                return f"请分析以下内容并决定是否推送：{content}"
+
     # 兼容两种字段名：prompt_template（数据库字段）和prompt（YAML配置字段）
     if 'prompt_template' in account and account['prompt_template']:
-        return account['prompt_template'].format(content=content)
+        return safe_format_template(account['prompt_template'], content)
     elif 'prompt' in account and account['prompt']:
-        return account['prompt'].format(content=content)
+        return safe_format_template(account['prompt'], content)
     else:
         try:
             # 导入默认提示词模板
             from utils.prompts.default_prompts import get_default_prompt
-            return get_default_prompt(tag).format(content=content)
+            template = get_default_prompt(tag)
+            return safe_format_template(template, content)
         except ImportError:
             # 如果导入失败，使用服务中的默认模板
-            from services.config_service import get_default_prompt_template
-            return get_default_prompt_template(tag).format(content=content)
+            try:
+                from services.config_service import get_default_prompt_template
+                template = get_default_prompt_template(tag)
+                return safe_format_template(template, content)
+            except Exception as service_error:
+                logger.error(f"获取服务提示词模板失败: {service_error}")
+                # 使用最基本的默认模板
+                return f"请分析以下内容并决定是否推送：{content}"
 
 def process_llm_result(format_result: Dict[str, Any], is_old_format: bool, content: str, tag: str) -> Tuple[bool, int, str, str]:
     """
@@ -579,12 +635,22 @@ def save_analysis_to_db(
                     media_content = json.dumps(media_info)
                     logger.debug(f"保存媒体内容，数量: {len(media_info)}")
 
+        # 对于时间线推文，需要特殊处理账号ID
+        # 时间线推文的account_id应该保持为"timeline"，但要保存原始作者信息
+        final_account_id = account_id
+        original_poster_name = None
+        if hasattr(post, 'source_type') and post.source_type == "timeline":
+            # 时间线推文：account_id保持为"timeline"，原始作者信息保存在poster_name中
+            final_account_id = "timeline"
+            if hasattr(post, 'account_id'):
+                original_poster_name = post.account_id  # 保存原始作者用户名
+
         # 确保在应用上下文中执行数据库操作
         with app.app_context():
-            # 检查是否已存在相同的记录
+            # 检查是否已存在相同的记录（使用处理后的账号ID）
             existing_result = AnalysisResult.query.filter_by(
                 social_network=account_type,
-                account_id=account_id,
+                account_id=final_account_id,
                 post_id=post.id
             ).first()
 
@@ -618,12 +684,12 @@ def save_analysis_to_db(
             poster_name = getattr(post, 'poster_name', None)
             if not poster_name:
                 # 如果没有poster_name，尝试从其他字段获取
-                poster_name = getattr(post, 'original_author', None) or getattr(post, 'account_id', None) or account_id
+                poster_name = getattr(post, 'original_author', None) or original_poster_name or account_id
 
             # 创建基本的分析结果对象
             db_result = AnalysisResult(
                 social_network=account_type,
-                account_id=account_id,
+                account_id=final_account_id,  # 使用处理后的账号ID
                 post_id=post.id,
                 post_time=post_time,
                 content=content,
@@ -1056,6 +1122,85 @@ def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = F
         logger.error(f"处理帖子时发生错误: {str(e)}", exc_info=True)
         return result
 
+def process_posts_for_account(posts: List[Any], account: Dict[str, Any], enable_auto_reply: bool = False, auto_reply_prompt: str = "", save_to_db: bool = False) -> Tuple[int, int]:
+    """
+    处理已抓取的推文列表（用于定时任务）
+
+    Args:
+        posts: 已抓取的推文列表
+        account: 账号配置（数据库模型对象）
+        enable_auto_reply: 是否启用自动回复
+        auto_reply_prompt: 自动回复提示词
+        save_to_db: 是否保存到数据库
+
+    Returns:
+        tuple: (总帖子数, 相关帖子数)
+    """
+    # 将数据库模型对象转换为字典格式
+    account_dict = {
+        'socialNetworkId': account.account_id,
+        'type': account.type,
+        'tag': account.tag,
+        'enableAutoReply': account.enable_auto_reply,
+        'prompt': account.prompt_template or '',
+        'bypass_ai': getattr(account, 'bypass_ai', False)
+    }
+
+    account_id = account_dict['socialNetworkId']
+    account_type = account_dict['type']
+    logger.info(f"开始处理 {account_type} 账号: {account_id} 的 {len(posts)} 条推文")
+
+    # 添加处理间隔配置，默认1秒
+    process_interval = float(os.getenv("PROCESS_INTERVAL", "1.0"))
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(f"设置处理间隔为 {process_interval} 秒")
+
+    # 初始化计数器
+    total = len(posts)
+    relevant = 0
+    processed_count = 0
+    error_count = 0
+
+    try:
+        # 如果没有推文，直接返回
+        if not posts:
+            logger.info(f"在 {account_type}: {account_id} 上未发现有更新的内容")
+            return (0, 0)
+
+        # 创建处理队列
+        post_queue = list(posts)  # 创建一个列表副本，这样我们可以安全地修改它
+
+        # 逐条处理帖子
+        while post_queue:
+            # 从队列头部取出一条帖子
+            post = post_queue.pop(0)
+
+            try:
+                # 处理帖子
+                logger.info(f"处理第 {processed_count + 1}/{total} 条帖子，ID: {post.id}")
+                result = process_post(post, account_dict, enable_auto_reply, auto_reply_prompt, save_to_db)
+
+                # 更新计数
+                processed_count += 1
+                if result["success"] and result.get("is_relevant", False):
+                    relevant += 1
+
+            except Exception as e:
+                logger.error(f"处理帖子 {post.id} 时出错: {str(e)}", exc_info=True)
+                error_count += 1
+
+            # 添加处理间隔，避免API限流
+            if post_queue and process_interval > 0:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f"等待 {process_interval} 秒后处理下一条帖子")
+                time.sleep(process_interval)
+
+        logger.info(f"账号 {account_id} 处理完成，成功: {processed_count}，失败: {error_count}，相关: {relevant}")
+        return (total, relevant)
+    except Exception as e:
+        logger.error(f"处理账号 {account_id} 的帖子时发生错误: {str(e)}", exc_info=True)
+        return (0, 0)
+
 def process_account_posts(account: Dict[str, Any], enable_auto_reply: bool = False, auto_reply_prompt: str = "", save_to_db: bool = False) -> Tuple[int, int]:
     """
     处理账号的所有帖子
@@ -1168,8 +1313,14 @@ def process_timeline_posts(enable_auto_reply: bool = False, auto_reply_prompt: s
         # 导入新的智能抓取接口
         from modules.socialmedia.smart_fetch import fetch_twitter_posts_smart
         from modules.socialmedia.async_utils import safe_asyncio_run
+        from utils.yaml_utils import load_config_with_env
+        from services.config_service import get_config
 
-        posts = safe_asyncio_run(fetch_twitter_posts_smart(None, 20, "timeline"))
+        # 获取时间线抓取数量配置
+        timeline_limit = int(get_config('TIMELINE_FETCH_LIMIT', '50'))
+        logger.info(f"时间线抓取限制: {timeline_limit} 条")
+
+        posts = safe_asyncio_run(fetch_twitter_posts_smart(None, timeline_limit, "timeline"))
         logger.info(f"智能抓取返回结果：{len(posts) if posts else 0} 条推文")
 
         if logger.isEnabledFor(logging.DEBUG):
@@ -1188,32 +1339,23 @@ def process_timeline_posts(enable_auto_reply: bool = False, auto_reply_prompt: s
 
         total = len(posts)
 
-        # 创建一个虚拟账号配置，用于处理时间线推文
-        # 注意：现在推文保留了原始作者信息，通过source_type来识别来源
-        timeline_account = {
-            'type': 'twitter',
-            'socialNetworkId': 'timeline',
-            'tag': 'timeline',  # 使用特殊标签标识时间线推文
-            'prompt': """
-你是一个专业的社交媒体内容分析助手。请分析以下推文内容，判断是否值得推送给用户。
-
-推文内容: {content}
-
-请根据以下标准进行判断：
-1. 内容是否包含有价值的信息
-2. 内容是否有新闻价值或时效性
-3. 内容是否有教育意义或启发性
-4. 内容是否有趣或娱乐性
-
-请以JSON格式返回你的分析结果：
-{{
-    "should_push": true/false,  // 是否应该推送，true或false
-    "confidence": 0-100,  // 置信度，0-100的整数
-    "reason": "推送或不推送的简短理由",
-    "summary": "内容的简短总结，包括关键点和价值"
-}}
-"""
-        }
+        # 读取 social-networks.yml 配置，查找 timeline 账号
+        config = load_config_with_env('config/social-networks.yml')
+        timeline_account = None
+        if config and 'social_networks' in config:
+            for acc in config['social_networks']:
+                if acc.get('socialNetworkId') == 'timeline' and acc.get('type') == 'twitter':
+                    timeline_account = acc
+                    break
+        if not timeline_account:
+            # 没有配置则用默认
+            timeline_account = {
+                'type': 'twitter',
+                'socialNetworkId': 'timeline',
+                'tag': 'general',
+                'enableAutoReply': False,
+                'prompt': ''
+            }
 
         # 创建处理队列
         post_queue = list(posts)  # 创建一个列表副本，这样我们可以安全地修改它

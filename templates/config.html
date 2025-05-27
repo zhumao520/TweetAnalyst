@@ -952,37 +952,71 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         // 保存模板按钮
-        document.getElementById('save-templates-btn').addEventListener('click', function() {
-            // 获取编辑器内容
-            templates.finance = templateEditors['finance-template-editor'].getValue();
-            templates.tech = templateEditors['tech-template-editor'].getValue();
-            templates.general = templateEditors['general-template-editor'].getValue();
+        const saveBtn = document.getElementById('save-templates-btn');
+        if (saveBtn) {
+            console.log('找到保存模板按钮，绑定事件');
+            saveBtn.addEventListener('click', function() {
+                console.log('保存模板按钮被点击');
 
-            // 保存到localStorage
-            localStorage.setItem('promptTemplates', JSON.stringify(templates));
+                try {
+                    // 获取编辑器内容
+                    templates.finance = templateEditors['finance-template-editor'].getValue();
+                    templates.tech = templateEditors['tech-template-editor'].getValue();
+                    templates.general = templateEditors['general-template-editor'].getValue();
 
-            // 保存到服务器
-            fetch('/api/save_templates', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
-                },
-                body: JSON.stringify({ templates: templates })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showStatus("模板已保存到服务器", "success");
-                } else {
-                    showStatus("保存到服务器失败: " + data.message, "error");
+                    console.log('模板内容:', {
+                        finance: templates.finance.length,
+                        tech: templates.tech.length,
+                        general: templates.general.length
+                    });
+
+                    // 保存到localStorage
+                    localStorage.setItem('promptTemplates', JSON.stringify(templates));
+
+                    // 获取CSRF token
+                    const csrfToken = document.querySelector('input[name="csrf_token"]');
+                    if (!csrfToken) {
+                        console.error('未找到CSRF token');
+                        showStatus("保存失败: 未找到CSRF token", "error");
+                        return;
+                    }
+
+                    console.log('开始保存到服务器...');
+                    showStatus("正在保存模板...", "info");
+
+                    // 保存到服务器
+                    fetch('/api/save_templates', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken.value
+                        },
+                        body: JSON.stringify({ templates: templates })
+                    })
+                    .then(response => {
+                        console.log('服务器响应状态:', response.status);
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('服务器响应数据:', data);
+                        if (data.success) {
+                            showStatus("模板已保存到服务器", "success");
+                        } else {
+                            showStatus("保存到服务器失败: " + data.message, "error");
+                        }
+                    })
+                    .catch(error => {
+                        console.error('保存模板失败:', error);
+                        showStatus("保存到服务器失败: " + error.message, "error");
+                    });
+                } catch (error) {
+                    console.error('保存模板时出错:', error);
+                    showStatus("保存失败: " + error.message, "error");
                 }
-            })
-            .catch(error => {
-                console.error('保存模板失败:', error);
-                showStatus("保存到服务器失败: " + error.message, "error");
             });
-        });
+        } else {
+            console.error('未找到保存模板按钮');
+        }
 
         // 从localStorage加载模板 - 优先级高于服务器模板
         const savedTemplates = localStorage.getItem('promptTemplates');

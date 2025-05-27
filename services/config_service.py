@@ -33,6 +33,28 @@ _config_meta = {
     'refresh_max_interval': 300  # 最大刷新间隔（秒）
 }
 
+# 需要同步到环境变量的配置键列表
+ENV_SYNC_KEYS = {
+    'SCHEDULER_INTERVAL_MINUTES',
+    'AUTO_FETCH_ENABLED',
+    'TIMELINE_INTERVAL_MINUTES',
+    'TIMELINE_FETCH_ENABLED',
+    'PUSH_QUEUE_INTERVAL_SECONDS',
+    'PUSH_QUEUE_ENABLED',
+    'DB_AUTO_CLEAN_ENABLED',
+    'DB_AUTO_CLEAN_TIME',
+    'DB_RETENTION_DAYS',
+    'DB_CLEAN_IRRELEVANT_ONLY',
+    'ENABLE_AUTO_REPLY',
+    'AUTO_REPLY_PROMPT',
+    'LLM_API_KEY',
+    'LLM_API_MODEL',
+    'LLM_API_BASE',
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'APPRISE_URLS'
+}
+
 def _refresh_config_cache(force=False):
     """
     刷新配置缓存
@@ -206,129 +228,69 @@ def get_config(key, default=None, use_cache=True):
         # 出错时返回默认值
         return default
 
-def set_config(key, value, is_secret=False, description=None, update_env=True):
+def update_env_variable(key: str, value: str):
     """
-    设置系统配置
-
+    更新环境变量，同时更新配置缓存
+    
     Args:
         key: 配置键
         value: 配置值
-        is_secret: 是否为敏感信息
-        description: 配置描述
-        update_env: 是否更新环境变量
-
-    Returns:
-        tuple: (SystemConfig, bool) - 配置对象和是否进行了更新
     """
-    # 记录操作开始
-    if is_secret:
-        # 对于敏感信息，不记录实际值
-        logger.debug(f"尝试设置配置 {key}，值为 ******")
-    else:
-        logger.debug(f"尝试设置配置 {key}，值为 {value}")
-
-    # 使用仓储模式设置配置
-    config_repo = RepositoryFactory.get_system_config_repository()
-    config_data = {
-        'value': value,
-        'is_secret': is_secret
-    }
-
-    if description:
-        config_data['description'] = description
-
     try:
-        # 获取现有配置
-        config = config_repo.get_by_key(key)
-        updated = False
-
-        if config:
-            # 检查值是否相同，如果相同则不更新
-            if config.value == value:
-                # 如果描述或敏感标记需要更新，则更新这些字段
-                if (description and config.description != description) or \
-                   (is_secret is not None and config.is_secret != is_secret):
-
-                    old_description = config.description
-                    old_is_secret = config.is_secret
-
-                    if description:
-                        logger.debug(f"更新配置 {key} 的描述：'{old_description}' -> '{description}'")
-
-                    if is_secret is not None:
-                        logger.debug(f"更新配置 {key} 的敏感标记：{old_is_secret} -> {is_secret}")
-
-                    # 更新配置
-                    config = config_repo.update(config, **config_data)
-                    logger.info(f"配置 {key} 的元数据已更新，值保持不变")
-                    updated = True
-                else:
-                    # 完全没有变化，不需要更新
-                    logger.debug(f"配置 {key} 已存在且所有属性相同，跳过更新")
-                    return config, False
-            else:
-                # 值不同，需要更新
-                old_value = config.value if not config.is_secret else "******"
-                new_value = value if not is_secret else "******"
-
-                # 更新配置
-                config = config_repo.update(config, **config_data)
-                updated = True
-                logger.info(f"配置 {key} 的值已更新：{old_value} -> {new_value}")
-        else:
-            # 配置不存在，创建新配置
-            config = config_repo.create(**config_data, key=key)
-            updated = True
-
-            # 记录创建信息
-            if is_secret:
-                logger.info(f"创建新配置 {key}，值为 ******，描述：{description}")
-            else:
-                logger.info(f"创建新配置 {key}，值为 {value}，描述：{description}")
-
-        # 更新缓存
-        if updated:
-            global _config_cache
-            _config_cache[key] = value
-            logger.debug(f"配置 {key} 已更新到缓存")
-
         # 更新环境变量
-        if update_env and updated:
-            os.environ[key] = value
-            logger.debug(f"环境变量 {key} 已更新")
-
-            # 更新.env文件
-            try:
-                env_file = os.path.join(os.path.dirname(os.environ.get('DATABASE_PATH', '.')), '.env')
-                env_lines = []
-
-                # 读取现有.env文件
-                if os.path.exists(env_file):
-                    with open(env_file, 'r') as f:
-                        env_lines = f.readlines()
-
-                # 更新或添加环境变量
-                key_found = False
-                for i, line in enumerate(env_lines):
-                    if line.startswith(f"{key}="):
-                        env_lines[i] = f"{key}={value}\n"
-                        key_found = True
-                        break
-
-                if not key_found:
-                    env_lines.append(f"{key}={value}\n")
-
-                # 写回.env文件
-                with open(env_file, 'w') as f:
-                    f.writelines(env_lines)
-                logger.debug(f".env文件中的 {key} 已更新")
-            except Exception as e:
-                logger.error(f"更新环境变量文件时出错: {str(e)}")
-
-        return config, updated
+        os.environ[key] = value
+        
+        # 更新配置缓存
+        _config_cache[key] = value
+        
+        logger.debug(f"已更新环境变量和配置缓存: {key}={value}")
     except Exception as e:
-        logger.error(f"设置配置 {key} 时出错: {str(e)}")
-        raise
+        logger.error(f"更新环境变量失败: {key}={value}, 错误: {str(e)}")
+
+def set_config(key: str, value: str, description: str = None, is_secret: bool = False, update_env: bool = True):
+    """
+    设置配置值
+    
+    Args:
+        key: 配置键
+        value: 配置值
+        description: 配置描述
+        is_secret: 是否为敏感信息
+        update_env: 是否同步更新环境变量
+    """
+    try:
+        # 使用仓储模式保存配置
+        config_repo = RepositoryFactory.get_system_config_repository()
+        config = config_repo.get_by_key(key)
+        
+        if config:
+            # 更新现有配置
+            config.value = value
+            if description:
+                config.description = description
+            config.is_secret = is_secret
+            config_repo.update(config)
+        else:
+            # 创建新配置
+            config_repo.create({
+                'key': key,
+                'value': value,
+                'description': description,
+                'is_secret': is_secret
+            })
+        
+        # 更新配置缓存
+        _config_cache[key] = value
+        
+        # 如果需要，同步更新环境变量
+        if update_env and key in ENV_SYNC_KEYS:
+            update_env_variable(key, value)
+        
+        logger.info(f"配置已更新: {key}={value}")
+        return True
+    except Exception as e:
+        logger.error(f"设置配置失败: {key}={value}, 错误: {str(e)}")
+        return False
 
 def get_system_config(use_cache=True):
     """

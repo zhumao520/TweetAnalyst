@@ -151,7 +151,7 @@ def fetch_posts(platform: str, user_id: str, limit: int = 10) -> List[Post]:
         return []
 
 
-def fetch_timeline(platform: str, limit: int = 20) -> List[Post]:
+def fetch_timeline(platform: str, limit: int = 50) -> List[Post]:
     """
     获取时间线帖子 - 兼容性接口
     

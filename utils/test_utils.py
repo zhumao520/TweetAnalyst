@@ -12,7 +12,7 @@ logger = get_logger('test_utils')
 
 def test_twitter_connection(account_id=None):
     """
-    测试Twitter API连接
+    测试Twitter API连接，支持tweety和twikit库
 
     Args:
         account_id (str, optional): 要测试的Twitter账号ID，如果不提供则使用默认测试账号
@@ -45,24 +45,119 @@ def test_twitter_connection(account_id=None):
                             "data": None
                         }
 
+        # 获取Twitter库偏好设置
+        library_preference = get_twitter_library_preference()
+        logger.info(f"使用Twitter库: {library_preference}")
+
+        # 根据库偏好选择测试方法
+        if library_preference == "twikit":
+            return test_twitter_with_twikit(account_id)
+        elif library_preference == "tweety":
+            return test_twitter_with_tweety(account_id)
+        else:  # auto
+            # 自动模式：优先尝试tweety，失败时尝试twikit
+            logger.info("自动模式：优先尝试tweety库")
+            result = test_twitter_with_tweety(account_id)
+
+            if result['success']:
+                return result
+
+            logger.info("tweety测试失败，尝试twikit库")
+            return test_twitter_with_twikit(account_id)
+
+    except Exception as e:
+        logger.error(f"测试Twitter连接时出错: {str(e)}")
+        return {
+            "success": False,
+            "message": f"测试Twitter连接失败: {str(e)}",
+            "data": {
+                "account_id": account_id if account_id else "elonmusk",
+                "proxy_used": os.getenv('HTTP_PROXY', '未使用代理'),
+                "error_details": str(e)
+            }
+        }
+
+
+def get_twitter_library_preference():
+    """
+    获取Twitter库偏好设置
+
+    Returns:
+        str: 'tweety', 'twikit', 或 'auto'
+    """
+    try:
+        # 优先从数据库获取配置
+        try:
+            from services.config_service import get_config
+            library_preference = get_config('TWITTER_LIBRARY')
+            if library_preference and library_preference.strip():
+                preference = library_preference.strip().lower()
+                if preference in ['tweety', 'twikit', 'auto']:
+                    return preference
+        except Exception as e:
+            logger.debug(f"从数据库获取Twitter库设置时出错: {str(e)}")
+
+        # 回退到环境变量
+        env_preference = os.getenv('TWITTER_LIBRARY', 'auto').strip().lower()
+        if env_preference in ['tweety', 'twikit', 'auto']:
+            return env_preference
+
+        # 默认值
+        return 'auto'
+    except Exception as e:
+        logger.warning(f"获取Twitter库偏好设置时出错: {str(e)}")
+        return 'auto'
+
+
+def test_twitter_with_tweety(account_id=None):
+    """
+    使用tweety库测试Twitter连接
+
+    Args:
+        account_id (str, optional): 要测试的Twitter账号ID
+
+    Returns:
+        dict: 测试结果
+    """
+    try:
         # 导入Twitter模块
         try:
             from modules.socialmedia.twitter import fetch, reinit_twitter_client
 
             # 尝试重新初始化Twitter客户端
-            logger.info("尝试重新初始化Twitter客户端...")
+            logger.info("使用tweety库测试Twitter连接...")
             reinit_twitter_client()
         except ImportError as e:
-            logger.error(f"导入Twitter模块失败: {str(e)}")
+            logger.error(f"导入tweety模块失败: {str(e)}")
             return {
                 "success": False,
-                "message": f"导入Twitter模块失败: {str(e)}",
+                "message": f"导入tweety模块失败: {str(e)}",
                 "data": None
             }
 
-        # 如果没有提供账号ID，使用默认测试账号
+        # 获取代理设置
+        proxy = os.getenv('HTTP_PROXY', '')
+
+        # 首先尝试获取当前登录的用户信息
+        current_user = None
+        try:
+            from modules.socialmedia.twitter import app as twitter_app
+            if twitter_app and hasattr(twitter_app, 'me'):
+                me = twitter_app.me() if callable(getattr(twitter_app, 'me', None)) else twitter_app.me
+                if me and hasattr(me, 'username'):
+                    current_user = me.username
+                    logger.info(f"检测到当前登录用户: {current_user}")
+        except Exception as e:
+            logger.debug(f"获取当前登录用户信息失败: {str(e)}")
+
+        # 如果没有提供账号ID，优先使用当前登录用户，否则使用默认测试账号
         if not account_id:
-            account_id = "elonmusk"  # 使用马斯克的账号作为默认测试
+            if current_user:
+                account_id = current_user
+                logger.info(f"使用当前登录用户进行测试: {account_id}")
+            else:
+                account_id = "elonmusk"  # 使用马斯克的账号作为默认测试
+                logger.info(f"使用默认测试账号: {account_id}")
 
         logger.info(f"开始测试Twitter API连接，测试账号: {account_id}")
 
@@ -71,42 +166,69 @@ def test_twitter_connection(account_id=None):
         posts = fetch(account_id, limit=1)
         end_time = time.time()
 
+        # 构建返回数据，包含当前登录用户信息
+        result_data = {
+            "account_id": account_id,
+            "response_time": f"{end_time - start_time:.2f}秒",
+            "proxy_used": proxy if proxy else "未使用代理",
+            "library": "tweety"
+        }
+
+        # 如果有当前登录用户，添加到结果中
+        if current_user:
+            result_data["logged_in_user"] = current_user
+            if account_id == current_user:
+                result_data["test_type"] = "当前登录用户"
+            else:
+                result_data["test_type"] = f"指定用户（当前登录：{current_user}）"
+        else:
+            result_data["test_type"] = "默认测试用户"
+
         if posts and len(posts) > 0:
             logger.info(f"成功获取到 {len(posts)} 条推文，耗时: {end_time - start_time:.2f}秒")
+            result_data.update({
+                "post_count": len(posts),
+                "first_post": {
+                    "id": posts[0].id,
+                    "content": posts[0].content[:100] + "..." if len(posts[0].content) > 100 else posts[0].content,
+                    "time": posts[0].get_local_time().strftime("%Y-%m-%d %H:%M:%S")
+                }
+            })
+
+            message = f"成功连接到Twitter API并获取到 {len(posts)} 条推文"
+            if current_user and account_id == current_user:
+                message += f"（当前登录用户：{current_user}）"
+            elif current_user:
+                message += f"（测试用户：{account_id}，当前登录：{current_user}）"
+
             return {
                 "success": True,
-                "message": f"成功连接到Twitter API并获取到 {len(posts)} 条推文",
-                "data": {
-                    "account_id": account_id,
-                    "post_count": len(posts),
-                    "first_post": {
-                        "id": posts[0].id,
-                        "content": posts[0].content[:100] + "..." if len(posts[0].content) > 100 else posts[0].content,
-                        "time": posts[0].get_local_time().strftime("%Y-%m-%d %H:%M:%S")
-                    },
-                    "response_time": f"{end_time - start_time:.2f}秒",
-                    "proxy_used": proxy if proxy else "未使用代理"
-                }
+                "message": message,
+                "data": result_data
             }
         else:
             logger.warning(f"成功连接到Twitter API，但未获取到推文，耗时: {end_time - start_time:.2f}秒")
+
+            message = "成功连接到Twitter API，但未获取到推文"
+            if current_user and account_id == current_user:
+                message += f"（当前登录用户：{current_user}）"
+            elif current_user:
+                message += f"（测试用户：{account_id}，当前登录：{current_user}）"
+
             return {
                 "success": True,
-                "message": "成功连接到Twitter API，但未获取到推文",
-                "data": {
-                    "account_id": account_id,
-                    "response_time": f"{end_time - start_time:.2f}秒",
-                    "proxy_used": proxy if proxy else "未使用代理"
-                }
+                "message": message,
+                "data": result_data
             }
     except Exception as e:
         logger.error(f"测试Twitter API连接时出错: {str(e)}")
         return {
             "success": False,
-            "message": f"连接Twitter API失败: {str(e)}",
+            "message": f"tweety连接Twitter API失败: {str(e)}",
             "data": {
                 "account_id": account_id if account_id else "elonmusk",
                 "proxy_used": os.getenv('HTTP_PROXY', '未使用代理'),
+                "library": "tweety",
                 "error_details": str(e)
             }
         }
@@ -207,7 +329,11 @@ def install_socks_support():
 
 def test_proxy_connection(test_url=None):
     """
-    测试代理连接
+    测试代理连接 (已弃用，请使用代理管理器)
+
+    此函数已被代理管理器替代，保留此函数仅为了向后兼容。
+    新代码应使用utils.api_utils.get_proxy_manager()获取代理管理器，
+    然后使用代理管理器的方法进行代理测试。
 
     Args:
         test_url (str, optional): 测试URL，如果不提供则使用默认测试URL
@@ -216,156 +342,73 @@ def test_proxy_connection(test_url=None):
         dict: 测试结果，包含success, message和data字段
     """
     try:
-        # 如果没有提供测试URL，使用环境变量中的测试URL或默认值
-        if not test_url:
-            # 从环境变量获取测试URL，如果未设置则使用默认值
-            # 使用Google的generate_204测试URL，专门用于连接测试
-            test_url = os.getenv('PROXY_TEST_URL', 'https://www.google.com/generate_204')
+        # 导入代理管理器
+        from utils.api_utils import get_proxy_manager
 
-        logger.info(f"开始测试代理连接，测试URL: {test_url}")
+        # 获取代理管理器
+        proxy_manager = get_proxy_manager()
 
-        # 获取当前代理设置
-        proxy = os.getenv("HTTP_PROXY", "")
+        # 使用代理管理器测试连接
+        logger.info(f"使用代理管理器测试连接，URL: {test_url or proxy_manager.test_url}")
 
-        # 如果是SOCKS代理，检查依赖
-        if proxy and proxy.startswith('socks'):
-            logger.info(f"检测到SOCKS代理: {proxy}")
-            try:
-                import socks
-                import socket
-                logger.info("SOCKS代理支持已安装")
-            except ImportError:
-                logger.warning("未安装SOCKS代理支持，尝试安装...")
-                if not install_socks_support():
-                    return {
-                        "success": False,
-                        "message": "缺少SOCKS代理支持，请手动安装: pip install requests[socks]",
-                        "data": {"proxy": proxy}
-                    }
+        # 查找可用代理
+        working_proxy = proxy_manager.find_working_proxy(force_check=True)
 
-        proxies = {}
-        if proxy:
-            proxies = {
-                "http": proxy,
-                "https": proxy
+        if not working_proxy:
+            return {
+                "success": False,
+                "message": "未找到可用的代理",
+                "data": {
+                    "url": test_url or proxy_manager.test_url,
+                    "status": "no_proxy"
+                }
             }
-            logger.info(f"使用代理 {proxy} 测试连接")
-        else:
-            logger.info("未设置代理，使用直接连接测试")
 
-        # 尝试连接测试URL
+        # 使用代理发送请求
         start_time = time.time()
         try:
-            # 添加verify=False参数，禁用SSL证书验证，解决SSL错误
-            # 注意：在生产环境中应谨慎使用此选项，这里仅用于测试
-            response = requests.get(test_url, proxies=proxies, timeout=10, verify=False)
+            if test_url:
+                # 使用用户指定的URL测试
+                response = proxy_manager.get(test_url, timeout=10)
+            else:
+                # 使用默认URL测试
+                response = proxy_manager.get(proxy_manager.test_url, timeout=10)
+
             end_time = time.time()
-            logger.info(f"请求完成，状态码: {response.status_code}, 耗时: {end_time - start_time:.2f}秒")
-        except requests.exceptions.Timeout:
-            logger.error(f"连接超时: {test_url}")
-            return {
-                "success": False,
-                "message": f"连接超时，请检查网络或代理设置",
-                "data": {
-                    "url": test_url,
-                    "proxy": proxy if proxy else "未使用代理",
-                    "error_type": "timeout"
-                }
-            }
-        except requests.exceptions.ProxyError as e:
-            logger.error(f"代理错误: {str(e)}")
-            return {
-                "success": False,
-                "message": f"代理连接错误: {str(e)}",
-                "data": {
-                    "url": test_url,
-                    "proxy": proxy if proxy else "未使用代理",
-                    "error_type": "proxy_error"
-                }
-            }
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"连接错误: {str(e)}")
-            return {
-                "success": False,
-                "message": f"网络连接错误: {str(e)}",
-                "data": {
-                    "url": test_url,
-                    "proxy": proxy if proxy else "未使用代理",
-                    "error_type": "connection_error"
-                }
-            }
-        except Exception as e:
-            logger.error(f"请求异常: {str(e)}")
-            return {
-                "success": False,
-                "message": f"请求异常: {str(e)}",
-                "data": {
-                    "url": test_url,
-                    "proxy": proxy if proxy else "未使用代理",
-                    "error_type": "request_error"
-                }
-            }
-
-        end_time = time.time()
-
-        # 对于Google的generate_204测试页面，状态码204表示成功
-        if response.status_code == 204 or response.status_code == 200:
-            logger.info(f"成功连接到测试URL，状态码: {response.status_code}, 耗时: {end_time - start_time:.2f}秒")
-
-            # 尝试获取IP信息（如果是返回JSON的API）
-            ip_address = "未知"
-            try:
-                if response.text and response.headers.get('content-type', '').startswith('application/json'):
-                    ip_info = response.json()
-                    if 'ip' in ip_info:
-                        ip_address = ip_info.get('ip')
-            except:
-                pass
-
-            # 获取外部IP（可选）
-            try:
-                if ip_address == "未知" and proxy:
-                    # 尝试使用另一个服务获取IP
-                    logger.info("尝试获取外部IP地址")
-                    ip_response = requests.get("https://httpbin.org/ip", proxies=proxies, timeout=5, verify=False)
-                    if ip_response.status_code == 200:
-                        ip_data = ip_response.json()
-                        if 'origin' in ip_data:
-                            ip_address = ip_data['origin']
-                            logger.info(f"成功获取外部IP: {ip_address}")
-            except Exception as e:
-                logger.warning(f"获取外部IP时出错: {str(e)}")
+            response_time = end_time - start_time
 
             return {
                 "success": True,
-                "message": "成功连接到测试URL",
+                "message": "代理连接测试成功",
                 "data": {
-                    "url": test_url,
+                    "url": test_url or proxy_manager.test_url,
+                    "status": "connected",
                     "status_code": response.status_code,
-                    "ip": ip_address,
-                    "proxy": proxy if proxy else "未使用代理",
-                    "response_time": f"{end_time - start_time:.2f}秒"
+                    "response_time": f"{response_time:.2f}秒",
+                    "proxy": working_proxy.name
                 }
             }
-        else:
-            logger.warning(f"连接到测试URL失败，状态码: {response.status_code}, 耗时: {end_time - start_time:.2f}秒")
+        except Exception as e:
+            logger.error(f"代理测试失败: {str(e)}")
             return {
                 "success": False,
-                "message": f"连接到测试URL失败，状态码: {response.status_code}",
+                "message": f"代理连接测试失败: {str(e)}",
                 "data": {
-                    "url": test_url,
-                    "proxy": proxy if proxy else "未使用代理",
-                    "response_time": f"{end_time - start_time:.2f}秒"
+                    "url": test_url or proxy_manager.test_url,
+                    "status": "error"
                 }
             }
     except Exception as e:
-        logger.error(f"测试代理连接时出错: {str(e)}")
+        logger.error(f"使用代理管理器测试连接时出错: {str(e)}")
+
+        # 回退到传统方式
+        proxy = os.getenv("HTTP_PROXY", "")
         return {
             "success": False,
-            "message": f"测试代理连接失败: {str(e)}",
+            "message": f"代理连接测试失败: {str(e)}",
             "data": {
                 "url": test_url,
-                "proxy": os.getenv("HTTP_PROXY", "未使用代理")
+                "proxy": proxy if proxy else "未使用代理"
             }
         }
 
@@ -484,33 +527,78 @@ def check_system_status():
 
     # 检查代理状态
     try:
-        proxy = os.getenv("HTTP_PROXY", "")
-        if proxy:
-            # 尝试使用代理连接到百度
-            try:
-                response = requests.get("http://www.baidu.com", proxies={"http": proxy, "https": proxy}, timeout=5, verify=False)
-                if response.status_code == 200:
-                    status["components"]["proxy"]["status"] = "正常"
-                    status["components"]["proxy"]["message"] = f"代理可用: {proxy}"
+        # 使用代理管理器检查代理状态
+        try:
+            from utils.api_utils import get_proxy_manager
+
+            # 获取代理管理器
+            proxy_manager = get_proxy_manager()
+
+            # 查找可用代理
+            working_proxy = proxy_manager.find_working_proxy()
+
+            if working_proxy:
+                status["components"]["proxy"]["status"] = "正常"
+                status["components"]["proxy"]["message"] = f"代理可用: {working_proxy.name}"
+                status["components"]["proxy"]["details"] = {
+                    "name": working_proxy.name,
+                    "host": working_proxy.host,
+                    "port": working_proxy.port,
+                    "protocol": working_proxy.protocol
+                }
+            else:
+                # 如果代理管理器没有找到可用代理，检查是否有环境变量中的代理
+                proxy = os.getenv("HTTP_PROXY", "")
+                if proxy:
+                    status["components"]["proxy"]["status"] = "异常"
+                    status["components"]["proxy"]["message"] = f"环境变量中的代理不可用: {proxy}"
                 else:
                     status["components"]["proxy"]["status"] = "异常"
-                    status["components"]["proxy"]["message"] = f"代理连接失败: {response.status_code}"
-            except Exception as e:
-                status["components"]["proxy"]["status"] = "异常"
-                status["components"]["proxy"]["message"] = f"代理测试失败: {str(e)}"
-        else:
-            # 尝试直接连接到百度
-            try:
-                response = requests.get("http://www.baidu.com", timeout=5, verify=False)
-                if response.status_code == 200:
-                    status["components"]["proxy"]["status"] = "正常"
-                    status["components"]["proxy"]["message"] = "直接连接可用"
-                else:
+                    status["components"]["proxy"]["message"] = "未配置代理"
+
+                    # 尝试直接连接到百度
+                    try:
+                        response = requests.get("http://www.baidu.com", timeout=5, verify=False)
+                        if response.status_code == 200:
+                            status["components"]["proxy"]["status"] = "正常"
+                            status["components"]["proxy"]["message"] = "直接连接可用"
+                        else:
+                            status["components"]["proxy"]["status"] = "异常"
+                            status["components"]["proxy"]["message"] = f"直接连接失败: {response.status_code}"
+                    except Exception as e:
+                        status["components"]["proxy"]["status"] = "异常"
+                        status["components"]["proxy"]["message"] = f"网络连接测试失败: {str(e)}"
+        except ImportError:
+            logger.warning("未找到代理管理器，使用传统方式检查代理")
+
+            # 回退到传统方式检查代理
+            proxy = os.getenv("HTTP_PROXY", "")
+            if proxy:
+                # 尝试使用代理连接到百度
+                try:
+                    response = requests.get("http://www.baidu.com", proxies={"http": proxy, "https": proxy}, timeout=5, verify=False)
+                    if response.status_code == 200:
+                        status["components"]["proxy"]["status"] = "正常"
+                        status["components"]["proxy"]["message"] = f"代理可用: {proxy}"
+                    else:
+                        status["components"]["proxy"]["status"] = "异常"
+                        status["components"]["proxy"]["message"] = f"代理连接失败: {response.status_code}"
+                except Exception as e:
                     status["components"]["proxy"]["status"] = "异常"
-                    status["components"]["proxy"]["message"] = f"直接连接失败: {response.status_code}"
-            except Exception as e:
-                status["components"]["proxy"]["status"] = "异常"
-                status["components"]["proxy"]["message"] = f"网络连接测试失败: {str(e)}"
+                    status["components"]["proxy"]["message"] = f"代理测试失败: {str(e)}"
+            else:
+                # 尝试直接连接到百度
+                try:
+                    response = requests.get("http://www.baidu.com", timeout=5, verify=False)
+                    if response.status_code == 200:
+                        status["components"]["proxy"]["status"] = "正常"
+                        status["components"]["proxy"]["message"] = "直接连接可用"
+                    else:
+                        status["components"]["proxy"]["status"] = "异常"
+                        status["components"]["proxy"]["message"] = f"直接连接失败: {response.status_code}"
+                except Exception as e:
+                    status["components"]["proxy"]["status"] = "异常"
+                    status["components"]["proxy"]["message"] = f"网络连接测试失败: {str(e)}"
     except Exception as e:
         logger.error(f"检查代理状态时出错: {str(e)}")
         status["components"]["proxy"]["status"] = "异常"
@@ -573,3 +661,127 @@ def check_system_status():
         status["components"]["notification"]["message"] = f"检查状态出错: {str(e)}"
 
     return status
+
+
+def test_twitter_with_twikit(account_id=None):
+    """
+    使用twikit库测试Twitter连接
+
+    Args:
+        account_id (str, optional): 要测试的Twitter账号ID
+
+    Returns:
+        dict: 测试结果
+    """
+    try:
+        # 检查twikit库是否可用
+        try:
+            from modules.socialmedia import twitter_twikit
+            logger.info("使用twikit库测试Twitter连接...")
+        except ImportError as e:
+            logger.error(f"导入twikit模块失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"导入twikit模块失败: {str(e)}",
+                "data": {
+                    "library": "twikit",
+                    "error": "模块导入失败"
+                }
+            }
+
+        # 获取代理设置
+        proxy = os.getenv('HTTP_PROXY', '')
+
+        # 如果没有提供账号ID，使用默认测试账号
+        if not account_id:
+            account_id = "elonmusk"  # 使用马斯克的账号作为默认测试
+            logger.info(f"使用默认测试账号: {account_id}")
+
+        logger.info(f"开始使用twikit测试Twitter连接，测试账号: {account_id}")
+
+        # 尝试获取推文
+        start_time = time.time()
+
+        # 使用异步函数测试
+        import asyncio
+
+        async def test_twikit_async():
+            try:
+                # 初始化twikit
+                if not twitter_twikit.twikit_handler.initialized:
+                    init_success = await twitter_twikit.initialize()
+                    if not init_success:
+                        return None, "twikit初始化失败"
+
+                # 尝试获取推文
+                posts = await twitter_twikit.fetch_tweets(account_id, limit=1)
+                return posts, None
+
+            except Exception as e:
+                return None, str(e)
+
+        # 运行异步测试
+        try:
+            posts, error = asyncio.run(test_twikit_async())
+        except Exception as e:
+            logger.error(f"运行twikit异步测试时出错: {str(e)}")
+            posts, error = None, str(e)
+
+        end_time = time.time()
+
+        # 构建返回数据
+        result_data = {
+            "account_id": account_id,
+            "response_time": f"{end_time - start_time:.2f}秒",
+            "proxy_used": proxy if proxy else "未使用代理",
+            "library": "twikit",
+            "test_type": "指定用户测试"
+        }
+
+        if error:
+            logger.error(f"twikit测试失败: {error}")
+            return {
+                "success": False,
+                "message": f"twikit连接测试失败: {error}",
+                "data": {
+                    **result_data,
+                    "error_details": error
+                }
+            }
+
+        if posts and len(posts) > 0:
+            logger.info(f"twikit成功获取到 {len(posts)} 条推文，耗时: {end_time - start_time:.2f}秒")
+            result_data.update({
+                "post_count": len(posts),
+                "first_post": {
+                    "id": posts[0].id,
+                    "content": posts[0].content[:100] + "..." if len(posts[0].content) > 100 else posts[0].content,
+                    "poster": posts[0].poster_name
+                }
+            })
+
+            return {
+                "success": True,
+                "message": f"twikit成功连接到Twitter并获取到 {len(posts)} 条推文",
+                "data": result_data
+            }
+        else:
+            logger.warning(f"twikit成功连接到Twitter，但未获取到推文，耗时: {end_time - start_time:.2f}秒")
+            return {
+                "success": True,
+                "message": "twikit成功连接到Twitter，但未获取到推文",
+                "data": result_data
+            }
+
+    except Exception as e:
+        logger.error(f"使用twikit测试Twitter连接时出错: {str(e)}")
+        return {
+            "success": False,
+            "message": f"twikit连接测试失败: {str(e)}",
+            "data": {
+                "account_id": account_id if account_id else "elonmusk",
+                "proxy_used": os.getenv('HTTP_PROXY', '未使用代理'),
+                "library": "twikit",
+                "error_details": str(e)
+            }
+        }

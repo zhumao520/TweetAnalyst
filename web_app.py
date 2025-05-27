@@ -686,23 +686,41 @@ def save_templates():
     try:
         # 获取请求数据
         data = request.json
+        logger.info(f"收到保存模板请求，数据类型: {type(data)}")
+
         if not data or 'templates' not in data:
+            logger.error(f"无效的请求数据: {data}")
             return jsonify({'success': False, 'message': '无效的请求数据'}), 400
 
         templates = data['templates']
+        logger.info(f"接收到的模板数据: finance长度={len(templates.get('finance', ''))}, tech长度={len(templates.get('tech', ''))}, general长度={len(templates.get('general', ''))}")
 
         # 验证模板数据
         required_templates = ['finance', 'tech', 'general']
         for template_name in required_templates:
             if template_name not in templates:
+                logger.warning(f"模板 {template_name} 缺失，使用默认模板")
                 templates[template_name] = get_default_prompt_template(template_name)
+
+        # 确保目录存在
+        os.makedirs(os.path.dirname(templates_path), exist_ok=True)
 
         # 保存到配置文件
         templates_data = {'templates': templates}
         with open(templates_path, 'w', encoding='utf-8') as f:
             yaml.dump(templates_data, f, allow_unicode=True)
 
-        logger.info("提示词模板配置已保存")
+        logger.info(f"提示词模板配置已保存到 {templates_path}")
+
+        # 验证保存是否成功
+        try:
+            with open(templates_path, 'r', encoding='utf-8') as f:
+                saved_data = yaml.safe_load(f)
+                saved_templates = saved_data.get('templates', {})
+                logger.info(f"验证保存结果: finance长度={len(saved_templates.get('finance', ''))}, tech长度={len(saved_templates.get('tech', ''))}, general长度={len(saved_templates.get('general', ''))}")
+        except Exception as verify_error:
+            logger.error(f"验证保存结果时出错: {verify_error}")
+
         return jsonify({'success': True, 'message': '提示词模板已保存'})
     except Exception as e:
         logger.error(f"保存提示词模板配置时出错: {str(e)}")
@@ -840,15 +858,39 @@ def results():
     # 获取所有账号，用于过滤
     accounts = SocialAccount.query.all()
 
+    # 创建时间线虚拟账号对象
+    class TimelineAccount:
+        def __init__(self):
+            self.id = 'timeline'
+            self.account_id = 'timeline'
+            self.type = 'twitter'
+            self.display_name = '时间线 (关注账号)'
+            self.avatar_url = None
+
+    # 将时间线账号添加到账号列表中
+    timeline_account = TimelineAccount()
+    accounts = list(accounts) + [timeline_account]
+
     # 创建账号字典，方便在模板中查找账号信息
     accounts_dict = {}
     for account in accounts:
-        accounts_dict[account.account_id] = {
-            'id': account.id,
-            'type': account.type,
-            'avatar_url': account.avatar_url,
-            'display_name': account.display_name
-        }
+        # 处理时间线虚拟账号和普通账号
+        if hasattr(account, 'display_name'):
+            # 时间线虚拟账号
+            accounts_dict[account.account_id] = {
+                'id': account.id,
+                'type': account.type,
+                'avatar_url': account.avatar_url,
+                'display_name': account.display_name
+            }
+        else:
+            # 普通数据库账号
+            accounts_dict[account.account_id] = {
+                'id': account.id,
+                'type': account.type,
+                'avatar_url': account.avatar_url,
+                'display_name': getattr(account, 'display_name', account.account_id)
+            }
 
     return render_template('results.html', results=results, accounts=accounts, accounts_dict=accounts_dict)
 

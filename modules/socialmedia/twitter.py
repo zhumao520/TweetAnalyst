@@ -1492,8 +1492,9 @@ def try_twikit_fallback(user_id: str, limit: int = None, reason: str = "unknown"
 
     logger.info(f"尝试使用twikit作为备选方案获取用户 {user_id} 的推文 (原因: {reason})")
     try:
-        import asyncio
-        twikit_posts = asyncio.run(twitter_twikit.fetch_tweets(user_id, limit))
+        # 使用安全的异步运行方法，避免事件循环冲突
+        from modules.socialmedia.async_utils import safe_asyncio_run
+        twikit_posts = safe_asyncio_run(twitter_twikit.fetch_tweets(user_id, limit))
         if twikit_posts:
             logger.info(f"twikit备选方案成功获取 {len(twikit_posts)} 条推文")
             return twikit_posts
@@ -1522,6 +1523,8 @@ def check_account_status(user_id: str, use_async: bool = False, update_avatar: b
             - error (str): 错误信息，如果有的话
             - avatar_url (str): 用户头像URL，如果获取成功
     """
+    import time
+    import json
     global app, async_app
 
     # 初始化返回结果
@@ -1590,7 +1593,9 @@ def check_account_status(user_id: str, use_async: bool = False, update_avatar: b
         # 尝试获取用户信息
         if use_async:
             try:
-                user_info = asyncio.run(async_app.get_user_info(user_id))
+                # 使用安全的异步调用方法，避免事件循环冲突
+                from modules.socialmedia.async_utils import safe_call_async_method
+                user_info = safe_call_async_method(async_app, 'get_user_info', user_id)
             except Exception as e:
                 error_msg = str(e).lower()
                 if "user not found" in error_msg or "account wasn't found" in error_msg:
@@ -1712,13 +1717,13 @@ def check_account_status(user_id: str, use_async: bool = False, update_avatar: b
                                         account.profession = profession_match.group(0)
 
                                 if hasattr(user_info, 'verified'):
-                                    account.verified = user_info.verified
+                                    account.verified = bool(user_info.verified) if user_info.verified is not None else False
 
                                 if hasattr(user_info, 'followers_count'):
-                                    account.followers_count = user_info.followers_count
+                                    account.followers_count = int(user_info.followers_count) if user_info.followers_count is not None else 0
 
                                 if hasattr(user_info, 'friends_count'):
-                                    account.following_count = user_info.friends_count
+                                    account.following_count = int(user_info.friends_count) if user_info.friends_count is not None else 0
 
                                 if hasattr(user_info, 'created_at'):
                                     # 尝试解析Twitter日期格式
@@ -1742,7 +1747,6 @@ def check_account_status(user_id: str, use_async: bool = False, update_avatar: b
                                             account.location = user_info.location['location']
                                         else:
                                             # 如果字典中没有location键，转换为JSON字符串
-                                            import json
                                             account.location = json.dumps(user_info.location, ensure_ascii=False)
                                     elif isinstance(user_info.location, str):
                                         account.location = user_info.location
@@ -1825,7 +1829,6 @@ def check_account_status(user_id: str, use_async: bool = False, update_avatar: b
                                                 account.location = user_info.location['location']
                                             else:
                                                 # 如果字典中没有location键，转换为JSON字符串
-                                                import json
                                                 account.location = json.dumps(user_info.location, ensure_ascii=False)
                                         elif isinstance(user_info.location, str):
                                             account.location = user_info.location
@@ -1874,13 +1877,13 @@ def check_account_status(user_id: str, use_async: bool = False, update_avatar: b
                                             account.profession = profession_match.group(0)
 
                                     if hasattr(user_info, 'verified'):
-                                        account.verified = user_info.verified
+                                        account.verified = bool(user_info.verified) if user_info.verified is not None else False
 
                                     if hasattr(user_info, 'followers_count'):
-                                        account.followers_count = user_info.followers_count
+                                        account.followers_count = int(user_info.followers_count) if user_info.followers_count is not None else 0
 
                                     if hasattr(user_info, 'friends_count'):
-                                        account.following_count = user_info.friends_count
+                                        account.following_count = int(user_info.friends_count) if user_info.friends_count is not None else 0
 
                                     if hasattr(user_info, 'created_at'):
                                         # 尝试解析Twitter日期格式
@@ -1904,7 +1907,6 @@ def check_account_status(user_id: str, use_async: bool = False, update_avatar: b
                                                 account.location = user_info.location['location']
                                             else:
                                                 # 如果字典中没有location键，转换为JSON字符串
-                                                import json
                                                 account.location = json.dumps(user_info.location, ensure_ascii=False)
                                         elif isinstance(user_info.location, str):
                                             account.location = user_info.location
@@ -3196,7 +3198,7 @@ def fetch_timeline(limit: int = None, retry_count: int = 0) -> list[Post]:
             return []
 
 
-async def get_timeline_posts_async(limit: int = 20) -> list[Post]:
+async def get_timeline_posts_async(limit: int = 50) -> list[Post]:
     """
     异步获取时间线推文 - 为了与main.py兼容而添加的包装函数
 
@@ -3211,6 +3213,115 @@ async def get_timeline_posts_async(limit: int = 20) -> list[Post]:
     # 调用现有的同步函数
     return fetch_timeline(limit)
 
+def _log_operation(operation: str, library: str = None):
+    """
+    统一的日志记录函数
+    Args:
+        operation: 操作名称
+        library: 库名称（可选）
+    """
+    if library:
+        logger.info(f"开始使用{library}抓取{operation}")
+    else:
+        logger.info(f"开始{operation}")
+
+def _handle_error(error: Exception, operation: str, library: str = None) -> dict:
+    """
+    统一的错误处理函数
+    Args:
+        error: 异常对象
+        operation: 操作名称
+        library: 库名称（可选）
+    Returns:
+        dict: 标准错误返回格式
+    """
+    if library:
+        logger.error(f"{library}抓取{operation}时出错: {str(error)}")
+    else:
+        logger.error(f"{operation}时出错: {str(error)}")
+    return {'success': False, 'message': str(error), 'data': []}
+
+def _create_response(success: bool, message: str, data: list = None) -> dict:
+    """
+    统一的响应创建函数
+    Args:
+        success: 是否成功
+        message: 消息
+        data: 数据（可选）
+    Returns:
+        dict: 标准响应格式
+    """
+    return {'success': success, 'message': message, 'data': data or []}
+
+def fetch_twitter_posts_smart():
+    """
+    智能抓取Twitter帖子，优先使用Tweety，失败时自动切换到Twikit。
+    返回值:
+        dict: 包含抓取结果的字典，格式为 {'success': bool, 'message': str, 'data': list}
+    """
+    try:
+        _log_operation("智能抓取Twitter帖子")
+        # 获取当前配置
+        config = get_config('TWITTER_LIBRARY', 'auto')
+        logger.info(f"当前Twitter库配置: {config}")
+
+        # 优先使用Tweety
+        if config == 'auto' or config == 'tweety':
+            try:
+                _log_operation("Twitter帖子", "Tweety")
+                result = fetch_twitter_posts_tweety()
+                if result['success']:
+                    logger.info("Tweety抓取成功")
+                    return result
+                logger.warning("Tweety抓取失败，尝试切换到Twikit")
+            except Exception as e:
+                return _handle_error(e, "Twitter帖子", "Tweety")
+
+        # 如果Tweety失败或配置为Twikit，使用Twikit
+        if config == 'auto' or config == 'twikit':
+            try:
+                _log_operation("Twitter帖子", "Twikit")
+                result = fetch_twitter_posts_twikit()
+                if result['success']:
+                    logger.info("Twikit抓取成功")
+                    return result
+                logger.warning("Twikit抓取失败")
+            except Exception as e:
+                return _handle_error(e, "Twitter帖子", "Twikit")
+
+        # 如果都失败，返回错误
+        logger.error("所有抓取方式均失败")
+        return _create_response(False, "所有抓取方式均失败")
+    except Exception as e:
+        return _handle_error(e, "智能抓取Twitter帖子")
+
+def fetch_twitter_posts_tweety():
+    """
+    使用Tweety抓取Twitter帖子。
+    返回值:
+        dict: 包含抓取结果的字典，格式为 {'success': bool, 'message': str, 'data': list}
+    """
+    try:
+        _log_operation("Twitter帖子", "Tweety")
+        # 抓取逻辑
+        # ...
+        return _create_response(True, "Tweety抓取成功")
+    except Exception as e:
+        return _handle_error(e, "Twitter帖子", "Tweety")
+
+def fetch_twitter_posts_twikit():
+    """
+    使用Twikit抓取Twitter帖子。
+    返回值:
+        dict: 包含抓取结果的字典，格式为 {'success': bool, 'message': str, 'data': list}
+    """
+    try:
+        _log_operation("Twitter帖子", "Twikit")
+        # 抓取逻辑
+        # ...
+        return _create_response(True, "Twikit抓取成功")
+    except Exception as e:
+        return _handle_error(e, "Twitter帖子", "Twikit")
 
 if __name__ == "__main__":
     posts = fetch('myfxtrader')

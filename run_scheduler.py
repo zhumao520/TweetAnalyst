@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-定时任务启动脚本
+定时任务脚本
+负责执行定时抓取任务
 """
 import time
 import schedule
@@ -9,6 +10,10 @@ import subprocess
 import threading
 from dotenv import load_dotenv
 import sys
+import logging
+from datetime import datetime
+from services.config_service import get_config
+from modules.socialmedia.smart_fetch import fetch_twitter_posts_smart
 
 # 添加当前目录到路径，确保能导入web_app模块
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -44,101 +49,152 @@ load_dotenv()
 running_tasks = {}
 task_lock = threading.Lock()
 
-def job():
-    """
-    执行主程序（使用独立进程，避免阻塞调度器）
-    """
-    task_id = f"social_media_task_{int(time.time())}"
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('scheduler')
 
-    with task_lock:
-        # 检查是否有任务正在运行
-        if running_tasks:
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务已在运行中，跳过本次执行")
-            # 清理已完成的任务
-            completed_tasks = [tid for tid, process in running_tasks.items() if process.poll() is not None]
-            for tid in completed_tasks:
-                process = running_tasks.pop(tid)
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 任务 {tid} 已完成，返回码: {process.returncode}")
+def get_scheduler_config():
+    """从数据库获取定时任务配置"""
+    try:
+        # 获取配置
+        interval = int(get_config('SCHEDULER_INTERVAL_MINUTES', '30'))
+        auto_fetch = get_config('AUTO_FETCH_ENABLED', 'false').lower() == 'true'
+        timeline_interval = int(get_config('TIMELINE_INTERVAL_MINUTES', '60'))
+        timeline_fetch = get_config('TIMELINE_FETCH_ENABLED', 'false').lower() == 'true'
+
+        logger.info(f"定时任务配置: 间隔={interval}分钟, 自动抓取={auto_fetch}")
+        logger.info(f"时间线任务配置: 间隔={timeline_interval}分钟, 自动抓取={timeline_fetch}")
+
+        return {
+            'interval': interval,
+            'auto_fetch': auto_fetch,
+            'timeline_interval': timeline_interval,
+            'timeline_fetch': timeline_fetch
+        }
+    except Exception as e:
+        logger.error(f"获取定时任务配置失败: {str(e)}")
+        return {
+            'interval': 30,
+            'auto_fetch': False,
+            'timeline_interval': 60,
+            'timeline_fetch': False
+        }
+
+def run_scheduled_task():
+    """执行定时任务"""
+    try:
+        logger.info("开始执行定时任务")
+        # 获取当前配置
+        config = get_scheduler_config()
+        logger.info(f"当前定时任务配置: 间隔={config['interval']}分钟, 自动抓取={config['auto_fetch']}")
+
+        # 检查是否启用自动抓取
+        if not config['auto_fetch']:
+            logger.info("自动抓取未启用，跳过执行")
             return
 
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始执行社交媒体监控任务 {task_id}...")
+        # 执行任务
+        with app.app_context():
+            # 从数据库获取所有需要抓取的账号
+            from models.social_account import SocialAccount
+            accounts = SocialAccount.query.filter_by(type='twitter').all()
 
-    try:
-        # 使用独立进程执行主程序
-        python_executable = sys.executable
-        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
+            # 获取抓取数量配置
+            fetch_limit = int(get_config('SCHEDULER_FETCH_LIMIT', '10'))
 
-        # 启动独立进程
-        process = subprocess.Popen(
-            [python_executable, script_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=os.path.dirname(os.path.abspath(__file__))
-        )
+            for account in accounts:
+                logger.info(f"开始抓取账号 {account.account_id} 的推文（限制: {fetch_limit} 条）")
+                from modules.socialmedia.async_utils import safe_asyncio_run
+                posts = safe_asyncio_run(fetch_twitter_posts_smart(account.account_id, fetch_limit, "account"))
+                if posts:
+                    logger.info(f"成功抓取到 {len(posts)} 条推文")
 
-        with task_lock:
-            running_tasks[task_id] = process
+                    # 处理抓取到的推文（AI分析和保存到数据库）
+                    from main import process_posts_for_account
+                    processed_count, relevant_count = process_posts_for_account(
+                        posts,
+                        account,
+                        save_to_db=True
+                    )
 
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务 {task_id} 已启动，PID: {process.pid}")
+                    logger.info(f"账号 {account.account_id}: 处理了 {processed_count} 条推文，其中 {relevant_count} 条相关内容")
+                else:
+                    logger.warning(f"账号 {account.account_id}: 未抓取到推文")
 
-        # 启动线程监控任务完成
-        monitor_thread = threading.Thread(target=monitor_task, args=(task_id, process))
-        monitor_thread.daemon = True
-        monitor_thread.start()
-
+        logger.info("定时任务执行完成")
     except Exception as e:
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 启动社交媒体监控任务时出错: {e}")
-        with task_lock:
-            if task_id in running_tasks:
-                del running_tasks[task_id]
+        logger.error(f"执行定时任务时出错: {str(e)}")
 
-def monitor_task(task_id, process):
-    """
-    监控任务执行状态
-    """
+def run_timeline_scheduled_task():
+    """执行时间线定时任务"""
     try:
-        # 等待进程完成
-        stdout, stderr = process.communicate()
+        logger.info("开始执行时间线定时任务")
+        # 获取当前配置
+        config = get_scheduler_config()
+        logger.info(f"当前时间线任务配置: 间隔={config['timeline_interval']}分钟, 自动抓取={config['timeline_fetch']}")
 
-        with task_lock:
-            if task_id in running_tasks:
-                del running_tasks[task_id]
+        # 检查是否启用时间线抓取
+        if not config['timeline_fetch']:
+            logger.info("时间线抓取未启用，跳过执行")
+            return
 
-        if process.returncode == 0:
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务 {task_id} 执行完成")
-            if stdout:
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 任务输出: {stdout.strip()}")
-        else:
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 社交媒体监控任务 {task_id} 执行失败，返回码: {process.returncode}")
-            if stderr:
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 错误信息: {stderr.strip()}")
+        # 执行任务
+        with app.app_context():
+            # 导入main模块中的处理函数
+            from main import process_timeline_posts
+
+            # 获取自动回复设置
+            enable_auto_reply = os.getenv("ENABLE_AUTO_REPLY", "false").lower() == "true"
+            auto_reply_prompt = os.getenv("AUTO_REPLY_PROMPT", "")
+
+            # 调用处理函数，确保保存到数据库
+            total, relevant = process_timeline_posts(enable_auto_reply, auto_reply_prompt, save_to_db=True)
+
+            if total > 0:
+                logger.info(f"成功处理 {total} 条时间线推文，其中 {relevant} 条相关内容")
+            else:
+                logger.warning("未处理到任何时间线推文")
+
+        logger.info("时间线定时任务执行完成")
     except Exception as e:
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 监控任务 {task_id} 时出错: {e}")
-        with task_lock:
-            if task_id in running_tasks:
-                del running_tasks[task_id]
+        logger.error(f"执行时间线定时任务时出错: {str(e)}")
 
-if __name__ == "__main__":
-    # 获取执行间隔（分钟）
-    interval_minutes = int(os.getenv("SCHEDULER_INTERVAL_MINUTES", "30"))
+def main():
+    """主函数"""
+    try:
+        logger.info("启动定时任务服务")
 
-    # 检查是否启用自动抓取
-    auto_fetch_enabled = os.getenv('AUTO_FETCH_ENABLED', 'false').lower() == 'true'
+        # 获取当前配置
+        config = get_scheduler_config()
+        logger.info(f"定时任务配置: 间隔={config['interval']}分钟, 自动抓取={config['auto_fetch']}")
+        logger.info(f"时间线任务配置: 间隔={config['timeline_interval']}分钟, 自动抓取={config['timeline_fetch']}")
 
-    if auto_fetch_enabled:
         # 设置定时任务
-        schedule.every(interval_minutes).minutes.do(job)
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 已启用自动抓取，每 {interval_minutes} 分钟执行一次")
-    else:
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 自动抓取已禁用，请通过Web界面手动启动抓取任务")
+        schedule.every(config['interval']).minutes.do(run_scheduled_task)
+        schedule.every(config['timeline_interval']).minutes.do(run_timeline_scheduled_task)
 
-    # 如果启用了自动抓取，立即执行一次
-    if auto_fetch_enabled:
-        print(f"定时任务已启动，每 {interval_minutes} 分钟执行一次")
-        job()
+        logger.info("已设置定时任务")
 
-    # 循环执行定时任务
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+        # 立即执行一次任务
+        logger.info("立即执行一次定时任务")
+        with app.app_context():
+            # 执行账号抓取任务
+            if config['auto_fetch']:
+                run_scheduled_task()
+
+            # 执行时间线抓取任务
+            if config['timeline_fetch']:
+                run_timeline_scheduled_task()
+
+        # 运行定时任务
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    except Exception as e:
+        logger.error(f"定时任务服务出错: {str(e)}")
+
+if __name__ == '__main__':
+    main()

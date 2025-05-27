@@ -286,8 +286,6 @@ const SettingsManager = {
         }
     },
 
-
-
     // 保存数据库自动清理配置
     saveDbCleanSettings: function() {
         const autoCleanEnabledElement = document.getElementById('db-auto-clean-enabled');
@@ -547,8 +545,6 @@ const SettingsManager = {
             description: 'HTTP代理'
         };
 
-
-
         // 数据库自动清理配置
         const dbAutoCleanEnabled = document.getElementById('db-auto-clean-enabled');
         if (dbAutoCleanEnabled) {
@@ -603,16 +599,6 @@ const SettingsManager = {
     },
 
     // AI提供商相关功能已移至AI设置页面
-
-
-
-
-
-
-
-
-
-
 
     // 关闭模态框
     closeModal: function(modalId) {
@@ -719,6 +705,12 @@ const SettingsManager = {
                 alert(`显示模态框错误: ${error.message}`);
             }
         }
+    },
+
+    saveAccountSettings: function() {
+        // 目前未实现账号设置保存逻辑，防止报错
+        // 你可以在这里实现具体保存逻辑
+        console.log('账号设置保存功能暂未实现');
     }
 };
 

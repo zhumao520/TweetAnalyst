@@ -154,7 +154,7 @@ class TwitterClientManager:
             logger.error(f"获取用户推文失败: {str(e)}")
             return []
 
-    def fetch_timeline_tweets(self, limit: int = 20) -> List[Post]:
+    def fetch_timeline_tweets(self, limit: int = 50) -> List[Post]:
         """获取时间线推文 - 统一接口"""
         if not self.initialized:
             logger.error("Twitter客户端未初始化")

@@ -170,6 +170,13 @@
                                     <i class="bi bi-info-circle me-1 text-primary"></i>账号抓取任务执行间隔，单位为分钟，默认为30分钟
                                 </div>
                             </div>
+                            <div class="mb-3">
+                                <label for="scheduler-fetch-limit" class="form-label">每次抓取数量</label>
+                                <input type="number" class="form-control" id="scheduler-fetch-limit" name="scheduler_fetch_limit" value="{{ config.get('SCHEDULER_FETCH_LIMIT', '10') }}" min="1" max="100" data-config-key="SCHEDULER_FETCH_LIMIT">
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1 text-primary"></i>每个账号每次抓取的推文数量，默认为10条
+                                </div>
+                            </div>
                         </div>
 
                         <!-- 时间线抓取任务配置 -->
@@ -191,6 +198,13 @@
                                 <input type="number" class="form-control" id="timeline-interval" name="timeline_interval" value="{{ config.get('TIMELINE_INTERVAL_MINUTES', '15') }}" min="1" max="1440" data-config-key="TIMELINE_INTERVAL_MINUTES">
                                 <div class="form-text">
                                     <i class="bi bi-info-circle me-1 text-success"></i>时间线抓取任务执行间隔，单位为分钟，默认为15分钟（建议比账号抓取更频繁）
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="timeline-fetch-limit" class="form-label">每次抓取数量</label>
+                                <input type="number" class="form-control" id="timeline-fetch-limit" name="timeline_fetch_limit" value="{{ config.get('TIMELINE_FETCH_LIMIT', '50') }}" min="1" max="200" data-config-key="TIMELINE_FETCH_LIMIT">
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1 text-success"></i>每次时间线抓取的推文数量，默认为50条（时间线内容更丰富，可以设置更多）
                                 </div>
                             </div>
                             <div class="alert alert-info">
