@@ -15,6 +15,50 @@ from typing import Dict, Any, Optional, Tuple, List, Union
 # 创建日志记录器
 logger = get_logger('main')
 
+# --- CLI App Setup ---
+# This section must be at the top after imports but before most other code.
+from flask import Flask
+from models import db as main_db # Use an alias
+from services.config_service import get_config as main_get_config # Use an alias
+
+cli_app = None
+
+def _init_cli_app():
+    global cli_app
+    if cli_app is None:
+        cli_app = Flask(__name__)
+        
+        try:
+            # Ensure config is initialized enough to get DATABASE_PATH
+            # This might be a chicken-and-egg if init_config itself needs db.
+            # For now, assume main_get_config can read env var or a pre-loaded cache.
+            db_uri_raw = main_get_config('DATABASE_PATH', 'data/tweetAnalyst.db')
+        except Exception:
+            logger.warning("Could not use main_get_config for DATABASE_PATH during _init_cli_app, using os.getenv.")
+            db_uri_raw = os.getenv('DATABASE_PATH', 'data/tweetAnalyst.db')
+
+        if not db_uri_raw: # Final fallback if config service also returned None/empty
+            db_uri_raw = 'data/tweetAnalyst.db'
+            logger.warning(f"DATABASE_PATH is empty, defaulting to {db_uri_raw} for CLI app.")
+
+
+        if not db_uri_raw.startswith('sqlite:///'):
+            if not os.path.isabs(db_uri_raw):
+                # Default path relative to the project root (assuming app runs from root)
+                project_root = os.getcwd() 
+                db_uri_raw = os.path.join(project_root, db_uri_raw)
+            db_uri = f'sqlite:///{db_uri_raw}'
+        else:
+            db_uri = db_uri_raw
+            
+        cli_app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+        cli_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        main_db.init_app(cli_app)
+        logger.info(f"CLI Flask app initialized for DB operations with URI: {db_uri}")
+
+# --- End CLI App Setup ---
+
+
 # 在导入其他模块之前应用SSL修复
 try:
     from utils.ssl_fix import apply_ssl_fixes
@@ -34,7 +78,8 @@ except ImportError:
     TWIKIT_AVAILABLE = False
     logger.info("Twikit库不可用，仅使用tweety库")
 
-from modules.langchain.llm import get_llm_response_with_cache, LLMAPIError, LLMRateLimitError
+from modules.langchain.llm import get_llm_response_with_cache, LLMAPIError, LLMRateLimitError, LLMResponseFormatError
+from models.llm_schemas import LLMAnalysisResponse # Import Pydantic model
 from utils.yaml_utils import load_config_with_env
 
 # 尝试导入队列版本的推送适配器，如果失败则使用原始版本
@@ -305,127 +350,74 @@ def process_llm_result(format_result: Dict[str, Any], is_old_format: bool, conte
     Returns:
         Tuple[bool, int, str, str]: (should_push, confidence, reason, summary)
     """
-    # 处理新旧两种格式
-    if is_old_format:
-        # 旧格式使用is_relevant字段
-        if 'is_relevant' in format_result:
-            should_push = format_result['is_relevant'] == '1'
-            analysis_content = format_result.get('analytical_briefing', '')
-            confidence = 100 if should_push else 0
-            reason = "符合预设主题" if should_push else "不符合预设主题"
-            summary = analysis_content
-        else:
-            # 如果使用旧格式提示词但返回了新格式结果，尝试适配
-            logger.warning("使用旧格式提示词但返回了新格式结果，尝试适配")
-            should_push = format_result.get('should_push', False)
-            confidence = format_result.get('confidence', 50)
-            reason = format_result.get('reason', '')
-            summary = format_result.get('summary', '')
-            # 如果有analytical_briefing字段，优先使用
-            if 'analytical_briefing' in format_result:
-                summary = format_result['analytical_briefing']
-    else:
-        # 新格式使用should_push字段
-        should_push = format_result.get('should_push', False)
-        confidence = format_result.get('confidence', 50)
-        reason = format_result.get('reason', '')
-        summary = format_result.get('summary', '')
+    should_push = llm_response.should_push
+    confidence = llm_response.confidence if llm_response.confidence is not None else (100 if should_push else 0)
+    reason = llm_response.reason or ("符合预设主题" if should_push else "不符合预设主题")
+    summary = llm_response.summary
+
+    # If analytical_briefing exists and summary is basic, merge it.
+    # The Pydantic model now includes 'detailed_analysis' as a preferred field for this.
+    # If 'analytical_briefing' is still used by the LLM, we can map it here.
+    if llm_response.analytical_briefing and (summary == content[:200] + "..." or not summary.strip()):
+        summary = llm_response.analytical_briefing
+        logger.info("使用 'analytical_briefing' 作为主要摘要内容。")
+    elif llm_response.detailed_analysis: # Prefer detailed_analysis if summary is basic
+         if summary == content[:200] + "..." or not summary.strip():
+            summary = llm_response.detailed_analysis
+            logger.info("使用 'detailed_analysis' 作为主要摘要内容。")
+
 
     # 确保summary不为空
     if not summary or summary.strip() == '':
-        # 如果summary为空，使用原始内容的前200个字符作为摘要
         summary = f"AI分析结果: {content[:200]}..." if len(content) > 200 else content
         logger.warning(f"分析结果摘要为空，使用原始内容作为摘要")
 
-    # 处理特定领域的额外信息
-    if tag == 'finance' and 'impact_areas' in format_result:
-        impact_areas = format_result.get('impact_areas', [])
-        if impact_areas:
-            summary += f"\n\n**影响领域**: {', '.join(impact_areas)}"
-    elif tag == 'ai' and 'tech_areas' in format_result:
-        tech_areas = format_result.get('tech_areas', [])
-        if tech_areas:
-            summary += f"\n\n**技术领域**: {', '.join(tech_areas)}"
-
+    # Append specific area info to summary
+    if tag == 'finance' and llm_response.impact_areas:
+        summary += f"\n\n**影响领域**: {', '.join(llm_response.impact_areas)}"
+    elif tag == 'ai' and llm_response.tech_areas:
+        summary += f"\n\n**技术领域**: {', '.join(llm_response.tech_areas)}"
+    if llm_response.news_categories: # General news categories
+        summary += f"\n\n**新闻分类**: {', '.join(llm_response.news_categories)}"
+        
     return should_push, confidence, reason, summary
 
-def call_llm_with_retry(prompt: str, account_type: str, account_id: str) -> Optional[Dict[str, Any]]:
+async def call_llm_with_retry(prompt: str, account_type: str, account_id: str) -> Optional[LLMAnalysisResponse]:
     """
-    调用LLM并解析响应，支持重试和多AI提供商
-
-    Args:
-        prompt: 提示词
-        account_type: 账号类型
-        account_id: 账号ID
-
-    Returns:
-        Optional[Dict[str, Any]]: 解析结果，如果失败则返回None
+    调用LLM并解析响应 (async), 支持重试和多AI提供商.
+    The retry logic is now primarily handled by the @retry_with_exponential_backoff decorator
+    on get_llm_response in llm.py. This function will focus on invoking it.
     """
-    format_result = None
-    rawData = ''
-    retry_count = 0
-    provider_info = {}
+    llm_response_obj: Optional[LLMAnalysisResponse] = None
+    provider_info_dict: Dict[str, Any] = {}
 
-    # 在某些情况下，LLM会返回一些非法的json字符串，所以这里需要循环尝试，直到解析成功为止
-    while format_result is None and retry_count < LLM_PROCESS_MAX_RETRIED:
-        try:
-            if len(rawData) > 0:
-                logger.warning(f"LLM返回的JSON格式无效，尝试重试 ({retry_count+1}/{LLM_PROCESS_MAX_RETRIED})")
-                prompt += f"""
-你前次基于上面的内容提供给我的json是{rawData}，然而这个json内容有语法错误，无法在python中被解析。针对这个问题重新检查我的要求，按指定要求和格式回答。
-"""
-            logger.debug("调用LLM进行内容分析")
+    try:
+        logger.debug(f"调用LLM进行内容分析 for {account_type}:{account_id}")
+        # get_llm_response_with_cache is now async and returns a Pydantic object and provider_info
+        llm_response_obj, provider_info_dict = await get_llm_response_with_cache(
+            prompt, use_cache=USE_LLM_CACHE
+        )
 
-            # 使用带缓存的LLM响应获取
-            try:
-                # 尝试使用多AI提供商版本
-                rawData, provider_info = get_llm_response_with_cache(prompt, use_cache=USE_LLM_CACHE)
+        if llm_response_obj:
+            logger.info("成功获取并解析LLM响应")
+            # Provider info is now part of the tuple from get_llm_response_with_cache
+            # and can be added to the Pydantic object if needed (already done in get_llm_response)
+        else: # Should ideally not happen if get_llm_response raises on error
+            logger.error("LLM响应为空或解析失败 (unexpected None from get_llm_response_with_cache)")
+            
+    except LLMResponseFormatError as e:
+        logger.error(f"LLM响应格式错误 (Pydantic解析失败) for {account_type}:{account_id}: {str(e)}")
+        # This error will be caught by the retry decorator on get_llm_response
+        # If it still propagates here, it means all retries failed.
+        return None # Or re-raise if preferred
+    except LLMAPIError as e: # Catch other specific LLM errors
+        logger.error(f"LLM API调用特定错误 for {account_type}:{account_id}: {str(e)}")
+        return None
+    except Exception as e: # Catch any other unexpected errors
+        logger.error(f"处理内容时发生未预期的错误 for {account_type}:{account_id}: {str(e)}", exc_info=True)
+        return None # Or re-raise
 
-                # 记录使用的AI提供商信息
-                if provider_info and 'provider_id' in provider_info:
-                    logger.info(f"使用AI提供商ID: {provider_info['provider_id']}")
-                    if 'model' in provider_info:
-                        logger.info(f"使用模型: {provider_info['model']}")
-                    if 'cached' in provider_info:
-                        logger.info(f"使用缓存: {'是' if provider_info['cached'] else '否'}")
-            except Exception as e:
-                # 如果多AI提供商版本失败，回退到单一AI提供商版本
-                logger.warning(f"多AI提供商调用失败，回退到单一AI提供商: {str(e)}")
-                rawData = get_llm_response_with_cache(prompt, use_cache=USE_LLM_CACHE)
-                provider_info = {}
-
-            # 解析LLM响应
-            format_result = parse_llm_response(rawData)
-
-            if format_result:
-                logger.info(f"成功解析LLM响应")
-
-                # 如果有提供商信息，添加到结果中
-                if provider_info:
-                    if 'provider_id' in provider_info:
-                        format_result['ai_provider_id'] = provider_info['provider_id']
-                    if 'model' in provider_info:
-                        format_result['ai_model'] = provider_info['model']
-            else:
-                logger.warning(f"解析LLM响应失败，尝试重试")
-                retry_count += 1
-
-        except LLMRateLimitError as e:
-            # 限流错误，等待一段时间后重试
-            wait_time = (retry_count + 1) * 5  # 递增等待时间
-            logger.warning(f"LLM API限流，等待 {wait_time} 秒后重试: {str(e)}")
-            time.sleep(wait_time)
-            retry_count += 1
-        except LLMAPIError as e:
-            # 其他API错误
-            logger.error(f"LLM API调用错误: {str(e)}")
-            retry_count += 1
-        except Exception as e:
-            # 未预期的错误
-            logger.error(f"处理内容时发生未预期的错误: {str(e)}", exc_info=True)
-            retry_count += 1
-
-    return format_result
+    return llm_response_obj # Return the Pydantic object
 
 def ensure_env_vars() -> None:
     """
@@ -913,7 +905,7 @@ def parse_llm_response(response_text: str) -> Dict[str, Any]:
 
 def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = False, auto_reply_prompt: str = "", save_to_db: bool = False) -> Dict[str, Any]:
     """
-    处理单个帖子
+    处理单个帖子 (async)
 
     Args:
         post: 帖子对象
@@ -925,6 +917,9 @@ def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = F
     Returns:
         dict: 处理结果
     """
+    # Ensure cli_app is initialized before potential DB operations in process_post
+    _init_cli_app()
+
     account_id = account['socialNetworkId']
     account_type = account['type']
     content = post.content
@@ -999,130 +994,80 @@ def process_post(post: Any, account: Dict[str, Any], enable_auto_reply: bool = F
         # 如果不绕过AI判断，使用正常流程
         # 获取提示词
         prompt = get_prompt_for_account(account, content, tag)
-        is_old_format = 'is_relevant' in prompt
+        # is_old_format = 'is_relevant' in prompt # No longer needed due to Pydantic model
 
-        # 调用LLM并解析响应
-        format_result = call_llm_with_retry(prompt, account_type, account_id)
+        # 调用LLM并解析响应 (async)
+        llm_analysis_response: Optional[LLMAnalysisResponse] = await call_llm_with_retry(prompt, account_type, account_id)
 
         # 如果LLM调用失败
-        if format_result is None:
+        if llm_analysis_response is None:
             logger.error(
-                f"在 {account_type}: {account_id} 上处理内容时，LLM返回的JSON格式始终无法解析，已达到最大重试次数 {LLM_PROCESS_MAX_RETRIED}")
-
-            # 保存基本信息到数据库
+                f"在 {account_type}:{account_id} 上处理内容时，LLM调用或解析失败，已达到最大重试次数或发生不可恢复错误")
             save_analysis_to_db(
-                post=post,
-                account_type=account_type,
-                account_id=account_id,
-                summary="LLM分析失败，无法获取分析结果",
-                is_relevant=False,
-                confidence=0,
-                reason="LLM API调用失败",
-                save_to_db=save_to_db,
-                ai_provider="error",
-                ai_model="error"
+                post=post, account_type=account_type, account_id=account_id,
+                summary="LLM分析失败，无法获取分析结果", is_relevant=False, confidence=0,
+                reason="LLM API调用或解析失败", save_to_db=save_to_db,
+                ai_provider="error", ai_model="error"
             )
+            return result # result['success'] is False
 
-            return result
+        # 处理LLM结果 using Pydantic object
+        should_push, confidence, reason, summary = process_llm_result(llm_analysis_response, False, content, tag) # is_old_format is False
 
-        post_time = post.get_local_time()
+        is_relevant = should_push # Compatibility
 
-        # 处理LLM结果
-        should_push, confidence, reason, summary = process_llm_result(format_result, is_old_format, content, tag)
-
-        # 兼容旧代码，保留is_relevant字段
-        is_relevant = should_push
-
-        # 更新结果对象
         result["success"] = True
         result["should_push"] = should_push
         result["is_relevant"] = is_relevant
-        result["format_result"] = format_result
+        result["format_result"] = llm_analysis_response.model_dump() # Store as dict
         result["post_time"] = post_time
         result["confidence"] = confidence
         result["reason"] = reason
         result["summary"] = summary
 
-        # 如果AI决定不推送
+        ai_provider_used = llm_analysis_response.ai_provider_id
+        ai_model_used = llm_analysis_response.ai_model
+
         if not should_push:
             logger.info(
-                f"在 {account_type}: {account_id} 上发现有更新的内容，但AI决定不推送 (置信度: {confidence}%)")
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"不推送原因: {reason}")
-                logger.debug(f"内容: {content[:100]}..." if len(content) > 100 else content)
-
-            # 获取AI提供商信息（如果有）
-            ai_provider = format_result.get('ai_provider_id', None)
-            ai_model = format_result.get('ai_model', None)
-
-            # 保存到数据库
+                f"在 {account_type}:{account_id} 上发现更新内容，但AI决定不推送 (置信度: {confidence}%)")
+            # ... (logging as before)
             save_analysis_to_db(
-                post=post,
-                account_type=account_type,
-                account_id=account_id,
-                summary=summary,
-                is_relevant=False,
-                confidence=confidence,
-                reason=reason,
-                save_to_db=save_to_db,
-                ai_provider=ai_provider,
-                ai_model=ai_model
+                post=post, account_type=account_type, account_id=account_id,
+                summary=summary, is_relevant=False, confidence=confidence, reason=reason,
+                save_to_db=save_to_db, ai_provider=ai_provider_used, ai_model=ai_model_used
             )
-
             return result
 
-        # AI决定推送
-        logger.info(f"在 {account_type}: {account_id} 上发现内容，AI决定推送 (置信度: {confidence}%)")
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"推送原因: {reason}")
+        logger.info(f"在 {account_type}:{account_id} 上发现内容，AI决定推送 (置信度: {confidence}%)")
+        # ... (logging as before)
 
-        # 发送推送通知
-        send_push_notification(
-            post=post,
-            summary=summary,
-            reason=reason,
-            tag=tag,
-            is_ai_decision=True
-        )
-
-        # 如果启用了自动回复，尝试回复
-        # 兼容两种字段名：enable_auto_reply（数据库字段）和enableAutoReply（YAML配置字段）
+        send_push_notification(post=post, summary=summary, reason=reason, tag=tag, is_ai_decision=True)
+        
         account_auto_reply = account.get('enable_auto_reply', account.get('enableAutoReply', False))
         if enable_auto_reply and account_auto_reply:
             try:
                 logger.info(f"尝试自动回复帖子 {post.id}")
-                reply_result = auto_reply(post, enable_auto_reply, auto_reply_prompt)
-                if reply_result:
-                    logger.info("自动回复成功")
-                else:
-                    logger.info("自动回复未执行或失败")
+                # Assuming auto_reply can be awaited if it becomes async
+                # For now, if auto_reply is sync, it will block here.
+                # This might need to be run in a separate thread if it's long-running.
+                reply_result = await auto_reply(post, enable_auto_reply, auto_reply_prompt) if inspect.iscoroutinefunction(auto_reply) else auto_reply(post, enable_auto_reply, auto_reply_prompt)
+                if reply_result: logger.info("自动回复成功")
+                else: logger.info("自动回复未执行或失败")
             except Exception as e:
                 logger.error(f"自动回复时出错: {str(e)}")
 
-        # 获取AI提供商信息（如果有）
-        ai_provider = format_result.get('ai_provider_id', None)
-        ai_model = format_result.get('ai_model', None)
-
-        # 保存分析结果到数据库
         save_analysis_to_db(
-            post=post,
-            account_type=account_type,
-            account_id=account_id,
-            summary=summary,
-            is_relevant=True,
-            confidence=confidence,
-            reason=reason,
-            save_to_db=save_to_db,
-            ai_provider=ai_provider,
-            ai_model=ai_model
+            post=post, account_type=account_type, account_id=account_id,
+            summary=summary, is_relevant=True, confidence=confidence, reason=reason,
+            save_to_db=save_to_db, ai_provider=ai_provider_used, ai_model=ai_model_used
         )
-
         return result
     except Exception as e:
         logger.error(f"处理帖子时发生错误: {str(e)}", exc_info=True)
-        return result
+        return result # result['success'] will be False
 
-def process_posts_for_account(posts: List[Any], account: Dict[str, Any], enable_auto_reply: bool = False, auto_reply_prompt: str = "", save_to_db: bool = False) -> Tuple[int, int]:
+async def process_posts_for_account(posts: List[Any], account: Dict[str, Any], enable_auto_reply: bool = False, auto_reply_prompt: str = "", save_to_db: bool = False) -> Tuple[int, int]:
     """
     处理已抓取的推文列表（用于定时任务）
 
@@ -1170,30 +1115,23 @@ def process_posts_for_account(posts: List[Any], account: Dict[str, Any], enable_
         # 创建处理队列
         post_queue = list(posts)  # 创建一个列表副本，这样我们可以安全地修改它
 
-        # 逐条处理帖子
-        while post_queue:
-            # 从队列头部取出一条帖子
-            post = post_queue.pop(0)
-
+        # 逐条处理帖子 (async)
+        for i, post_item in enumerate(post_queue): # Use enumerate for logging progress
             try:
-                # 处理帖子
-                logger.info(f"处理第 {processed_count + 1}/{total} 条帖子，ID: {post.id}")
-                result = process_post(post, account_dict, enable_auto_reply, auto_reply_prompt, save_to_db)
-
-                # 更新计数
+                logger.info(f"处理第 {i + 1}/{total} 条帖子，ID: {post_item.id}")
+                result = await process_post(post_item, account_dict, enable_auto_reply, auto_reply_prompt, save_to_db)
+                
                 processed_count += 1
                 if result["success"] and result.get("is_relevant", False):
                     relevant += 1
-
             except Exception as e:
-                logger.error(f"处理帖子 {post.id} 时出错: {str(e)}", exc_info=True)
+                logger.error(f"处理帖子 {post_item.id} 时出错: {str(e)}", exc_info=True)
                 error_count += 1
 
-            # 添加处理间隔，避免API限流
-            if post_queue and process_interval > 0:
+            if i < total - 1 and process_interval > 0 : # Check if it's not the last post
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(f"等待 {process_interval} 秒后处理下一条帖子")
-                time.sleep(process_interval)
+                await asyncio.sleep(process_interval) # Use asyncio.sleep
 
         logger.info(f"账号 {account_id} 处理完成，成功: {processed_count}，失败: {error_count}，相关: {relevant}")
         return (total, relevant)
@@ -1201,7 +1139,7 @@ def process_posts_for_account(posts: List[Any], account: Dict[str, Any], enable_
         logger.error(f"处理账号 {account_id} 的帖子时发生错误: {str(e)}", exc_info=True)
         return (0, 0)
 
-def process_account_posts(account: Dict[str, Any], enable_auto_reply: bool = False, auto_reply_prompt: str = "", save_to_db: bool = False) -> Tuple[int, int]:
+async def process_account_posts(account: Dict[str, Any], enable_auto_reply: bool = False, auto_reply_prompt: str = "", save_to_db: bool = False) -> Tuple[int, int]:
     """
     处理账号的所有帖子
 
@@ -1247,30 +1185,24 @@ def process_account_posts(account: Dict[str, Any], enable_auto_reply: bool = Fal
         # 创建处理队列
         post_queue = list(posts)  # 创建一个列表副本，这样我们可以安全地修改它
 
-        # 逐条处理帖子
-        while post_queue:
-            # 从队列头部取出一条帖子
-            post = post_queue.pop(0)
-
+        # 逐条处理帖子 (async)
+        for i, post_item in enumerate(post_queue): # Use enumerate for logging progress
             try:
-                # 处理帖子
-                logger.info(f"处理第 {processed_count + 1}/{total} 条帖子，ID: {post.id}")
-                result = process_post(post, account, enable_auto_reply, auto_reply_prompt, save_to_db)
+                logger.info(f"处理第 {i + 1}/{total} 条帖子，ID: {post_item.id}")
+                # process_post is now async
+                result = await process_post(post_item, account, enable_auto_reply, auto_reply_prompt, save_to_db)
 
-                # 更新计数
                 processed_count += 1
                 if result["success"] and result.get("is_relevant", False):
                     relevant += 1
-
             except Exception as e:
-                logger.error(f"处理帖子 {post.id} 时出错: {str(e)}", exc_info=True)
+                logger.error(f"处理帖子 {post_item.id} 时出错: {str(e)}", exc_info=True)
                 error_count += 1
-
-            # 添加处理间隔，避免API限流
-            if post_queue and process_interval > 0:
+            
+            if i < total - 1 and process_interval > 0: # Check if it's not the last post
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(f"等待 {process_interval} 秒后处理下一条帖子")
-                time.sleep(process_interval)
+                await asyncio.sleep(process_interval) # Use asyncio.sleep
 
         logger.info(f"账号 {account_id} 处理完成，成功: {processed_count}，失败: {error_count}，相关: {relevant}")
         return (total, relevant)
@@ -1278,7 +1210,7 @@ def process_account_posts(account: Dict[str, Any], enable_auto_reply: bool = Fal
         logger.error(f"处理账号 {account_id} 的帖子时发生错误: {str(e)}", exc_info=True)
         return (0, 0)
 
-def process_timeline_posts(enable_auto_reply: bool = False, auto_reply_prompt: str = "", save_to_db: bool = False) -> Tuple[int, int]:
+async def process_timeline_posts(enable_auto_reply: bool = False, auto_reply_prompt: str = "", save_to_db: bool = False) -> Tuple[int, int]:
     """
     处理时间线（关注账号）的最新推文
 
@@ -1360,31 +1292,25 @@ def process_timeline_posts(enable_auto_reply: bool = False, auto_reply_prompt: s
         # 创建处理队列
         post_queue = list(posts)  # 创建一个列表副本，这样我们可以安全地修改它
 
-        # 逐条处理推文
-        while post_queue:
-            # 从队列头部取出一条推文
-            post = post_queue.pop(0)
-
+        # 逐条处理推文 (async)
+        for i, post_item in enumerate(post_queue): # Use enumerate for logging progress
             try:
-                # 处理推文，显示原始作者信息
-                author_info = f"作者: {post.poster_name}" if hasattr(post, 'poster_name') else ""
-                logger.info(f"处理第 {processed_count + 1}/{total} 条时间线推文，ID: {post.id} {author_info}")
-                result = process_post(post, timeline_account, enable_auto_reply, auto_reply_prompt, save_to_db)
+                author_info = f"作者: {post_item.poster_name}" if hasattr(post_item, 'poster_name') else ""
+                logger.info(f"处理第 {i + 1}/{total} 条时间线推文，ID: {post_item.id} {author_info}")
+                # process_post is now async
+                result = await process_post(post_item, timeline_account, enable_auto_reply, auto_reply_prompt, save_to_db)
 
-                # 更新计数
                 processed_count += 1
                 if result["success"] and result.get("is_relevant", False):
                     relevant += 1
-
             except Exception as e:
-                logger.error(f"处理时间线推文 {post.id} 时出错: {str(e)}", exc_info=True)
+                logger.error(f"处理时间线推文 {post_item.id} 时出错: {str(e)}", exc_info=True)
                 error_count += 1
 
-            # 添加处理间隔，避免API限流
-            if post_queue and process_interval > 0:
+            if i < total - 1 and process_interval > 0: # Check if it's not the last post
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(f"等待 {process_interval} 秒后处理下一条推文")
-                time.sleep(process_interval)
+                await asyncio.sleep(process_interval) # Use asyncio.sleep
 
         logger.info(f"时间线处理完成，成功: {processed_count}，失败: {error_count}，相关: {relevant}")
         return (total, relevant)
@@ -1393,7 +1319,7 @@ def process_timeline_posts(enable_auto_reply: bool = False, auto_reply_prompt: s
         return (0, 0)
 
 
-def main() -> None:
+async def main() -> None: # Changed to async def
     """
     主函数，执行社交媒体监控任务
     """
@@ -1481,29 +1407,26 @@ def check_database_connection() -> bool:
     Returns:
         bool: 是否可以保存到数据库
     """
-    try:
-        # 导入Flask应用和数据库模型
-        from web_app import AnalysisResult, db, app
+    if 'cli_app' not in globals() or cli_app is None:
+        logger.error("cli_app not initialized. Cannot check database connection.")
+        _init_cli_app() # Attempt to initialize if not already
+        if 'cli_app' not in globals() or cli_app is None: # Check again
+             logger.error("cli_app still not initialized after attempt. DB check failed.")
+             return False
 
-        # 测试应用上下文和数据库连接
-        try:
-            with app.app_context():
-                db_count = AnalysisResult.query.count()
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(f"数据库中已有 {db_count} 条分析结果记录")
-                logger.info("已连接到数据库，将保存分析结果")
-                return True
-        except Exception as db_error:
-            logger.error(f"测试数据库连接时出错: {str(db_error)}")
-            logger.warning("由于数据库连接错误，不会保存分析结果")
-            return False
-    except ImportError as import_error:
-        logger.error(f"导入数据库模块时出错: {str(import_error)}")
-        logger.warning("未找到数据库模块，不会保存分析结果")
-        return False
+
+    try:
+        with cli_app.app_context():
+            # A simple query to check connectivity
+            # For SQLAlchemy, connecting and closing is a good test.
+            # For a more thorough check, you might execute a simple query like "SELECT 1".
+            connection = main_db.engine.connect()
+            connection.close()
+            logger.info("数据库连接成功 (via cli_app)")
+            return True
     except Exception as e:
-        logger.error(f"连接数据库时出错: {str(e)}")
-        logger.warning("由于错误，不会保存分析结果")
+        logger.error(f"数据库连接失败 (via cli_app): {str(e)}")
+        logger.warning("由于数据库连接错误，不会保存分析结果")
         return False
 
 
@@ -1531,20 +1454,21 @@ def process_all_accounts(
     # 添加账号处理间隔配置，默认5秒
     account_interval = float(os.getenv("ACCOUNT_INTERVAL", "5.0"))
 
-    # 使用线程池并行处理账号
-    use_threads = os.getenv("USE_THREADS", "false").lower() == "true"
-    max_workers = int(os.getenv("MAX_WORKERS", "4"))
+    # 使用线程池并行处理账号 (adjusting for async process_account_posts)
+    use_threads = main_get_config("USE_THREADS", "false").lower() == "true" # Use main_get_config
+    max_workers = int(main_get_config("MAX_WORKERS", "4")) # Use main_get_config
 
     if use_threads:
-        logger.info(f"使用线程池并行处理账号，最大线程数: {max_workers}")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 提交所有任务
-            future_to_account = {
-                executor.submit(process_account_posts, account, enable_auto_reply, auto_reply_prompt, save_to_db): account
-                for account in accounts
-            }
+        logger.info(f"使用线程池并行处理异步账号任务，最大线程数: {max_workers}")
+        
+        # Helper to run async function in a thread
+        def run_async_in_thread(acc):
+            return asyncio.run(process_account_posts(acc, enable_auto_reply, auto_reply_prompt, save_to_db))
 
-            # 处理结果
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_account = {
+                executor.submit(run_async_in_thread, account): account for account in accounts
+            }
             for future in concurrent.futures.as_completed(future_to_account):
                 account = future_to_account[future]
                 try:
@@ -1552,26 +1476,26 @@ def process_all_accounts(
                     total_posts += posts
                     relevant_posts += relevant
                 except Exception as e:
-                    logger.error(f"处理账号 {account.get('socialNetworkId', 'unknown')} 时发生错误: {str(e)}", exc_info=True)
+                    logger.error(f"处理账号 {account.get('socialNetworkId', 'unknown')} 的异步任务时发生错误: {str(e)}", exc_info=True)
     else:
-        # 顺序处理账号
+        # 顺序处理账号 (async)
         for i, account in enumerate(accounts):
             try:
-                logger.info(f"处理第 {i+1}/{len(accounts)} 个账号")
-                posts, relevant = process_account_posts(account, enable_auto_reply, auto_reply_prompt, save_to_db)
+                logger.info(f"顺序处理第 {i+1}/{len(accounts)} 个账号 (async)")
+                posts, relevant = await process_account_posts(account, enable_auto_reply, auto_reply_prompt, save_to_db)
                 total_posts += posts
                 relevant_posts += relevant
 
-                # 添加账号处理间隔
                 if i < len(accounts) - 1 and account_interval > 0:
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(f"等待 {account_interval} 秒后处理下一个账号")
-                    time.sleep(account_interval)
+                    await asyncio.sleep(account_interval) # Use asyncio.sleep
             except Exception as e:
                 logger.error(f"处理账号 {account.get('socialNetworkId', 'unknown')} 时发生错误: {str(e)}", exc_info=True)
-
     return total_posts, relevant_posts
 
 
 if __name__ == "__main__":
-    main()
+    # Ensure the CLI app is initialized before running main logic
+    _init_cli_app() # Initialize Flask app for DB context
+    asyncio.run(main()) # Run the async main function

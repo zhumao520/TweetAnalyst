@@ -1,0 +1,435 @@
+modules/socialmedia/post.py:2: error: Library stubs not installed for "pytz"  [import-untyped]
+modules/socialmedia/post.py:2: note: Hint: "python3 -m pip install types-pytz"
+modules/socialmedia/post.py:16: error: Incompatible default for argument "media_urls" (default has type "None", argument has type "list[Any]")  [assignment]
+modules/socialmedia/post.py:16: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/post.py:16: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/post.py:17: error: Incompatible default for argument "media_types" (default has type "None", argument has type "list[Any]")  [assignment]
+modules/socialmedia/post.py:17: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/post.py:17: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/post.py:18: error: Incompatible default for argument "poster_avatar_url" (default has type "None", argument has type "str")  [assignment]
+modules/socialmedia/post.py:18: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/post.py:18: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+models/notification_service.py:9: error: Name "db.Model" is not defined  [name-defined]
+models/notification_service.py:13: error: Cannot determine type of "db"  [has-type]
+models/notification_service.py:14: error: Cannot determine type of "db"  [has-type]
+models/notification_service.py:15: error: Cannot determine type of "db"  [has-type]
+models/notification_service.py:16: error: Cannot determine type of "db"  [has-type]
+models/notification_service.py:17: error: Cannot determine type of "db"  [has-type]
+models/notification_service.py:18: error: Cannot determine type of "db"  [has-type]
+models/notification_service.py:19: error: Cannot determine type of "db"  [has-type]
+models/system_state.py:13: error: Name "db.Model" is not defined  [name-defined]
+models/system_state.py:15: error: Cannot determine type of "db"  [has-type]
+models/system_state.py:16: error: Cannot determine type of "db"  [has-type]
+models/system_state.py:17: error: Cannot determine type of "db"  [has-type]
+models/system_state.py:18: error: Cannot determine type of "db"  [has-type]
+models/system_state.py:19: error: Cannot determine type of "db"  [has-type]
+models/system_state.py:20: error: Cannot determine type of "db"  [has-type]
+models/system_config.py:9: error: Name "db.Model" is not defined  [name-defined]
+models/system_config.py:11: error: Cannot determine type of "db"  [has-type]
+models/system_config.py:12: error: Cannot determine type of "db"  [has-type]
+models/system_config.py:13: error: Cannot determine type of "db"  [has-type]
+models/system_config.py:14: error: Cannot determine type of "db"  [has-type]
+models/system_config.py:15: error: Cannot determine type of "db"  [has-type]
+models/system_config.py:16: error: Cannot determine type of "db"  [has-type]
+models/system_config.py:17: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:9: error: Name "db.Model" is not defined  [name-defined]
+models/analysis_result.py:11: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:12: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:13: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:14: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:15: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:16: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:17: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:18: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:19: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:20: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:21: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:22: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:25: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:26: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:29: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:30: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:32: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:36: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:37: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:38: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:39: error: Cannot determine type of "db"  [has-type]
+models/analysis_result.py:40: error: Cannot determine type of "db"  [has-type]
+models/user.py:7: error: Cannot find implementation or library stub for module named "flask_login"  [import-not-found]
+models/user.py:10: error: Name "db.Model" is not defined  [name-defined]
+models/user.py:12: error: Cannot determine type of "db"  [has-type]
+models/user.py:13: error: Cannot determine type of "db"  [has-type]
+models/user.py:14: error: Cannot determine type of "db"  [has-type]
+models/user.py:15: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:9: error: Name "db.Model" is not defined  [name-defined]
+models/ai_provider.py:13: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:14: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:15: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:16: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:17: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:18: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:19: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:22: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:23: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:24: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:25: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:28: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:29: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:30: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:31: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:34: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:35: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:36: error: Cannot determine type of "db"  [has-type]
+models/ai_provider.py:37: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:9: error: Name "db.Model" is not defined  [name-defined]
+models/social_account.py:11: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:12: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:13: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:14: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:15: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:16: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:17: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:18: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:19: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:20: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:21: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:22: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:23: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:24: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:25: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:26: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:27: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:28: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:29: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:30: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:31: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:32: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:33: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:34: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:35: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:36: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:40: error: Cannot determine type of "db"  [has-type]
+models/social_account.py:41: error: Cannot determine type of "db"  [has-type]
+models/__init__.py:6: error: Cannot find implementation or library stub for module named "flask_sqlalchemy"  [import-not-found]
+models/proxy_config.py:9: error: Name "db.Model" is not defined  [name-defined]
+utils/redisClient.py:11: error: Need type annotation for "memory_store" (hint: "memory_store: dict[<type>, <type>] = ...")  [var-annotated]
+utils/redisClient.py:13: error: Need type annotation for "expiry_store" (hint: "expiry_store: dict[<type>, <type>] = ...")  [var-annotated]
+services/repository/__init__.py:7: error: Cannot find implementation or library stub for module named "sqlalchemy.orm"  [import-not-found]
+services/repository/__init__.py:8: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+services/repository/__init__.py:41: error: "type[T]" has no attribute "query"  [attr-defined]
+services/repository/__init__.py:50: error: "type[T]" has no attribute "query"  [attr-defined]
+services/repository/__init__.py:62: error: "type[T]" has no attribute "query"  [attr-defined]
+services/repository/__init__.py:74: error: "type[T]" has no attribute "query"  [attr-defined]
+services/repository/__init__.py:161: error: "type[T]" has no attribute "query"  [attr-defined]
+services/repository/__init__.py:173: error: "type[T]" has no attribute "query"  [attr-defined]
+services/repository/__init__.py:182: error: "type[T]" has no attribute "query"  [attr-defined]
+services/repository/__init__.py:196: error: "type[T]" has no attribute "query"  [attr-defined]
+services/repository/__init__.py:210: error: "type[T]" has no attribute "query"  [attr-defined]
+utils/logger.py:29: error: Cannot find implementation or library stub for module named "dotenv"  [import-not-found]
+utils/logger.py:29: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+services/repository/ai_provider_repository.py:101: error: Incompatible default for argument "error_message" (default has type "None", argument has type "str")  [assignment]
+services/repository/ai_provider_repository.py:101: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+services/repository/ai_provider_repository.py:101: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+services/repository/system_state_repository.py:52: error: Incompatible default for argument "expire" (default has type "None", argument has type "int")  [assignment]
+services/repository/system_state_repository.py:52: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+services/repository/system_state_repository.py:52: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+services/repository/system_config_repository.py:43: error: Incompatible default for argument "description" (default has type "None", argument has type "str")  [assignment]
+services/repository/system_config_repository.py:43: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+services/repository/system_config_repository.py:43: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+services/repository/analysis_result_repository.py:8: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+services/repository/analysis_result_repository.py:171: error: Name "db" is not defined  [name-defined]
+services/repository/analysis_result_repository.py:178: error: Name "db" is not defined  [name-defined]
+services/repository/analysis_result_repository.py:185: error: Name "db" is not defined  [name-defined]
+services/repository/social_account_repository.py:167: error: Incompatible default for argument "content_type" (default has type "None", argument has type "str")  [assignment]
+services/repository/social_account_repository.py:167: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+services/repository/social_account_repository.py:167: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter_utils.py:156: error: Argument "poster_name" to "Post" has incompatible type "str | None"; expected "str"  [arg-type]
+modules/socialmedia/twitter_utils.py:157: error: Argument "poster_url" to "Post" has incompatible type "str | None"; expected "str"  [arg-type]
+modules/socialmedia/twitter_utils.py:160: error: Argument "poster_avatar_url" to "Post" has incompatible type "str | None"; expected "str"  [arg-type]
+modules/socialmedia/twitter_utils.py:165: error: "Post" has no attribute "like_count"  [attr-defined]
+modules/socialmedia/twitter_utils.py:167: error: "Post" has no attribute "retweet_count"  [attr-defined]
+modules/socialmedia/twitter_utils.py:169: error: "Post" has no attribute "reply_count"  [attr-defined]
+modules/socialmedia/twitter_utils.py:178: error: Incompatible default for argument "original_author" (default has type "None", argument has type "str")  [assignment]
+modules/socialmedia/twitter_utils.py:178: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter_utils.py:178: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter_utils.py:190: error: "Post" has no attribute "account_id"  [attr-defined]
+modules/socialmedia/twitter_utils.py:191: error: "Post" has no attribute "source_type"  [attr-defined]
+modules/socialmedia/twitter_utils.py:192: error: "Post" has no attribute "original_author"  [attr-defined]
+modules/socialmedia/twitter_utils.py:212: error: Library stubs not installed for "dateutil"  [import-untyped]
+modules/socialmedia/twitter_utils.py:212: note: Hint: "python3 -m pip install types-python-dateutil"
+utils/db_utils.py:46: error: Incompatible default for argument "priority_columns" (default has type "None", argument has type "list[str]")  [assignment]
+utils/db_utils.py:46: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+utils/db_utils.py:46: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+utils/db_utils.py:167: error: Incompatible default for argument "default_value" (default has type "None", argument has type "str")  [assignment]
+utils/db_utils.py:167: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+utils/db_utils.py:167: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+services/repository/factory.py:110: error: Missing positional argument "model_class" in call to "BaseRepository"  [call-arg]
+services/repository/factory.py:112: error: Incompatible return value type (got "BaseRepository[Any]", expected "R")  [return-value]
+services/config_service.py:14: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+services/config_service.py:23: error: Need type annotation for "_config_cache" (hint: "_config_cache: dict[<type>, <type>] = ...")  [var-annotated]
+services/config_service.py:255: error: Incompatible default for argument "description" (default has type "None", argument has type "str")  [assignment]
+services/config_service.py:255: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+services/config_service.py:255: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+services/config_service.py:277: error: Too many arguments for "create" of "BaseRepository"  [call-arg]
+services/config_service.py:519: error: Library stubs not installed for "yaml"  [import-untyped]
+services/proxy_service.py:52: error: Incompatible default for argument "username" (default has type "None", argument has type "str")  [assignment]
+services/proxy_service.py:52: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+services/proxy_service.py:52: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+services/proxy_service.py:52: error: Incompatible default for argument "password" (default has type "None", argument has type "str")  [assignment]
+services/proxy_service.py:145: error: Incompatible default for argument "test_url" (default has type "None", argument has type "str")  [assignment]
+services/proxy_service.py:145: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+services/proxy_service.py:145: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+services/proxy_service.py:225: error: Incompatible default for argument "test_url" (default has type "None", argument has type "str")  [assignment]
+services/proxy_service.py:225: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+services/proxy_service.py:225: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+utils/yaml_utils.py:7: error: Library stubs not installed for "yaml"  [import-untyped]
+utils/yaml_utils.py:7: note: Hint: "python3 -m pip install types-PyYAML"
+utils/yaml_utils.py:7: note: (or run "mypy --install-types" to install all missing stub packages)
+modules/socialmedia/async_utils.py:122: error: Incompatible default for argument "init_method" (default has type "None", argument has type "str")  [assignment]
+modules/socialmedia/async_utils.py:122: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/async_utils.py:122: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/async_utils.py:122: error: Incompatible default for argument "cleanup_method" (default has type "None", argument has type "str")  [assignment]
+utils/api_utils.py:40: error: Need type annotation for "_request_cache" (hint: "_request_cache: dict[<type>, <type>] = ...")  [var-annotated]
+utils/api_utils.py:62: error: Name "DBProxyConfig" already defined (possibly by an import)  [no-redef]
+utils/api_utils.py:69: error: Incompatible default for argument "username" (default has type "None", argument has type "str")  [assignment]
+utils/api_utils.py:69: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+utils/api_utils.py:69: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+utils/api_utils.py:70: error: Incompatible default for argument "password" (default has type "None", argument has type "str")  [assignment]
+utils/api_utils.py:70: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+utils/api_utils.py:70: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+utils/api_utils.py:72: error: Incompatible default for argument "name" (default has type "None", argument has type "str")  [assignment]
+utils/api_utils.py:72: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+utils/api_utils.py:72: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+utils/api_utils.py:131: error: Incompatible default for argument "username" (default has type "None", argument has type "str")  [assignment]
+utils/api_utils.py:131: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+utils/api_utils.py:131: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+utils/api_utils.py:132: error: Incompatible default for argument "password" (default has type "None", argument has type "str")  [assignment]
+utils/api_utils.py:132: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+utils/api_utils.py:132: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+utils/api_utils.py:134: error: Incompatible default for argument "name" (default has type "None", argument has type "str")  [assignment]
+utils/api_utils.py:134: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+utils/api_utils.py:134: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+utils/api_utils.py:163: error: Incompatible default for argument "proxy_configs" (default has type "None", argument has type "list[ProxyConfig]")  [assignment]
+utils/api_utils.py:163: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+utils/api_utils.py:163: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+utils/api_utils.py:251: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
+utils/api_utils.py:267: error: Incompatible types in assignment (expression has type "ProxyConfig", variable has type "None")  [assignment]
+utils/api_utils.py:300: error: Argument "key" to "sort" of "list" has incompatible type "Callable[[tuple[ProxyConfig, float | None]], float | None]"; expected "Callable[[tuple[ProxyConfig, float | None]], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+utils/api_utils.py:300: error: Incompatible return value type (got "float | None", expected "SupportsDunderLT[Any] | SupportsDunderGT[Any]")  [return-value]
+utils/api_utils.py:301: error: Incompatible types in assignment (expression has type "ProxyConfig", variable has type "None")  [assignment]
+api/ai_provider.py:6: error: Cannot find implementation or library stub for module named "flask_login"  [import-not-found]
+api/analytics.py:12: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+services/test_service.py:40: error: Cannot find implementation or library stub for module named "twitter.scraper"  [import-not-found]
+services/test_service.py:123: error: Cannot find implementation or library stub for module named "langchain_openai"  [import-not-found]
+services/test_service.py:124: error: Cannot find implementation or library stub for module named "langchain_core.messages"  [import-not-found]
+modules/bots/apprise_adapter.py:2: error: Cannot find implementation or library stub for module named "apprise"  [import-not-found]
+modules/bots/apprise_adapter.py:284: error: All conditional function variants must have identical signatures  [misc]
+modules/bots/apprise_adapter.py:284: note: Original:
+modules/bots/apprise_adapter.py:284: note:     def mask_sensitive_url(url: str) -> str
+modules/bots/apprise_adapter.py:284: note: Redefinition:
+modules/bots/apprise_adapter.py:284: note:     def mask_sensitive_url(url: Any) -> Any
+modules/bots/apprise_adapter.py:311: error: All conditional function variants must have identical signatures  [misc]
+modules/bots/apprise_adapter.py:311: note: Original:
+modules/bots/apprise_adapter.py:311: note:     def validate_url(url: str) -> tuple[bool, str | None]
+modules/bots/apprise_adapter.py:311: note: Redefinition:
+modules/bots/apprise_adapter.py:311: note:     def validate_url(url: Any) -> Any
+modules/bots/apprise_adapter.py:315: error: All conditional function variants must have identical signatures  [misc]
+modules/bots/apprise_adapter.py:315: note: Original:
+modules/bots/apprise_adapter.py:315: note:     def parse_urls(urls_text: str) -> list[str]
+modules/bots/apprise_adapter.py:315: note: Redefinition:
+modules/bots/apprise_adapter.py:315: note:     def parse_urls(urls_text: Any) -> Any
+modules/bots/apprise_adapter.py:375: error: All conditional function variants must have identical signatures  [misc]
+modules/bots/apprise_adapter.py:375: note: Original:
+modules/bots/apprise_adapter.py:375: note:     def normalize_bark_url(url: str) -> str
+modules/bots/apprise_adapter.py:375: note: Redefinition:
+modules/bots/apprise_adapter.py:375: note:     def normalize_bark_url(url: Any) -> Any
+modules/socialmedia/twitter_twikit.py:116: error: Cannot find implementation or library stub for module named "twikit"  [import-not-found]
+modules/socialmedia/twitter_twikit.py:167: error: Incompatible types in assignment (expression has type "str", target has type "None")  [assignment]
+modules/socialmedia/twitter_twikit.py:174: error: Incompatible types in assignment (expression has type "str", target has type "None")  [assignment]
+modules/socialmedia/twitter_twikit.py:190: error: Incompatible types in assignment (expression has type "str", target has type "None")  [assignment]
+modules/socialmedia/twitter_twikit.py:191: error: Incompatible types in assignment (expression has type "str", target has type "None")  [assignment]
+modules/socialmedia/twitter_twikit.py:194: error: Incompatible types in assignment (expression has type "str", target has type "None")  [assignment]
+modules/socialmedia/twitter_twikit.py:195: error: Incompatible types in assignment (expression has type "str", target has type "None")  [assignment]
+modules/socialmedia/twitter_twikit.py:196: error: Incompatible types in assignment (expression has type "str", target has type "None")  [assignment]
+modules/socialmedia/twitter_twikit.py:197: error: Incompatible types in assignment (expression has type "str", target has type "None")  [assignment]
+modules/socialmedia/twitter_twikit.py:555: error: Incompatible default for argument "limit" (default has type "None", argument has type "int")  [assignment]
+modules/socialmedia/twitter_twikit.py:555: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter_twikit.py:555: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+migrations/db_migrations.py:39: error: Cannot find implementation or library stub for module named "dotenv"  [import-not-found]
+migrations/db_migrations.py:54: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+migrations/db_migrations.py:70: error: Cannot find implementation or library stub for module named "alembic"  [import-not-found]
+migrations/db_migrations.py:111: error: Incompatible types in assignment (expression has type "datetime", variable has type "None")  [assignment]
+migrations/db_migrations.py:121: error: Incompatible types in assignment (expression has type "str", variable has type "None")  [assignment]
+migrations/db_migrations.py:125: error: Incompatible types in assignment (expression has type "datetime", variable has type "None")  [assignment]
+modules/socialmedia/twitter_client_manager.py:31: error: Cannot find implementation or library stub for module named "tweety"  [import-not-found]
+modules/socialmedia/twitter_client_manager.py:38: error: Cannot find implementation or library stub for module named "twikit"  [import-not-found]
+services/ai_polling_service.py:42: error: Need type annotation for "_cache" (hint: "_cache: dict[<type>, <type>] = ...")  [var-annotated]
+services/ai_polling_service.py:46: error: Need type annotation for "_health_status" (hint: "_health_status: dict[<type>, <type>] = ...")  [var-annotated]
+services/ai_polling_service.py:219: error: Incompatible default for argument "ttl_seconds" (default has type "None", argument has type "int")  [assignment]
+services/ai_polling_service.py:219: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+services/ai_polling_service.py:219: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+services/ai_polling_service.py:304: error: Incompatible return value type (got "None", expected "str")  [return-value]
+services/ai_polling_service.py:334: error: Incompatible return value type (got "None", expected "dict[str, Any]")  [return-value]
+services/ai_polling_service.py:353: error: Need type annotation for "groups" (hint: "groups: dict[<type>, <type>] = ...")  [var-annotated]
+services/ai_polling_service.py:535: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
+services/ai_polling_service.py:551: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
+services/ai_polling_service.py:554: error: Incompatible types in assignment (expression has type "float", variable has type "int")  [assignment]
+modules/langchain/llm.py:1: error: Cannot find implementation or library stub for module named "dotenv"  [import-not-found]
+modules/langchain/llm.py:10: error: Cannot find implementation or library stub for module named "langchain_openai"  [import-not-found]
+modules/langchain/llm.py:11: error: Cannot find implementation or library stub for module named "langchain_core.messages"  [import-not-found]
+modules/langchain/llm.py:22: error: Incompatible types in assignment (expression has type "None", variable has type "AIAnalysisLogger")  [assignment]
+modules/langchain/llm.py:369: error: Need type annotation for "chat_params_extra" (hint: "chat_params_extra: dict[<type>, <type>] = ...")  [var-annotated]
+modules/langchain/llm.py:427: error: Need type annotation for "model_kwargs" (hint: "model_kwargs: dict[<type>, <type>] = ...")  [var-annotated]
+utils/test_utils.py:31: error: Cannot find implementation or library stub for module named "socksio"  [import-not-found]
+utils/test_utils.py:248: error: Cannot find implementation or library stub for module named "langchain_openai"  [import-not-found]
+utils/test_utils.py:249: error: Cannot find implementation or library stub for module named "langchain_core.messages"  [import-not-found]
+utils/test_utils.py:626: error: Cannot find implementation or library stub for module named "apprise"  [import-not-found]
+api/test.py:442: error: Cannot find implementation or library stub for module named "apprise"  [import-not-found]
+api/test.py:1190: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+modules/socialmedia/smart_fetch.py:24: error: Incompatible default for argument "prefer_library" (default has type "None", argument has type "str")  [assignment]
+modules/socialmedia/smart_fetch.py:24: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/smart_fetch.py:24: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter.py:8: error: Cannot find implementation or library stub for module named "tweety"  [import-not-found]
+modules/socialmedia/twitter.py:9: error: Cannot find implementation or library stub for module named "tweety.types"  [import-not-found]
+modules/socialmedia/twitter.py:21: error: Cannot find implementation or library stub for module named "dotenv"  [import-not-found]
+modules/socialmedia/twitter.py:154: error: Incompatible default for argument "proxy_info" (default has type "None", argument has type "dict[Any, Any]")  [assignment]
+modules/socialmedia/twitter.py:154: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter.py:154: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter.py:180: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:221: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:225: error: Incompatible types in assignment (expression has type "float", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:232: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:234: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:240: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:242: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:246: error: Item "None" of "tzinfo | None" has no attribute "utcoffset"  [union-attr]
+modules/socialmedia/twitter.py:246: error: Item "None" of "timedelta | Any | None" has no attribute "total_seconds"  [union-attr]
+modules/socialmedia/twitter.py:246: error: Incompatible types in assignment (expression has type "float | Any", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:249: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:599: error: Library stubs not installed for "yaml"  [import-untyped]
+modules/socialmedia/twitter.py:1469: error: Incompatible default for argument "limit" (default has type "None", argument has type "int")  [assignment]
+modules/socialmedia/twitter.py:1469: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter.py:1469: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter.py:1576: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1583: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1587: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1602: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1607: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1612: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1615: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1621: error: Incompatible types in assignment (expression has type "int", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1629: error: Item "None" of "Any | None" has no attribute "get_user_info"  [union-attr]
+modules/socialmedia/twitter.py:1633: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1638: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1643: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1646: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1652: error: Incompatible types in assignment (expression has type "int", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1674: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1934: error: Incompatible types in assignment (expression has type "int", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1942: error: Incompatible types in assignment (expression has type "str", target has type "bool | None")  [assignment]
+modules/socialmedia/twitter.py:1945: error: Incompatible default for argument "limit" (default has type "None", argument has type "int")  [assignment]
+modules/socialmedia/twitter.py:1945: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter.py:1945: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter.py:2149: error: Item "None" of "Any | None" has no attribute "get_tweets"  [union-attr]
+modules/socialmedia/twitter.py:2156: error: Item "None" of "Any | None" has no attribute "get_tweets"  [union-attr]
+modules/socialmedia/twitter.py:2163: error: Item "None" of "Any | None" has no attribute "get_tweets"  [union-attr]
+modules/socialmedia/twitter.py:2469: error: Item "None" of "Any | None" has no attribute "reply"  [union-attr]
+modules/socialmedia/twitter.py:2487: error: Incompatible default for argument "prompt_template" (default has type "None", argument has type "str")  [assignment]
+modules/socialmedia/twitter.py:2487: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter.py:2487: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter.py:2617: error: Incompatible default for argument "prompt_template" (default has type "None", argument has type "str")  [assignment]
+modules/socialmedia/twitter.py:2617: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter.py:2617: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter.py:2694: error: Incompatible default for argument "limit" (default has type "None", argument has type "int")  [assignment]
+modules/socialmedia/twitter.py:2694: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter.py:2694: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter.py:2877: error: Argument "poster_avatar_url" to "Post" has incompatible type "Any | None"; expected "str"  [arg-type]
+modules/socialmedia/twitter.py:2880: error: "Post" has no attribute "account_id"  [attr-defined]
+modules/socialmedia/twitter.py:2881: error: "Post" has no attribute "source_type"  [attr-defined]
+modules/socialmedia/twitter.py:2882: error: "Post" has no attribute "original_author"  [attr-defined]
+modules/socialmedia/twitter.py:2907: error: Item "None" of "Any | None" has no attribute "get_home_timeline"  [union-attr]
+modules/socialmedia/twitter.py:2910: error: Item "None" of "Any | None" has no attribute "get_home_timeline"  [union-attr]
+modules/socialmedia/twitter.py:2913: error: Item "None" of "Any | None" has no attribute "get_home_timeline"  [union-attr]
+modules/socialmedia/twitter.py:2930: error: Item "None" of "Any | None" has no attribute "get_timeline"  [union-attr]
+modules/socialmedia/twitter.py:2933: error: Item "None" of "Any | None" has no attribute "get_timeline"  [union-attr]
+modules/socialmedia/twitter.py:2936: error: Item "None" of "Any | None" has no attribute "get_timeline"  [union-attr]
+modules/socialmedia/twitter.py:2980: error: Item "None" of "Any | None" has no attribute "me"  [union-attr]
+modules/socialmedia/twitter.py:2983: error: Item "None" of "Any | None" has no attribute "me"  [union-attr]
+modules/socialmedia/twitter.py:2999: error: Item "None" of "Any | None" has no attribute "get_following"  [union-attr]
+modules/socialmedia/twitter.py:3002: error: Item "None" of "Any | None" has no attribute "get_friends"  [union-attr]
+modules/socialmedia/twitter.py:3043: error: "Post" has no attribute "created_on"  [attr-defined]
+modules/socialmedia/twitter.py:3105: error: Argument "poster_avatar_url" to "Post" has incompatible type "Any | None"; expected "str"  [arg-type]
+modules/socialmedia/twitter.py:3108: error: "Post" has no attribute "account_id"  [attr-defined]
+modules/socialmedia/twitter.py:3109: error: "Post" has no attribute "source_type"  [attr-defined]
+modules/socialmedia/twitter.py:3110: error: "Post" has no attribute "original_author"  [attr-defined]
+modules/socialmedia/twitter.py:3147: error: Argument "poster_avatar_url" to "Post" has incompatible type "Any | None"; expected "str"  [arg-type]
+modules/socialmedia/twitter.py:3150: error: "Post" has no attribute "account_id"  [attr-defined]
+modules/socialmedia/twitter.py:3151: error: "Post" has no attribute "source_type"  [attr-defined]
+modules/socialmedia/twitter.py:3152: error: "Post" has no attribute "original_author"  [attr-defined]
+modules/socialmedia/twitter.py:3216: error: Incompatible default for argument "library" (default has type "None", argument has type "str")  [assignment]
+modules/socialmedia/twitter.py:3216: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter.py:3216: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter.py:3228: error: Incompatible default for argument "library" (default has type "None", argument has type "str")  [assignment]
+modules/socialmedia/twitter.py:3228: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter.py:3228: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/twitter.py:3244: error: Incompatible default for argument "data" (default has type "None", argument has type "list[Any]")  [assignment]
+modules/socialmedia/twitter.py:3244: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/twitter.py:3244: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+modules/socialmedia/__init__.py:87: error: Incompatible default for argument "prefer_twitter_library" (default has type "None", argument has type "str")  [assignment]
+modules/socialmedia/__init__.py:87: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+modules/socialmedia/__init__.py:87: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+api/__init__.py:35: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:36: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:37: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:38: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:39: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:40: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:41: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:42: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:43: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:44: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+api/__init__.py:45: error: "Blueprint" has no attribute "register_blueprint"  [attr-defined]
+models/push_notification.py:8: error: Cannot find implementation or library stub for module named "sqlalchemy.dialects.sqlite"  [import-not-found]
+routes/ai_settings.py:10: error: Cannot find implementation or library stub for module named "flask_login"  [import-not-found]
+routes/ai_settings.py:11: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+routes/push_notifications.py:10: error: Cannot find implementation or library stub for module named "flask_login"  [import-not-found]
+routes/push_notifications.py:11: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+web_app.py:7: error: Library stubs not installed for "yaml"  [import-untyped]
+web_app.py:21: error: Cannot find implementation or library stub for module named "flask_wtf.csrf"  [import-not-found]
+web_app.py:22: error: Cannot find implementation or library stub for module named "flask_login"  [import-not-found]
+web_app.py:23: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+migrations/add_ai_request_logs.py:28: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+migrations/add_ai_provider_fields.py:29: error: Cannot find implementation or library stub for module named "sqlalchemy"  [import-not-found]
+modules/bots/apprise_adapter_queue.py:26: error: Incompatible types in assignment (expression has type "None", variable has type "Callable[[Any, Any, Any, Any, Any, Any, Any, Any, Any], Any]")  [assignment]
+modules/bots/apprise_adapter_queue.py:27: error: Incompatible types in assignment (expression has type "None", variable has type "Callable[[Any], Any]")  [assignment]
+modules/bots/apprise_adapter_queue.py:40: error: Incompatible types in assignment (expression has type "None", variable has type "Callable[[Any, Any, Any, Any, Any, Any, Any, Any], Any]")  [assignment]
+modules/bots/apprise_adapter_queue.py:41: error: Incompatible types in assignment (expression has type "None", variable has type "Callable[[Any, Any, Any], Any]")  [assignment]
+modules/bots/apprise_adapter_queue.py:87: error: Function "queue_notification" could always be true in boolean context  [truthy-function]
+modules/bots/apprise_adapter_queue.py:124: error: Function "direct_send_notification" could always be true in boolean context  [truthy-function]
+modules/bots/apprise_adapter_queue.py:181: error: Function "queue_notification" could always be true in boolean context  [truthy-function]
+modules/bots/apprise_adapter_queue.py:216: error: Function "direct_send_to_specific_url" could always be true in boolean context  [truthy-function]
+modules/bots/apprise_adapter_queue.py:239: error: All conditional function variants must have identical signatures  [misc]
+modules/bots/apprise_adapter_queue.py:239: note: Original:
+modules/bots/apprise_adapter_queue.py:239: note:     def mask_sensitive_url(url: str) -> str
+modules/bots/apprise_adapter_queue.py:239: note: Redefinition:
+modules/bots/apprise_adapter_queue.py:239: note:     def mask_url(url: Any) -> Any
+main.py:12: error: Cannot find implementation or library stub for module named "dotenv"  [import-not-found]
+main.py:81: error: Incompatible default for argument "limit" (default has type "None", argument has type "int")  [assignment]
+main.py:81: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+main.py:81: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+main.py:394: error: Incompatible types in assignment (expression has type "tuple[Any, ...]", variable has type "str")  [assignment]
+main.py:436: error: Module "services.config_service" has no attribute "ensure_env_vars"  [attr-defined]
+main.py:594: error: Incompatible default for argument "ai_provider" (default has type "None", argument has type "str")  [assignment]
+main.py:594: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+main.py:594: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+main.py:595: error: Incompatible default for argument "ai_model" (default has type "None", argument has type "str")  [assignment]
+main.py:595: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+main.py:595: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+main.py:776: error: Incompatible return value type (got "None", expected "dict[str, Any]")  [return-value]
+main.py:1141: error: "dict[str, Any]" has no attribute "account_id"  [attr-defined]
+main.py:1142: error: "dict[str, Any]" has no attribute "type"  [attr-defined]
+main.py:1143: error: "dict[str, Any]" has no attribute "tag"  [attr-defined]
+main.py:1144: error: "dict[str, Any]" has no attribute "enable_auto_reply"  [attr-defined]
+main.py:1145: error: "dict[str, Any]" has no attribute "prompt_template"  [attr-defined]
+main.py:1236: error: Argument 2 to "fetch_twitter_posts_smart" has incompatible type "None"; expected "int"  [arg-type]
+Found 333 errors in 49 files (checked 16 source files)
