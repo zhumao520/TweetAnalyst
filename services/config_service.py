@@ -24,7 +24,9 @@ _config_cache = {}
 _config_cache_timestamp = 0
 _config_cache_ttl = 60  # 缓存有效期（秒）
 _config_initialized = False
-_config_refreshing = False  # 替代锁，使用简单的标志变量
+_config_refreshing = False
+_config_lock = threading.Lock() # Thread lock for cache operations
+
 _config_meta = {
     'last_refresh_attempt': 0,  # 上次尝试刷新缓存的时间
     'refresh_failure_count': 0,  # 刷新失败计数
@@ -55,6 +57,39 @@ ENV_SYNC_KEYS = {
     'APPRISE_URLS'
 }
 
+def _get_database_path():
+    """
+    Determines the database path.
+    Prioritizes DATABASE_PATH env var, then defaults to 'data/tweetAnalyst.db'.
+    Logs an error if the file is not found.
+    """
+    db_path_env = os.environ.get('DATABASE_PATH')
+    if db_path_env:
+        db_path = db_path_env
+        logger.debug(f"Using DATABASE_PATH from environment: {db_path}")
+    else:
+        # Default path relative to the project root (assuming app runs from root)
+        # Get current working directory, assuming it's the project root
+        project_root = os.getcwd() 
+        db_path = os.path.join(project_root, 'data', 'tweetAnalyst.db')
+        logger.debug(f"DATABASE_PATH not set, using default: {db_path}")
+
+    # Ensure the directory exists
+    db_dir = os.path.dirname(db_path)
+    if not os.path.exists(db_dir):
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            logger.info(f"Created database directory: {db_dir}")
+        except Exception as e:
+            logger.error(f"Failed to create database directory {db_dir}: {str(e)}")
+            return None # Cannot proceed if directory creation fails
+
+    if not os.path.exists(db_path):
+        logger.warning(f"Database file not found at resolved path: {db_path}. It might be created by SQLAlchemy.")
+        # Allow to proceed, as SQLAlchemy might create it. 
+        # The connection attempt will fail later if it's truly an issue.
+    return db_path
+
 def _refresh_config_cache(force=False):
     """
     刷新配置缓存
@@ -67,119 +102,97 @@ def _refresh_config_cache(force=False):
     """
     global _config_cache, _config_cache_timestamp, _config_meta, _config_refreshing
 
-    # 获取当前时间
     current_time = time.time()
 
-    # 检查是否需要刷新缓存
-    cache_valid = (current_time - _config_cache_timestamp < _config_cache_ttl) and _config_cache
+    with _config_lock:
+        cache_valid = (current_time - _config_cache_timestamp < _config_cache_ttl) and _config_cache
+        if cache_valid and not force:
+            logger.debug("使用配置缓存")
+            return True
 
-    # 如果缓存有效且不强制刷新，直接返回
-    if cache_valid and not force:
-        logger.debug("使用配置缓存")
-        return True
+        last_attempt = _config_meta['last_refresh_attempt']
+        failure_count = _config_meta['refresh_failure_count']
+        min_interval = _config_meta['refresh_min_interval']
 
-    # 检查刷新间隔
-    last_attempt = _config_meta['last_refresh_attempt']
-    failure_count = _config_meta['refresh_failure_count']
-    min_interval = _config_meta['refresh_min_interval']
+        if failure_count > 0:
+            backoff = min(_config_meta['refresh_max_interval'],
+                          min_interval * (_config_meta['refresh_backoff_factor'] ** failure_count))
+            if current_time - last_attempt < backoff and not force:
+                logger.debug(f"刷新间隔过短 ({current_time - last_attempt:.1f}秒 < {backoff:.1f}秒)，跳过刷新")
+                return False
+        
+        _config_meta['last_refresh_attempt'] = current_time
 
-    # 计算当前应该使用的刷新间隔
-    if failure_count > 0:
-        # 使用指数退避策略
-        backoff = min(_config_meta['refresh_max_interval'],
-                      min_interval * (_config_meta['refresh_backoff_factor'] ** failure_count))
-        if current_time - last_attempt < backoff and not force:
-            logger.debug(f"刷新间隔过短 ({current_time - last_attempt:.1f}秒 < {backoff:.1f}秒)，跳过刷新")
-            return False
+        if _config_refreshing:
+            logger.debug("配置刷新已在进行中，跳过")
+            return False # Another thread is already refreshing
 
-    # 更新最后尝试刷新时间
-    _config_meta['last_refresh_attempt'] = current_time
+        _config_refreshing = True
 
-    # 如果已经在刷新中，直接返回
-    if _config_refreshing:
-        logger.debug("配置刷新已在进行中，跳过")
-        return False
-
-    # 使用标志变量代替线程锁
-    _config_refreshing = True
+    # Actual refresh logic (outside the initial lock to allow other threads to check _config_refreshing)
     try:
-        # 缓存过期或为空，重新加载
-        logger.debug("刷新配置缓存")
+        logger.debug("尝试刷新配置缓存")
+        new_cache_data = {}
+        timestamp_to_set = current_time # Default to current time
 
         try:
-            # 使用仓储模式获取所有配置
             config_repo = RepositoryFactory.get_system_config_repository()
             configs = config_repo.get_all()
-
-            # 更新缓存
-            _config_cache = {config.key: config.value for config in configs}
-            _config_cache_timestamp = current_time
-            logger.debug(f"配置缓存已更新，包含 {len(_config_cache)} 个配置项")
-
-            # 重置失败计数
-            _config_meta['refresh_failure_count'] = 0
-            return True
+            new_cache_data = {config.key: config.value for config in configs}
+            logger.debug(f"配置缓存已通过 Repository 更新，包含 {len(new_cache_data)} 个配置项")
+            
+            with _config_lock:
+                _config_meta['refresh_failure_count'] = 0
+            
+            success = True
         except Exception as db_error:
-            # 如果使用仓储模式失败，尝试直接使用SQLite
-            logger.debug(f"使用仓储模式获取配置失败: {str(db_error)}，尝试直接使用SQLite")
-
-            # 获取数据库路径
-            db_path = os.environ.get('DATABASE_PATH', '/data/tweetAnalyst.db')
-
-            # 检查是否存在小写版本的数据库文件
-            db_dir = os.path.dirname(db_path)
-            db_name = os.path.basename(db_path)
-            lowercase_db_name = db_name.lower()
-            lowercase_db_path = os.path.join(db_dir, lowercase_db_name)
-
-            if os.path.exists(lowercase_db_path) and not os.path.exists(db_path) and lowercase_db_path != db_path:
-                logger.warning(f"检测到小写数据库文件: {lowercase_db_path}，但配置使用: {db_path}")
-                logger.info(f"正在重命名数据库文件: {lowercase_db_path} -> {db_path}")
+            logger.warning(f"使用仓储模式获取配置失败: {str(db_error)}，尝试直接使用SQLite")
+            
+            db_path = _get_database_path()
+            if not db_path or not os.path.exists(db_path): # Re-check existence before connecting
+                logger.error(f"SQLite数据库文件不存在于: {db_path}，无法刷新缓存")
+                with _config_lock:
+                    _config_meta['refresh_failure_count'] += 1
+                success = False
+            else:
                 try:
-                    os.rename(lowercase_db_path, db_path)
-                    logger.info(f"数据库文件重命名成功")
-                except Exception as e:
-                    logger.error(f"数据库文件重命名失败: {str(e)}")
-                    # 如果重命名失败，使用小写版本的数据库文件
-                    logger.warning(f"将使用小写版本的数据库文件: {lowercase_db_path}")
-                    db_path = lowercase_db_path
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT key, value FROM system_config")
+                    configs_sqlite = cursor.fetchall()
+                    new_cache_data = {key: value for key, value in configs_sqlite}
+                    logger.debug(f"配置缓存已通过SQLite更新，包含 {len(new_cache_data)} 个配置项")
+                    cursor.close()
+                    conn.close()
+                    with _config_lock:
+                        _config_meta['refresh_failure_count'] = 0
+                    success = True
+                except Exception as sqlite_error:
+                    logger.error(f"通过SQLite刷新配置缓存时出错: {sqlite_error}")
+                    with _config_lock:
+                        _config_meta['refresh_failure_count'] += 1
+                    success = False
+        
+        # Update cache only if refresh was successful or cache is currently empty
+        with _config_lock:
+            if success or not _config_cache: # if successful, or if cache is empty, update
+                _config_cache = new_cache_data
+                _config_cache_timestamp = timestamp_to_set
+            elif not success and _config_cache: # if failed but old cache exists, log it
+                 logger.warning("刷新配置失败，继续使用旧缓存（如果存在）")
 
-            # 创建SQLite连接
-            import sqlite3
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
+            _config_refreshing = False # Reset refreshing flag under lock
+        return success
 
-            # 查询所有配置
-            cursor.execute("SELECT key, value FROM system_config")
-            configs = cursor.fetchall()
-
-            # 更新缓存
-            _config_cache = {key: value for key, value in configs}
-            _config_cache_timestamp = current_time
-            logger.debug(f"配置缓存已通过SQLite更新，包含 {len(_config_cache)} 个配置项")
-
-            # 关闭连接
-            cursor.close()
-            conn.close()
-
-            # 重置失败计数
-            _config_meta['refresh_failure_count'] = 0
-            return True
-    except Exception as e:
-        # 增加失败计数
-        _config_meta['refresh_failure_count'] += 1
-
-        logger.warning(f"刷新配置缓存时出错 (失败次数: {_config_meta['refresh_failure_count']}): {str(e)}")
-
-        # 如果刷新失败，但缓存不为空，继续使用旧缓存
-        if not _config_cache:
-            # 如果缓存为空，创建一个空缓存
-            _config_cache = {}
-
+    except Exception as e: # Catch any unexpected error during the broader try block
+        with _config_lock:
+            _config_meta['refresh_failure_count'] += 1
+            logger.error(f"刷新配置缓存时发生意外错误 (失败次数: {_config_meta['refresh_failure_count']}): {str(e)}")
+            if not _config_cache: # Ensure cache is at least an empty dict
+                _config_cache = {}
+            _config_refreshing = False
         return False
-    finally:
-        # 无论成功还是失败，都重置刷新标志
-        _config_refreshing = False
+
 
 def get_config(key, default=None, use_cache=True):
     """
@@ -194,38 +207,33 @@ def get_config(key, default=None, use_cache=True):
         str: 配置值
     """
     try:
-        # 如果使用缓存，先检查缓存
         if use_cache:
-            try:
-                # 刷新缓存（如果需要）
-                _refresh_config_cache()
-
-                # 从缓存中获取配置
+            _refresh_config_cache() # Will use lock internally
+            with _config_lock: # Protect reading from cache
                 if key in _config_cache:
                     return _config_cache[key]
-            except Exception as cache_error:
-                logger.warning(f"从缓存获取配置时出错: {str(cache_error)}")
-                # 继续执行，尝试从数据库获取
-
-        # 不使用缓存或缓存获取失败，直接从数据库查询
+        
+        # Fallback if not use_cache or key not in cache
         try:
-            # 使用仓储模式获取配置
             config_repo = RepositoryFactory.get_system_config_repository()
             value = config_repo.get_value(key)
             if value is not None:
+                if use_cache: # Update cache if fetched from DB
+                    with _config_lock:
+                        _config_cache[key] = value
                 return value
         except Exception as db_error:
-            logger.warning(f"从数据库获取配置时出错: {str(db_error)}")
-            # 继续执行，尝试从环境变量获取
+            logger.warning(f"从数据库获取配置 '{key}' 时出错: {str(db_error)}")
 
-        # 缓存中没有或不使用缓存且数据库中没有，从环境变量获取
         env_value = os.getenv(key)
         if env_value is not None:
+            if use_cache: # Update cache if fetched from env
+                 with _config_lock:
+                    _config_cache[key] = env_value
             return env_value
         return default
     except Exception as e:
-        logger.warning(f"获取配置时出错: {str(e)}")
-        # 出错时返回默认值
+        logger.warning(f"获取配置 '{key}' 时出错: {str(e)}")
         return default
 
 def update_env_variable(key: str, value: str):
@@ -237,12 +245,9 @@ def update_env_variable(key: str, value: str):
         value: 配置值
     """
     try:
-        # 更新环境变量
         os.environ[key] = value
-        
-        # 更新配置缓存
-        _config_cache[key] = value
-        
+        with _config_lock:
+            _config_cache[key] = value
         logger.debug(f"已更新环境变量和配置缓存: {key}={value}")
     except Exception as e:
         logger.error(f"更新环境变量失败: {key}={value}, 错误: {str(e)}")
@@ -259,19 +264,16 @@ def set_config(key: str, value: str, description: str = None, is_secret: bool = 
         update_env: 是否同步更新环境变量
     """
     try:
-        # 使用仓储模式保存配置
         config_repo = RepositoryFactory.get_system_config_repository()
         config = config_repo.get_by_key(key)
         
         if config:
-            # 更新现有配置
             config.value = value
             if description:
                 config.description = description
             config.is_secret = is_secret
             config_repo.update(config)
         else:
-            # 创建新配置
             config_repo.create({
                 'key': key,
                 'value': value,
@@ -279,17 +281,16 @@ def set_config(key: str, value: str, description: str = None, is_secret: bool = 
                 'is_secret': is_secret
             })
         
-        # 更新配置缓存
-        _config_cache[key] = value
+        with _config_lock:
+            _config_cache[key] = value
         
-        # 如果需要，同步更新环境变量
         if update_env and key in ENV_SYNC_KEYS:
             update_env_variable(key, value)
         
-        logger.info(f"配置已更新: {key}={value}")
+        logger.info(f"配置已更新: {key}={'******' if is_secret and value else value}")
         return True
     except Exception as e:
-        logger.error(f"设置配置失败: {key}={value}, 错误: {str(e)}")
+        logger.error(f"设置配置失败: {key}={'******' if is_secret and value else value}, 错误: {str(e)}")
         return False
 
 def get_system_config(use_cache=True):
@@ -303,45 +304,37 @@ def get_system_config(use_cache=True):
         dict: 配置字典
     """
     result = {}
-
+    
     if use_cache:
-        # 刷新缓存（如果需要）
-        _refresh_config_cache()
-
-        # 从缓存中获取所有配置
-        configs_dict = _config_cache
-
-        # 使用仓储模式获取敏感配置标记
+        _refresh_config_cache() # Will use lock internally
+        with _config_lock: # Protect reading from cache
+            # Make a copy to avoid issues if the cache is modified elsewhere
+            # though with the lock this should be safer.
+            configs_dict_cache_copy = dict(_config_cache) 
+        
         config_repo = RepositoryFactory.get_system_config_repository()
         secret_configs = config_repo.query().filter_by(is_secret=True).all()
         secret_keys = set(config.key for config in secret_configs)
 
-        # 处理配置值
-        for key, value in configs_dict.items():
+        for key, value in configs_dict_cache_copy.items():
             if key in secret_keys:
-                # 对于敏感信息，只返回是否已设置
                 result[key] = '******' if value else ''
             else:
                 result[key] = value
     else:
-        # 不使用缓存，直接从数据库查询
         config_repo = RepositoryFactory.get_system_config_repository()
         configs = config_repo.get_all()
-
         for config in configs:
             if config.is_secret:
-                # 对于敏感信息，只返回是否已设置
                 result[config.key] = '******' if config.value else ''
             else:
                 result[config.key] = config.value
 
-    # 添加环境变量中的配置
     env_keys = [
         'LLM_API_KEY', 'LLM_API_MODEL', 'LLM_API_BASE',
         'TWITTER_USERNAME', 'TWITTER_EMAIL', 'TWITTER_PASSWORD', 'TWITTER_SESSION',
         'SCHEDULER_INTERVAL_MINUTES', 'HTTP_PROXY', 'APPRISE_URLS'
     ]
-
     for key in env_keys:
         if key not in result:
             value = os.getenv(key, '')
@@ -349,7 +342,6 @@ def get_system_config(use_cache=True):
                 result[key] = '******'
             else:
                 result[key] = value
-
     return result
 
 def batch_set_configs(configs_dict, update_env=True):
@@ -363,30 +355,24 @@ def batch_set_configs(configs_dict, update_env=True):
     Returns:
         tuple: (updated_count, skipped_count) - 更新的配置数量和跳过的配置数量
     """
-    # 使用仓储模式批量设置配置
     config_repo = RepositoryFactory.get_system_config_repository()
-
     try:
-        # 调用仓储的批量设置方法
         updated_count, skipped_count = config_repo.batch_set_configs(configs_dict)
-
         logger.info(f"批量更新了 {updated_count} 个配置项，跳过了 {skipped_count} 个配置项")
 
-        # 更新环境变量
-        if update_env and updated_count > 0:
-            for key, config_data in configs_dict.items():
-                value = config_data.get('value', '')
-                config = config_repo.get_by_key(key)
-                if config:
-                    os.environ[key] = config.value
-                    logger.debug(f"已更新环境变量 {key}")
-
-                    # 更新缓存
-                    global _config_cache
+        if updated_count > 0:
+            with _config_lock: # Acquire lock before updating cache and env
+                for key, config_data in configs_dict.items():
+                    # Check if this key was actually updated (not skipped)
+                    # This might require more info from batch_set_configs or re-fetching
+                    # For simplicity, we update all provided keys in cache/env if any update happened.
+                    # A more precise way would be to get the list of successfully updated keys.
+                    value = config_data.get('value', '')
                     _config_cache[key] = value
-
+                    if update_env and key in ENV_SYNC_KEYS:
+                        os.environ[key] = value
+                        logger.debug(f"已更新环境变量 {key}")
         return updated_count, skipped_count
-
     except Exception as e:
         logger.error(f"批量更新配置时出错: {str(e)}")
         raise
@@ -394,129 +380,73 @@ def batch_set_configs(configs_dict, update_env=True):
 def init_config(force=False, validate=True, app_context=None):
     """
     初始化配置：从数据库加载最新配置到环境变量和缓存
-
-    这是一个统一的配置初始化函数，应在应用启动时调用。
-    它确保配置只被初始化一次，除非指定force=True。
-
-    Args:
-        force (bool): 是否强制重新初始化配置，即使已经初始化过
-        validate (bool): 是否验证关键配置
-        app_context: Flask应用上下文，如果提供则在此上下文中执行
-
-    Returns:
-        dict: 包含初始化结果的字典，格式为：
-            {
-                'success': bool,  # 是否成功初始化
-                'message': str,   # 初始化结果消息
-                'missing_configs': list,  # 缺失的关键配置列表
-                'configs': dict   # 当前配置字典（敏感信息已隐藏）
-            }
     """
-    global _config_initialized, _config_cache, _config_cache_timestamp
+    global _config_initialized
+    result = {'success': False, 'message': '', 'missing_configs': [], 'configs': {}}
 
-    # 初始化结果字典
-    result = {
-        'success': False,
-        'message': '',
-        'missing_configs': [],
-        'configs': {}
-    }
-
-    # 使用标志变量代替线程锁
-    # 如果已经初始化过且不强制重新初始化，则直接返回
-    if _config_initialized and not force:
-        logger.debug("配置已初始化，跳过初始化过程")
-        result['success'] = True
-        result['message'] = "配置已初始化，跳过初始化过程"
-        result['configs'] = get_system_config()
-        return result
-
-    # 如果已经在初始化中，避免重复初始化
-    global _config_refreshing
-    if _config_refreshing:
-        logger.debug("配置初始化已在进行中，跳过")
-        result['success'] = False
-        result['message'] = "配置初始化已在进行中，跳过"
-        return result
-
-    # 标记为正在初始化
-    _config_refreshing = True
-    try:
-        logger.info("开始初始化配置")
-
-        # 清空配置缓存
-        _config_cache = {}
-        _config_cache_timestamp = 0
-
-        # 如果提供了应用上下文，则在此上下文中执行
-        if app_context:
-            with app_context:
-                # 加载配置到环境变量
-                success = load_configs_to_env()
-        else:
-            # 加载配置到环境变量
-            success = load_configs_to_env()
-
-        if success:
-            # 刷新配置缓存
-            try:
-                _refresh_config_cache(force=True)
-                logger.info("配置缓存已刷新")
-            except Exception as e:
-                logger.warning(f"刷新配置缓存时出错: {str(e)}")
-
-            # 获取当前配置
-            current_configs = get_system_config()
-            result['configs'] = current_configs
-
-            # 验证关键配置
-            if validate:
-                # 定义关键配置列表
-                critical_configs = [
-                    'LLM_API_KEY',  # AI模型API密钥
-                    'LLM_API_MODEL',  # AI模型名称
-                    'LLM_API_BASE'  # AI模型API基础URL
-                ]
-
-                # 检查关键配置是否存在
-                for key in critical_configs:
-                    value = os.getenv(key, '')
-                    if not value:
-                        result['missing_configs'].append(key)
-                        logger.warning(f"缺少关键配置: {key}")
-
-                # 如果有缺失的关键配置，记录警告但仍然继续
-                if result['missing_configs']:
-                    logger.warning(f"缺少 {len(result['missing_configs'])} 个关键配置: {', '.join(result['missing_configs'])}")
-                    result['message'] = f"配置初始化成功，但缺少 {len(result['missing_configs'])} 个关键配置"
-                else:
-                    logger.info("所有关键配置都已设置")
-                    result['message'] = "配置初始化成功，所有关键配置都已设置"
-            else:
-                result['message'] = "配置初始化成功，跳过配置验证"
-
-            # 打印关键配置（隐藏敏感信息）
-            logger.info("当前环境变量配置:")
-            for key in ['LLM_API_MODEL', 'LLM_API_BASE', 'SCHEDULER_INTERVAL_MINUTES']:
-                logger.info(f"{key}: {os.getenv(key, '未设置')}")
-
-            # 对于敏感信息，只显示是否已设置
-            for key in ['LLM_API_KEY', 'TWITTER_PASSWORD', 'TWITTER_SESSION']:
-                value = os.getenv(key, '')
-                logger.info(f"{key}: {'已设置' if value else '未设置'}")
-
-            # 标记为已初始化
-            _config_initialized = True
+    with _config_lock:
+        if _config_initialized and not force:
+            logger.debug("配置已初始化，跳过初始化过程")
             result['success'] = True
-            logger.info("配置初始化成功")
-        else:
-            result['message'] = "配置初始化失败，无法加载配置到环境变量"
-            logger.error("配置初始化失败，无法加载配置到环境变量")
+            result['message'] = "配置已初始化，跳过初始化过程"
+            result['configs'] = get_system_config(use_cache=False) # get fresh data
+            return result
+        
+        # If another thread is initializing, wait or return.
+        # For simplicity, we'll let it proceed if force=True or not initialized.
+        # A more robust solution might involve a separate init_lock or event.
 
-        return result
-    finally:
-        # 无论成功还是失败，都重置刷新标志
-        _config_refreshing = False
+    logger.info("开始初始化配置")
+    
+    # Load configs to environment
+    if app_context:
+        with app_context:
+            load_success = load_configs_to_env()
+    else:
+        load_success = load_configs_to_env()
+
+    if load_success:
+        # Refresh cache after loading to env
+        _refresh_config_cache(force=True) # This will use the lock internally
+        logger.info("配置缓存已刷新")
+        
+        current_configs = get_system_config(use_cache=False) # Get fresh after refresh
+        result['configs'] = current_configs
+
+        if validate:
+            critical_configs = ['LLM_API_KEY', 'LLM_API_MODEL', 'LLM_API_BASE']
+            for key in critical_configs:
+                value = os.getenv(key, '') # Check env var directly as it's most up-to-date
+                if not value:
+                    result['missing_configs'].append(key)
+            
+            if result['missing_configs']:
+                msg = f"配置初始化成功，但缺少 {len(result['missing_configs'])} 个关键配置: {', '.join(result['missing_configs'])}"
+                logger.warning(msg)
+                result['message'] = msg
+            else:
+                msg = "配置初始化成功，所有关键配置都已设置"
+                logger.info(msg)
+                result['message'] = msg
+        else:
+            result['message'] = "配置初始化成功，跳过配置验证"
+
+        logger.info("当前环境变量配置 (部分):")
+        for key in ['LLM_API_MODEL', 'LLM_API_BASE', 'SCHEDULER_INTERVAL_MINUTES']:
+            logger.info(f"{key}: {os.getenv(key, '未设置')}")
+        for key in ['LLM_API_KEY', 'TWITTER_PASSWORD', 'TWITTER_SESSION']:
+            value = os.getenv(key, '')
+            logger.info(f"{key}: {'已设置' if value else '未设置'}")
+        
+        with _config_lock:
+            _config_initialized = True
+        result['success'] = True
+        logger.info("配置初始化成功")
+    else:
+        result['message'] = "配置初始化失败，无法加载配置到环境变量"
+        logger.error("配置初始化失败，无法加载配置到环境变量")
+    
+    return result
 
 def load_configs_to_env():
     """
@@ -525,175 +455,53 @@ def load_configs_to_env():
     Returns:
         bool: 是否成功
     """
+    logger.info("尝试从数据库加载配置到环境变量...")
     try:
-        # 使用仓储模式获取所有配置
-        try:
-            config_repo = RepositoryFactory.get_system_config_repository()
-            configs = config_repo.get_all()
+        config_repo = RepositoryFactory.get_system_config_repository()
+        configs = config_repo.get_all()
+        
+        if not configs: # Try SQLite if repository returns nothing (e.g. DB not fully up)
+            logger.info("仓储未返回配置，尝试直接SQLite查询以加载到环境变量")
+            db_path = _get_database_path()
+            if not db_path or not os.path.exists(db_path):
+                logger.error(f"数据库文件不存在于: {db_path}，无法加载配置到环境变量。")
+                return False
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT key, value FROM system_config")
+                configs_sqlite = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                
+                # Convert to list of objects similar to what repository returns, for consistent processing
+                configs = [{'key': row[0], 'value': row[1]} for row in configs_sqlite]
+                logger.info(f"已从SQLite查询到 {len(configs)} 个配置项")
+            except Exception as sqlite_e:
+                logger.error(f"直接SQLite查询配置失败: {sqlite_e}")
+                return False # Critical if we can't even read from SQLite here
 
-            # 加载到环境变量
-            for config in configs:
-                os.environ[config.key] = config.value
-                logger.debug(f"已加载配置 {config.key} 到环境变量")
+        # Load to environment variables
+        count = 0
+        for config_item in configs:
+            key = config_item.key if hasattr(config_item, 'key') else config_item['key']
+            value = config_item.value if hasattr(config_item, 'value') else config_item['value']
+            os.environ[key] = value
+            # logger.debug(f"已加载配置 {key} 到环境变量") # Too verbose for init
+            count +=1
+        
+        logger.info(f"已成功加载 {count} 个配置到环境变量")
 
-            logger.info(f"已加载 {len(configs)} 个配置到环境变量")
-        except Exception as e:
-            logger.warning(f"使用仓储模式获取配置失败: {str(e)}，尝试使用直接SQL查询")
-
-            # 如果仓储模式失败，使用直接SQL查询
-            # 获取数据库路径
-            db_path = os.environ.get('DATABASE_PATH', '/data/tweetAnalyst.db')
-
-            # 检查是否存在小写版本的数据库文件
-            db_dir = os.path.dirname(db_path)
-            db_name = os.path.basename(db_path)
-            lowercase_db_name = db_name.lower()
-            lowercase_db_path = os.path.join(db_dir, lowercase_db_name)
-
-            # 检查文件名大小写问题（特别是在Windows上）
-            if lowercase_db_path != db_path and os.path.exists(db_path):
-                # 检查实际文件名的大小写
-                try:
-                    actual_files = os.listdir(db_dir)
-                    actual_db_name = None
-                    for file in actual_files:
-                        if file.lower() == lowercase_db_name:
-                            actual_db_name = file
-                            break
-
-                    if actual_db_name and actual_db_name != db_name:
-                        logger.warning(f"检测到数据库文件名大小写不匹配: 实际={actual_db_name}, 期望={db_name}")
-                        logger.info(f"正在修正数据库文件名大小写")
-
-                        # 在Windows上，需要通过临时文件名来重命名
-                        temp_db_path = os.path.join(db_dir, f"temp_{db_name}")
-                        actual_db_path = os.path.join(db_dir, actual_db_name)
-
-                        try:
-                            # 先重命名为临时文件名
-                            os.rename(actual_db_path, temp_db_path)
-                            # 再重命名为正确的文件名
-                            os.rename(temp_db_path, db_path)
-                            logger.info(f"数据库文件名大小写修正成功: {actual_db_name} -> {db_name}")
-                        except Exception as e:
-                            logger.error(f"数据库文件名大小写修正失败: {str(e)}")
-                            # 如果修正失败，恢复原文件名
-                            try:
-                                if os.path.exists(temp_db_path):
-                                    os.rename(temp_db_path, actual_db_path)
-                            except:
-                                pass
-                except Exception as e:
-                    logger.error(f"检查数据库文件名大小写时出错: {str(e)}")
-
-            elif os.path.exists(lowercase_db_path) and not os.path.exists(db_path) and lowercase_db_path != db_path:
-                logger.warning(f"检测到小写数据库文件: {lowercase_db_path}，但配置使用: {db_path}")
-                logger.info(f"正在重命名数据库文件: {lowercase_db_path} -> {db_path}")
-                try:
-                    os.rename(lowercase_db_path, db_path)
-                    logger.info(f"数据库文件重命名成功")
-                except Exception as e:
-                    logger.error(f"数据库文件重命名失败: {str(e)}")
-                    # 如果重命名失败，使用小写版本的数据库文件
-                    logger.warning(f"将使用小写版本的数据库文件: {lowercase_db_path}")
-                    db_path = lowercase_db_path
-
-            # 确保数据库路径存在
-            if not os.path.exists(db_path):
-                logger.warning(f"数据库文件不存在: {db_path}")
-                # 尝试在当前目录下查找
-                alt_db_path = os.path.join(os.getcwd(), 'instance/tweetAnalyst.db')
-
-                # 检查替代路径的小写版本
-                alt_db_dir = os.path.dirname(alt_db_path)
-                alt_db_name = os.path.basename(alt_db_path)
-                alt_lowercase_db_name = alt_db_name.lower()
-                alt_lowercase_db_path = os.path.join(alt_db_dir, alt_lowercase_db_name)
-
-                # 检查替代路径的文件名大小写问题
-                if os.path.exists(alt_db_path):
-                    # 检查实际文件名的大小写
-                    try:
-                        actual_files = os.listdir(alt_db_dir)
-                        actual_db_name = None
-                        for file in actual_files:
-                            if file.lower() == alt_lowercase_db_name:
-                                actual_db_name = file
-                                break
-
-                        if actual_db_name and actual_db_name != alt_db_name:
-                            logger.warning(f"检测到替代数据库文件名大小写不匹配: 实际={actual_db_name}, 期望={alt_db_name}")
-                            logger.info(f"正在修正替代数据库文件名大小写")
-
-                            # 在Windows上，需要通过临时文件名来重命名
-                            temp_alt_db_path = os.path.join(alt_db_dir, f"temp_{alt_db_name}")
-                            actual_alt_db_path = os.path.join(alt_db_dir, actual_db_name)
-
-                            try:
-                                # 先重命名为临时文件名
-                                os.rename(actual_alt_db_path, temp_alt_db_path)
-                                # 再重命名为正确的文件名
-                                os.rename(temp_alt_db_path, alt_db_path)
-                                logger.info(f"替代数据库文件名大小写修正成功: {actual_db_name} -> {alt_db_name}")
-                            except Exception as e:
-                                logger.error(f"替代数据库文件名大小写修正失败: {str(e)}")
-                                # 如果修正失败，恢复原文件名
-                                try:
-                                    if os.path.exists(temp_alt_db_path):
-                                        os.rename(temp_alt_db_path, actual_alt_db_path)
-                                except:
-                                    pass
-                    except Exception as e:
-                        logger.error(f"检查替代数据库文件名大小写时出错: {str(e)}")
-
-                elif os.path.exists(alt_lowercase_db_path) and not os.path.exists(alt_db_path):
-                    logger.warning(f"检测到小写替代数据库文件: {alt_lowercase_db_path}")
-                    try:
-                        os.rename(alt_lowercase_db_path, alt_db_path)
-                        logger.info(f"替代数据库文件重命名成功")
-                    except Exception as e:
-                        logger.error(f"替代数据库文件重命名失败: {str(e)}")
-                        alt_db_path = alt_lowercase_db_path
-
-                if os.path.exists(alt_db_path):
-                    db_path = alt_db_path
-                    logger.info(f"找到替代数据库文件: {db_path}")
-                else:
-                    logger.error("无法找到数据库文件")
-                    return False
-
-            # 创建SQLite连接
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-
-            # 查询所有配置
-            cursor.execute("SELECT key, value FROM system_config")
-            configs = cursor.fetchall()
-
-            # 加载到环境变量
-            for key, value in configs:
-                os.environ[key] = value
-                logger.debug(f"已加载配置 {key} 到环境变量")
-
-            logger.info(f"已加载 {len(configs)} 个配置到环境变量")
-
-            # 关闭连接
-            cursor.close()
-            conn.close()
-
-        # 检查代理设置
         proxy = os.getenv('HTTP_PROXY', '')
         if proxy:
             logger.info(f"检测到HTTP代理配置: {proxy}")
-
-            # 设置代理环境变量
-            os.environ['HTTP_PROXY'] = proxy
-            os.environ['HTTPS_PROXY'] = proxy
+            os.environ['HTTPS_PROXY'] = proxy # Ensure HTTPS_PROXY is also set if HTTP_PROXY is
 
         return True
     except Exception as e:
         logger.error(f"加载配置到环境变量时出错: {str(e)}")
         return False
+
 
 def get_default_prompt_template(account_type):
     """
@@ -705,28 +513,19 @@ def get_default_prompt_template(account_type):
     Returns:
         str: 提示词模板
     """
-    # 尝试从配置文件中读取模板
     templates_path = 'config/prompt-templates.yml'
-
     try:
         if os.path.exists(templates_path):
             import yaml
             with open(templates_path, 'r', encoding='utf-8') as f:
                 templates_data = yaml.safe_load(f)
                 templates = templates_data.get('templates', {})
-
-                # 根据账号类型选择合适的模板
-                if account_type == 'finance' and 'finance' in templates:
-                    return templates['finance']
-                elif (account_type == 'ai' or account_type == 'tech') and 'tech' in templates:
-                    return templates['tech']
-                elif account_type in ['general', 'twitter', 'news'] and 'general' in templates:
-                    return templates['general']
+                if account_type == 'finance' and 'finance' in templates: return templates['finance']
+                if (account_type == 'ai' or account_type == 'tech') and 'tech' in templates: return templates['tech']
+                if account_type in ['general', 'twitter', 'news'] and 'general' in templates: return templates['general']
     except Exception as e:
         logger.warning(f"从配置文件读取模板失败: {str(e)}，使用内置模板")
 
-    # 如果从配置文件读取失败，使用内置模板
-    # 这些是最基本的默认模板，只在配置文件不存在或读取失败时使用
     if account_type == 'finance':
         return """你是一个专业的财经内容分析助手，请分析以下财经相关的社交媒体内容，并决定是否值得向关注财经的用户推送通知。
 
@@ -747,7 +546,7 @@ def get_default_prompt_template(account_type):
   "is_relevant": 1或0,  // 是否相关，只返回1或0
   "analytical_briefing": "分析简报，简明扼要地总结内容要点"
 }"""
-    else:
+    else: # general
         return """你现在是一名专业分析师，请对以下内容进行分析，并给按我指定的格式返回分析结果。
 
 这是你需要分析的内容：{content}
